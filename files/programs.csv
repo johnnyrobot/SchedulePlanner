@@ -1,0 +1,37 @@
+Program Code,Program Title,GE Pattern,Course ID,Requirement Type,Recommended Semester
+AS-T-CSCI,Computer Science AS-T,IGETC,MATH 245,Required,1
+AS-T-CSCI,Computer Science AS-T,IGETC,MATH 246,Required,2
+AS-T-CSCI,Computer Science AS-T,IGETC,MATH 247,Required,3
+AS-T-CSCI,Computer Science AS-T,IGETC,CS 101,Required,1
+AS-T-CSCI,Computer Science AS-T,IGETC,CS 102,Required,2
+AS-T-CSCI,Computer Science AS-T,IGETC,CS 103,Required,3
+AS-T-CSCI,Computer Science AS-T,IGETC,PHYS 101,Required,2
+AS-T-CSCI,Computer Science AS-T,IGETC,PHYS 102,Required,4
+AS-T-CSCI,Computer Science AS-T,IGETC,ENGL 101,Required,1
+AS-T-CSCI,Computer Science AS-T,IGETC,ENGL 102,Required,2
+AS-T-CSCI,Computer Science AS-T,IGETC,COMM 101,Required,3
+AS-T-CSCI,Computer Science AS-T,IGETC,HIST 11,Required,1
+AS-T-BUS,Business Administration AS-T,CSU GE-Breadth,ACCTG 1,Required,1
+AS-T-BUS,Business Administration AS-T,CSU GE-Breadth,ACCTG 2,Required,2
+AS-T-BUS,Business Administration AS-T,CSU GE-Breadth,ECON 1,Required,1
+AS-T-BUS,Business Administration AS-T,CSU GE-Breadth,ECON 2,Required,2
+AS-T-BUS,Business Administration AS-T,CSU GE-Breadth,BUS 1,Required,1
+AS-T-BUS,Business Administration AS-T,CSU GE-Breadth,BUS 5,Required,3
+AS-T-BUS,Business Administration AS-T,CSU GE-Breadth,MATH 236,Required,2
+AS-T-BUS,Business Administration AS-T,CSU GE-Breadth,ENGL 101,Required,1
+AS-T-BUS,Business Administration AS-T,CSU GE-Breadth,COMM 101,Required,2
+AS-T-BIOL,Biology AS-T,IGETC,BIOL 6,Required,1
+AS-T-BIOL,Biology AS-T,IGETC,BIOL 7,Required,2
+AS-T-BIOL,Biology AS-T,IGETC,CHEM 101,Required,1
+AS-T-BIOL,Biology AS-T,IGETC,CHEM 102,Required,2
+AS-T-BIOL,Biology AS-T,IGETC,CHEM 211,Required,3
+AS-T-BIOL,Biology AS-T,IGETC,CHEM 212,Required,4
+AS-T-BIOL,Biology AS-T,IGETC,MATH 245,Required,1
+AS-T-BIOL,Biology AS-T,IGETC,PHYS 101,Required,2
+AS-T-BIOL,Biology AS-T,IGETC,ENGL 101,Required,1
+AS-T-ENGR,Engineering AS-T,IGETC,ENGR 101,Required,1
+AS-T-ENGR,Engineering AS-T,IGETC,ENGR 102,Required,2
+AS-T-ENGR,Engineering AS-T,IGETC,ENGR 103,Required,3
+AS-T-ENGR,Engineering AS-T,IGETC,MATH 245,Required,1
+AS-T-ENGR,Engineering AS-T,IGETC,PHYS 101,Required,2
+AS-T-ENGR,Engineering AS-T,IGETC,ENGL 101,Required,1

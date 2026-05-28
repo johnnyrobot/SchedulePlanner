@@ -1,0 +1,29 @@
+# OS / editor cruft
+.DS_Store
+*~
+
+# Logs
+*.log
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+*.egg-info/
+.pytest_cache/
+
+# Build / dist artifacts (PyInstaller)
+build/
+dist/
+*.spec
+
+# Local / generated data outputs
+# NOTE: bundled synthetic demo data in files/ is intentionally tracked (PRD N12).
+# Only local/generated outputs are ignored.
+data/local/
+data/raw/
+data/live_*.xlsx
+*.local.xlsx
+*.local.csv
