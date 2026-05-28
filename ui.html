@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LAMC Schedule Planner</title>
+<style>
+  :root{
+    --bg:#11140f; --panel:#181c14; --line:#2c3326; --ink:#e8ead8;
+    --dim:#8b9178; --amber:#d9a441; --green:#7faa57; --red:#c4674a;
+    --blue:#6f97a8; --mono:ui-monospace,"SFMono-Regular","JetBrains Mono",Menlo,Consolas,monospace;
+    --sans:ui-sans-serif,-apple-system,"Segoe UI",system-ui,sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--ink);font-family:var(--sans);
+       font-size:14px;line-height:1.5;
+       background-image:radial-gradient(circle at 1px 1px,#ffffff08 1px,transparent 0);
+       background-size:22px 22px;}
+  header{display:flex;align-items:center;justify-content:space-between;
+         padding:18px 26px;border-bottom:1px solid var(--line);
+         background:linear-gradient(180deg,#1a1f15,#13160f);}
+  .brand{display:flex;align-items:baseline;gap:12px}
+  .brand h1{font-family:var(--mono);font-size:16px;font-weight:600;letter-spacing:.04em}
+  .brand .tag{font-family:var(--mono);font-size:11px;color:var(--dim);
+              text-transform:uppercase;letter-spacing:.18em}
+  .pill{font-family:var(--mono);font-size:11px;padding:5px 11px;border-radius:2px;
+        border:1px solid var(--line);color:var(--dim);display:flex;gap:7px;align-items:center}
+  .pill .dot{width:7px;height:7px;border-radius:50%;background:var(--dim)}
+  .pill.on .dot{background:var(--green)} .pill.on{color:var(--green);border-color:#3a4a2c}
+  .pill.off .dot{background:var(--red)}
+  main{padding:26px;max-width:1000px;margin:0 auto}
+  .drop{border:1px dashed var(--line);border-radius:4px;padding:40px;text-align:center;
+        background:var(--panel);transition:.15s}
+  .drop:hover{border-color:var(--amber)}
+  .drop p{color:var(--dim);font-family:var(--mono);font-size:12px;margin-top:10px}
+  button{font-family:var(--mono);font-size:13px;background:var(--amber);color:#14160f;
+         border:none;padding:11px 20px;border-radius:3px;cursor:pointer;font-weight:600;
+         letter-spacing:.02em}
+  button.ghost{background:transparent;color:var(--ink);border:1px solid var(--line)}
+  button:disabled{opacity:.4;cursor:wait}
+  .row{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+  .mt{margin-top:22px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:4px;
+        padding:18px 20px;margin-top:14px}
+  .card h3{font-family:var(--mono);font-size:14px;letter-spacing:.02em;
+           display:flex;justify-content:space-between;align-items:center}
+  .badge{font-family:var(--mono);font-size:10px;padding:3px 8px;border-radius:2px;
+         text-transform:uppercase;letter-spacing:.1em}
+  .b-ok{background:#27331c;color:var(--green)}
+  .b-warn{background:#3a2f17;color:var(--amber)}
+  .b-bad{background:#3a201a;color:var(--red)}
+  .cohorts{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:14px}
+  .cohort{border:1px solid var(--line);border-radius:3px;padding:12px 14px}
+  .cohort .lab{font-family:var(--mono);font-size:11px;color:var(--dim);
+               text-transform:uppercase;letter-spacing:.12em}
+  .cohort .big{font-family:var(--mono);font-size:24px;margin:4px 0}
+  .term{font-family:var(--mono);font-size:12px;color:var(--dim);
+        padding:3px 0;border-top:1px solid #ffffff08}
+  .term b{color:var(--ink);font-weight:500}
+  .issue{font-family:var(--mono);font-size:12px;color:var(--amber);margin-top:4px}
+  .fix{font-family:var(--mono);font-size:12px;color:var(--green);margin-top:6px}
+  .analysis{columns:2;column-gap:24px}
+  .analysis .a{break-inside:avoid;margin-bottom:12px}
+  .analysis .a h4{font-family:var(--mono);font-size:12px;color:var(--blue);
+                  text-transform:uppercase;letter-spacing:.1em;margin-bottom:4px}
+  .analysis .a li{font-family:var(--mono);font-size:12px;color:var(--dim);
+                  list-style:none;padding:2px 0}
+  .explain{white-space:pre-wrap;font-family:var(--mono);font-size:13px;line-height:1.6;
+           color:var(--ink)}
+  .hint{font-family:var(--mono);font-size:11px;color:var(--dim);margin-top:6px}
+  .spinner{display:inline-block;width:12px;height:12px;border:2px solid #ffffff22;
+           border-top-color:var(--amber);border-radius:50%;animation:spin .7s linear infinite}
+  @keyframes spin{to{transform:rotate(360deg)}}
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">
+    <h1>SCHEDULE&nbsp;PLANNER</h1>
+    <span class="tag">2-Year Completion · LAMC</span>
+  </div>
+  <div class="pill" id="aiPill"><span class="dot"></span><span id="aiText">checking AI…</span></div>
+</header>
+
+<main>
+  <div class="drop" id="drop">
+    <button onclick="pick()">Choose data file</button>
+    <p>.xlsx workbook with sheets: sections · catalog · programs</p>
+    <p id="picked"></p>
+  </div>
+
+  <div class="row mt" id="actions" style="display:none">
+    <button id="runBtn" onclick="runAnalysis()">Generate schedules</button>
+    <button class="ghost" id="explainBtn" onclick="doExplain()" style="display:none">
+      Explain for admin
+    </button>
+    <span id="status" class="hint"></span>
+  </div>
+
+  <div id="out"></div>
+  <div id="explainBox"></div>
+</main>
+
+<script>
+let dataPath = "";
+
+async function refreshAI(){
+  const s = await window.pywebview.api.ai_status();
+  const pill = document.getElementById('aiPill');
+  const txt = document.getElementById('aiText');
+  if(s.running && s.model){
+    pill.className='pill on'; txt.textContent='Gemma 4 ready ('+s.model_name+')';
+  } else if(s.installed && !s.model){
+    pill.className='pill'; txt.innerHTML='Gemma 4 not downloaded — <a href="#" onclick="setupAI(event)" style="color:var(--amber)">get it</a>';
+  } else {
+    pill.className='pill off'; txt.textContent='Offline mode (no Gemma 4)';
+  }
+}
+
+async function setupAI(e){
+  e && e.preventDefault();
+  document.getElementById('aiText').innerHTML='<span class="spinner"></span> downloading model…';
+  await window.pywebview.api.setup_ai();
+  refreshAI();
+}
+
+async function pick(){
+  const r = await window.pywebview.api.choose_file();
+  if(!r.path) return;
+  dataPath = r.path;
+  document.getElementById('picked').textContent = r.path;
+  document.getElementById('actions').style.display='flex';
+}
+
+async function runAnalysis(){
+  const btn=document.getElementById('runBtn');
+  btn.disabled=true; btn.textContent='Solving…';
+  document.getElementById('status').innerHTML='<span class="spinner"></span> running solver';
+  const res = await window.pywebview.api.analyze(dataPath);
+  btn.disabled=false; btn.textContent='Generate schedules';
+  document.getElementById('status').textContent = res.ai_used ? 'parsed with Gemma 4' : 'regex parse (offline)';
+  if(res.error){ document.getElementById('out').innerHTML='<div class="card" style="color:var(--red)">'+res.error+'</div>'; return; }
+  render(res);
+  document.getElementById('explainBtn').style.display='inline-block';
+}
+
+function badge(p){
+  const ft=p.cohorts.full_time;
+  if(p.official_map_issues.length && ft && ft.needs_fix) return '<span class="badge b-bad">needs fix</span>';
+  if(p.official_map_issues.length) return '<span class="badge b-warn">map broken</span>';
+  return '<span class="badge b-ok">on track</span>';
+}
+
+function cohortCard(label, c){
+  if(!c) return '<div class="cohort"><div class="lab">'+label+'</div><div class="big">—</div></div>';
+  const yrs=Math.ceil(c.terms_used/2);
+  const terms=Object.entries(c.plan).map(([t,cs])=>
+    '<div class="term"><b>T'+t+'</b> '+cs.join(', ')+'</div>').join('');
+  const fix=(c.fixes&&c.fixes.length)?
+    '<div class="fix">fix: '+c.fixes.map(f=>'+ '+f.course+' in '+f.season).join(', ')+'</div>':'';
+  const tag=c.needs_fix?' <span style="color:var(--red)">(with fix)</span>':'';
+  return '<div class="cohort"><div class="lab">'+label+'</div>'+
+         '<div class="big">'+c.terms_used+' terms'+tag+'</div>'+
+         '<div class="hint">~'+yrs+' year'+(yrs>1?'s':'')+'</div>'+terms+fix+'</div>';
+}
+
+function render(res){
+  let html='';
+  for(const [code,p] of Object.entries(res.programs)){
+    const issues=p.official_map_issues.map(i=>'<div class="issue">! '+i+'</div>').join('');
+    html+='<div class="card"><h3>'+p.title+' '+badge(p)+'</h3>'+issues+
+      '<div class="cohorts">'+cohortCard('Full-time',p.cohorts.full_time)+
+      cohortCard('Part-time',p.cohorts.part_time)+'</div></div>';
+  }
+  // analysis block
+  const a=res.analysis;
+  const mk=(t,arr,fn)=>'<div class="a"><h4>'+t+'</h4><ul>'+
+    (arr.length?arr.map(fn).join(''):'<li>none</li>')+'</ul></div>';
+  html+='<div class="card"><h3>Supply diagnostics ('+res.terms_in_data+' terms)</h3>'+
+    '<div class="analysis mt">'+
+    mk('Rotation gaps',a.rotation_gaps,x=>'<li>'+x.course+' — '+x.offered+'/'+x.of+'</li>')+
+    mk('Single-section risk',a.single_section,x=>'<li>'+x.course+'</li>')+
+    mk('Modality mismatch',a.modality_mismatch,x=>'<li>'+x.course+' — '+x.fill_pct+'% fill</li>')+
+    mk('Under-supply',a.under_supply,x=>'<li>'+x.course+' — '+x.waitlisted+' waitlisted</li>')+
+    '</div></div>';
+  document.getElementById('out').innerHTML=html;
+}
+
+async function doExplain(){
+  const box=document.getElementById('explainBox');
+  box.innerHTML='<div class="card"><span class="spinner"></span> writing summary…</div>';
+  const r=await window.pywebview.api.explain();
+  box.innerHTML='<div class="card"><h3>Briefing</h3><div class="explain mt">'+r.text+'</div></div>';
+}
+
+window.addEventListener('pywebviewready', refreshAI);
+</script>
+</body>
+</html>

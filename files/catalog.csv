@@ -1,0 +1,30 @@
+Course ID,Subject,Catalog,Title,Units,Prerequisites (structured),Prerequisites (raw),IGETC Area,OER,Discipline,Acad Org,Status
+ENGL 101,ENGL,101,College Reading & Composition I,3,,,1A,Y,English,ENGLISH,Active
+ENGL 102,ENGL,102,College Reading & Composition II,3,(ENGL 101),ENGL 101,1B,Y,English,ENGLISH,Active
+MATH 245,MATH,245,Calculus I,5,,,2A,,Mathematics,MATH,Active
+MATH 246,MATH,246,Calculus II,5,(MATH 245),MATH 245,2A,,Mathematics,MATH,Active
+MATH 247,MATH,247,Linear Algebra,3,(MATH 246),MATH 246,2A,,Mathematics,MATH,Active
+MATH 236,MATH,236,Statistics,4,,,2A,Y,Mathematics,MATH,Active
+CS 101,CS,101,Intro to Programming,3,,,,Y,Computer Science,COMPSCI,Active
+CS 102,CS,102,Data Structures,3,(CS 101),CS 101,,,Computer Science,COMPSCI,Active
+CS 103,CS,103,Computer Architecture,3,(CS 102),CS 102,,,Computer Science,COMPSCI,Active
+PHYS 101,PHYS,101,Physics for Scientists I,4,(MATH 245),MATH 245,5A,,Physics,PHYSICS,Active
+PHYS 102,PHYS,102,Physics for Scientists II,4,(PHYS 101),PHYS 101,5A,,Physics,PHYSICS,Active
+CHEM 101,CHEM,101,General Chemistry I,5,,,5A,,Chemistry,CHEM,Active
+CHEM 102,CHEM,102,General Chemistry II,5,(CHEM 101),CHEM 101,5A,,Chemistry,CHEM,Active
+CHEM 211,CHEM,211,Organic Chemistry I,5,(CHEM 102),CHEM 102,5A,,Chemistry,CHEM,Active
+CHEM 212,CHEM,212,Organic Chemistry II,5,(CHEM 211),CHEM 211,5A,,Chemistry,CHEM,Active
+BIOL 6,BIOL,6,Cell & Molecular Biology,4,,,5B,,Biology,BIOLOGY,Active
+BIOL 7,BIOL,7,Organismal Biology,4,(BIOL 6),BIOL 6,5B,,Biology,BIOLOGY,Active
+ACCTG 1,ACCTG,1,Financial Accounting,5,,,,,Accounting,ACCTG,Active
+ACCTG 2,ACCTG,2,Managerial Accounting,5,(ACCTG 1),ACCTG 1,,,Accounting,ACCTG,Active
+ECON 1,ECON,1,Principles of Macroeconomics,3,,,4,Y,Economics,ECON,Active
+ECON 2,ECON,2,Principles of Microeconomics,3,,,4,Y,Economics,ECON,Active
+BUS 1,BUS,1,Introduction to Business,3,,,,Y,Business,BUS,Active
+BUS 5,BUS,5,Business Law I,3,,,,,Business,BUS,Active
+COMM 101,COMM,101,Public Speaking,3,,,1C,Y,Communication,COMM,Active
+HIST 11,HIST,11,Political & Social History US,3,,,3B,Y,History,HISTORY,Active
+PSYC 1,PSYC,1,General Psychology,3,,,4,Y,Psychology,PSYCH,Active
+ENGR 101,ENGR,101,Intro to Engineering,3,,,,,Engineering,ENGR,Active
+ENGR 102,ENGR,102,Engineering Graphics,3,(ENGR 101),ENGR 101,,,Engineering,ENGR,Active
+ENGR 103,ENGR,103,Statics,3,(ENGR 102),ENGR 102,,,Engineering,ENGR,Active
