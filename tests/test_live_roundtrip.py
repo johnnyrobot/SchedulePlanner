@@ -23,7 +23,7 @@ def test_mapped_workbook_runs_through_engine(tmp_path):
 
     # data summary
     assert results["terms_in_data"] == 2
-    # all four diagnostic buckets present (fill/waitlist will be empty by design)
+    # analysis shape is stable — engine always emits all four diagnostic keys
     assert set(results["analysis"]) == {
         "rotation_gaps", "single_section", "modality_mismatch", "under_supply"}
     # CS 101 offered in only 1 of 2 terms -> a rotation gap is surfaced
@@ -36,4 +36,7 @@ def test_mapped_workbook_runs_through_engine(tmp_path):
     assert prog["title"] == "Computer Science"
     full_time = prog["cohorts"]["full_time"]
     assert full_time is not None
-    assert "plan" in full_time
+    assert full_time["terms_used"] == 1
+    assert full_time["plan"] == {1: ["CS 101", "MATH 245"]}
+    # part-time cohort is also feasible (8u < 9u cap)
+    assert prog["cohorts"]["part_time"] is not None
