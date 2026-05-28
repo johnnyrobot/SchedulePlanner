@@ -25,10 +25,11 @@ class FakeClient:
 
     def get(self, url, params=None, headers=None):
         self.calls.append({"url": url, "params": params, "headers": headers or {}})
-        for fragment, payload in self.routes.items():
-            if fragment in url:
-                return FakeResponse(payload)
-        raise AssertionError(f"FakeClient: no route matches {url}")
+        matches = [(frag, payload) for frag, payload in self.routes.items() if frag in url]
+        if not matches:
+            raise AssertionError(f"FakeClient: no route matches {url}")
+        fragment, payload = max(matches, key=lambda item: len(item[0]))
+        return FakeResponse(payload)
 
     def close(self):
         return None
