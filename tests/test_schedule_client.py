@@ -41,3 +41,9 @@ def test_fetch_sections_requests_each_term(make_client):
     assert any("/listing/LAMC/2264" in u for u in urls)
     assert any("/listing/LAMC/2268" in u for u in urls)
     assert len(client.calls) == 2
+
+
+def test_get_subjects_returns_payload(make_client):
+    client = make_client({"/subjects/LAMC/2268": [{"code": "MATH", "name": "Mathematics"}]})
+    subjects = schedule.get_subjects("LAMC", "2268", client=client)
+    assert subjects == [{"code": "MATH", "name": "Mathematics"}]

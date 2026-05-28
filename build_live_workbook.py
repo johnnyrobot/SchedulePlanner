@@ -2,7 +2,7 @@
 
 Network IO lives here, OUTSIDE engine.run(). Usage:
   python build_live_workbook.py --campus LAMC --terms 2264,2266,2268 \
-      --program "Computer Science" --out data/live_LAMC.xlsx
+      --program "Biology" --out data/live_LAMC.xlsx
 """
 from __future__ import annotations
 
