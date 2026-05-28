@@ -22,6 +22,7 @@ def test_to_units_coercion():
     assert mapping._to_units(5.0) == 5.0
     assert mapping._to_units("") == 3.0          # default
     assert mapping._to_units(None) == 3.0        # default
+    assert mapping._to_units(float("nan")) == 3.0   # missing numeric cell
 
 
 def test_build_sections_df_schema_and_zero_enrollment():
@@ -31,6 +32,7 @@ def test_build_sections_df_schema_and_zero_enrollment():
     assert (df["Class Status"] == "Active").all()
     assert (df[["Cap Enrl", "Tot Enrl", "Wait Tot"]] == 0).all().all()
     assert set(df["CLASS"]) == {"CS 101", "MATH 245"}
+    assert pd.api.types.is_integer_dtype(df["Term"])
 
 
 def test_build_catalog_df_numeric_units_and_union():

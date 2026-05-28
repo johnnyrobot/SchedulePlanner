@@ -6,6 +6,7 @@ are expected gaps documented in the design doc, not failures.
 """
 from __future__ import annotations
 
+import math
 import re
 
 import pandas as pd
@@ -22,15 +23,19 @@ def _norm(code):
 def _to_units(value, default=3.0):
     """Coerce '3.00', '3-4', 5.0, '' -> float (solver does int(units))."""
     try:
-        return float(str(value).split("-")[0])
+        result = float(str(value).split("-")[0])
     except (ValueError, TypeError):
         return default
+    return default if math.isnan(result) else result
 
 
 def build_sections_df(section_records):
     rows = [{
         "Term": int(r["term"]),
         "CLASS": _norm(r["course"]),
+        # The schedule API only returns offered sections (cancelled ones are
+        # absent); its status field is enrollment availability (Open/Closed/
+        # Waitlist), not lifecycle. So every fetched section is an active offering.
         "Class Status": "Active",
         "Cap Enrl": 0,
         "Tot Enrl": 0,
