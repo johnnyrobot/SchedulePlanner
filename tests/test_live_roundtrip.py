@@ -1,3 +1,5 @@
+import pytest
+
 import engine
 from sources import mapping
 
@@ -42,18 +44,15 @@ def test_mapped_workbook_runs_through_engine(tmp_path):
     assert prog["cohorts"]["part_time"] is not None
 
 
-import pytest
-
-
 @pytest.mark.live
 def test_live_lamc_end_to_end(tmp_path):
     """Hits the real LACCD APIs. Run with: pytest -m live"""
     import build_live_workbook
     out = tmp_path / "live_real.xlsx"
-    sections, program = build_live_workbook.build(
-        "LAMC", [2268], "Computer Science", str(out))
+    sections, program = build_live_workbook.build("LAMC", [2268], "Biology")
     assert len(sections) > 0
-    if program is not None:
-        mapping.write_workbook(sections, program, str(out))
-        results = engine.run(str(out))
-        assert results["terms_in_data"] >= 1
+    if program is None:
+        pytest.fail("Program mapper returned None for 'Biology' at LAMC — API may have changed")
+    mapping.write_workbook(sections, program, str(out))
+    results = engine.run(str(out))
+    assert results["terms_in_data"] >= 1

@@ -16,8 +16,7 @@ import engine
 from sources import mapping, program_mapper, schedule
 
 
-def build(campus, terms, program_query, out):
-    os.makedirs(os.path.dirname(out) or ".", exist_ok=True)
+def build(campus, terms, program_query):
     with httpx.Client(timeout=30.0) as client:
         sections = schedule.fetch_sections(campus, terms, client=client)
         program = program_mapper.fetch_program(campus, program_query, client=client)
@@ -28,17 +27,18 @@ def main():
     ap = argparse.ArgumentParser(description="Build an EdgeSched workbook from live LACCD sources.")
     ap.add_argument("--campus", default="LAMC")
     ap.add_argument("--terms", default="2264,2266,2268")
-    ap.add_argument("--program", default="Computer Science")
+    ap.add_argument("--program", default="Biology")
     ap.add_argument("--out", default="data/live_LAMC.xlsx")
     args = ap.parse_args()
     terms = [int(t) for t in args.terms.split(",") if t.strip()]
 
-    sections, program = build(args.campus, terms, args.program, args.out)
+    sections, program = build(args.campus, terms, args.program)
     if program is None:
         print(f"No program matched {args.program!r}. Try a different --program.")
-        return
+        raise SystemExit(1)
 
     matched, unmatched = mapping.reconcile_courses(sections, program)
+    os.makedirs(os.path.dirname(args.out) or ".", exist_ok=True)
     mapping.write_workbook(sections, program, args.out)
 
     print(f"Wrote {args.out}: {len(sections)} sections across {len(terms)} terms; "
