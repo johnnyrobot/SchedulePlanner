@@ -41,19 +41,24 @@ def get_all_programs(campus, *, client=None):
                     headers=_headers(campus), client=client)
     programs = []
     for group in home.get("programGroups", []):
-        data = get_json(_site_url(campus, f"/program-groups/{group['masterRecordId']}"),
+        gid = group.get("masterRecordId")
+        if not gid:
+            continue
+        data = get_json(_site_url(campus, f"/program-groups/{gid}"),
                         headers=_headers(campus), client=client)
         for program in data.get("programs", []):
-            program["group_title"] = group.get("title")
-            programs.append(program)
+            prog = dict(program)
+            prog["group_title"] = group.get("title")
+            programs.append(prog)
     return programs
 
 
 def search_program(campus, query, *, client=None):
     needle = re.sub(r"\s+", " ", query.strip().lower())
     for program in get_all_programs(campus, client=client):
-        haystack = f"{program.get('title', '')} {program.get('awardShortTitle', '')}".lower()
-        if needle in haystack:
+        title = program.get("title", "").lower()
+        award = program.get("awardShortTitle", "").lower()
+        if needle in title or needle in award:
             return program
     return None
 

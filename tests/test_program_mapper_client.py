@@ -46,3 +46,20 @@ def test_fetch_program_returns_courses_with_semester_and_units(make_client):
 def test_fetch_program_returns_none_when_no_match(make_client):
     client = make_client(ROUTES)
     assert pm.fetch_program("LAMC", "underwater basket weaving", client=client) is None
+
+
+def test_get_all_programs_empty_when_no_groups(make_client):
+    client = make_client({"/home-page-content": {"somethingElse": []}})
+    assert pm.get_all_programs("LAMC", client=client) == []
+
+
+def test_get_program_courses_falls_back_to_first_pathway(make_client):
+    routes = {
+        "/programs/p2": {"pathways": [{"programMapId": "m2"}]},  # no defaultPathway
+        "/program-maps/m2": {"pathwayElements": [
+            {"name": "ENGL 101", "recommendedOpportunity": {
+                "type": "COURSE", "term": {"termNumber": 1}, "minUnits": 3.0}}]},
+    }
+    client = make_client(routes)
+    courses = pm.get_program_courses("LAMC", "p2", client=client)
+    assert [c["course_id"] for c in courses] == ["ENGL 101"]
