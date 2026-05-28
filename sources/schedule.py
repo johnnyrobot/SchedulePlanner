@@ -18,10 +18,10 @@ def get_subjects(campus, term, *, client=None):
 
 
 def get_class_listing(campus, term, subjects=None, *, client=None):
-    subjectlist = ",".join(sorted(subjects)) if subjects else ""
+    params = {"subjectlist": ",".join(sorted(subjects))} if subjects else None
     return get_json(
         f"{API_BASE}/listing/{campus}/{term}",
-        params={"subjectlist": subjectlist},
+        params=params,
         client=client,
     )
 
@@ -44,14 +44,15 @@ def fetch_sections(campus, terms=None, *, client=None):
             for course in subject.get("courses", []):
                 subj = (course.get("subject") or "").strip()
                 catalog = (course.get("catalogNbr") or "").strip()
-                cls = f"{subj} {catalog}"
+                course_id = f"{subj} {catalog}"
                 for section in _iter_sections(course):
-                    meeting = (section.get("meetings") or [{}])[0]
+                    meetings = section.get("meetings") or []
+                    meeting = meetings[0] if meetings else {}
                     records.append({
                         "term": int(term),
                         "subject": subj,
                         "catalog": catalog,
-                        "course": cls,
+                        "course": course_id,
                         "title": course.get("descr", ""),
                         "units": course.get("units", ""),
                         "class_nbr": section.get("classNbr", ""),

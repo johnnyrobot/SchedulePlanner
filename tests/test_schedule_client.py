@@ -40,3 +40,4 @@ def test_fetch_sections_requests_each_term(make_client):
     urls = [c["url"] for c in client.calls]
     assert any("/listing/LAMC/2264" in u for u in urls)
     assert any("/listing/LAMC/2268" in u for u in urls)
+    assert len(client.calls) == 2
