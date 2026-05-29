@@ -13,48 +13,24 @@ If the live APIs drift, we re-capture the fixtures and these assertions tell
 us whether the downstream contract still holds.
 """
 import json
-import pathlib
-
-import pytest
 
 import build_live_workbook
 import engine
+from conftest import STEM_GID, load_fixture
 from sources import mapping, program_mapper as pm, schedule
 
-FIXTURES = pathlib.Path(__file__).parent / "fixtures"
-
-# Real LAMC identifiers the fixtures were captured under.
-ARTS_GID = "e2068320-d2f3-421d-bbf8-a0014e859702"
-STEM_GID = "fd4c554f-6a1c-4180-9c09-900520f4d4a8"
-BIOLOGY_PID = "a4060608-61af-8a69-5d00-66fc77c61774"
-BIOLOGY_MAPID = "c9380a8d-158f-44a8-b8b3-ddebba81a8a8"
-
-
-def _load(name):
-    return json.loads((FIXTURES / name).read_text())
-
-
-@pytest.fixture
-def lamc_routes():
-    """URL-substring -> fixture payload map for the full LAMC Biology chain."""
-    return {
-        "/listing/LAMC/2268": _load("schedule_listing_LAMC_2268.json"),
-        "/subjects/LAMC/2268": _load("schedule_subjects_LAMC_2268.json"),
-        "/home-page-content": _load("pm_home_page_content_LAMC.json"),
-        f"/program-groups/{ARTS_GID}": _load("pm_program_group_arts_LAMC.json"),
-        f"/program-groups/{STEM_GID}": _load("pm_program_group_LAMC.json"),
-        f"/programs/{BIOLOGY_PID}": _load("pm_program_LAMC.json"),
-        f"/program-maps/{BIOLOGY_MAPID}": _load("pm_program_map_LAMC.json"),
-    }
+# The `lamc_routes` fixture (the shared live-fixture route map) and the
+# STEM_GID identifier now live in tests/conftest.py so the live-pipeline and
+# desktop-shell tests share one source of truth.
 
 
 def test_fixtures_exist_and_are_shape_faithful(lamc_routes):
-    listing = _load("schedule_listing_LAMC_2268.json")
+    listing = load_fixture("schedule_listing_LAMC_2268.json")
     assert listing["campuscode"] == "LAMC"
     assert isinstance(listing["subjects"], list) and listing["subjects"]
-    home = _load("pm_home_page_content_LAMC.json")
+    home = load_fixture("pm_home_page_content_LAMC.json")
     assert any(g["masterRecordId"] == STEM_GID for g in home["programGroups"])
-    pmap = _load("pm_program_map_LAMC.json")
+    pmap = load_fixture("pm_program_map_LAMC.json")
     assert any((e.get("recommendedOpportunity") or {}).get("type") == "COURSE"
                for e in pmap["pathwayElements"])
 
