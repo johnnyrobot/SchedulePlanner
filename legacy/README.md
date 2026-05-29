@@ -1,0 +1,1 @@
+These files (`analyze_bottlenecks.py` and `solve_schedule.py`) are early standalone prototypes from an initial Neo4j-first design spike. They are not part of the current product, are not imported or called by any active module, and may contain dead sandbox paths (e.g. `/home/claude`). They are retained here for reference only.
