@@ -1,8 +1,10 @@
+"""Regression tests for engine behavior against the bundled synthetic dataset (PRD §6 FRs + N11)."""
 import json
+import pathlib
 
 import engine
 
-DEMO = "files/lamc_data.xlsx"
+DEMO = str(pathlib.Path(__file__).resolve().parent.parent / "files" / "lamc_data.xlsx")
 
 
 def test_engine_run_is_deterministic():
