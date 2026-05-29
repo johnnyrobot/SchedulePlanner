@@ -18,21 +18,31 @@ Two modes (see generate()):
                                  the production layout before real IR data arrives.
 
 Determinism: all randomness flows through a single seeded random.Random(seed)
-instance created inside generate(), never the global RNG, and the workbook's
-embedded core-properties timestamp is frozen, so each mode's output is
-byte-for-byte reproducible run to run.
+instance created inside generate(), never the global RNG, and the workbook is
+repacked with a frozen embedded timestamp and fixed ZIP member dates (see
+_freeze_workbook_timestamps), so each mode's output is byte-for-byte
+reproducible run to run.
 """
 
 import argparse
 import datetime
 import os
 import random
+import re
+import zipfile
 
 import pandas as pd
 
-# Frozen workbook timestamp so the emitted .xlsx is byte-for-byte reproducible
-# (openpyxl otherwise stamps docProps/core.xml with the current wall clock).
+# Frozen workbook timestamp so the emitted .xlsx is byte-for-byte reproducible.
+# openpyxl (our writer; the same engine sources/mapping.py uses) freezes the
+# `created` property but unconditionally re-stamps `modified` to the wall clock
+# on save, and the ZIP member timestamps default to the wall clock too -- so
+# after writing we repack the archive with this frozen value (see
+# _freeze_workbook_timestamps).
 _FROZEN_TS = datetime.datetime(2024, 1, 1, 0, 0, 0)
+# DOS epoch: the earliest timestamp a ZIP local header can carry, used so every
+# member's stored date is identical across runs.
+_ZIP_EPOCH = (1980, 1, 1, 0, 0, 0)
 
 # --------------------------------------------------------------------------
 # Term scheme.  Confirmed from real data: Fall 2024 = 2248.
@@ -449,6 +459,33 @@ def _build_programs_df():
     return pd.DataFrame(prog_rows)
 
 
+def _freeze_workbook_timestamps(path):
+    """Repack the .xlsx so its bytes are reproducible run to run.
+
+    openpyxl re-stamps docProps/core.xml's <dcterms:modified> with the wall
+    clock at save time, and the ZIP local headers carry wall-clock member dates.
+    We rewrite the archive in a stable member order with a fixed member date and
+    a frozen <dcterms:modified>, leaving cell data untouched.
+    """
+    ts = _FROZEN_TS.strftime("%Y-%m-%dT%H:%M:%S") + "Z"
+    with zipfile.ZipFile(path, "r") as src:
+        members = [(name, src.read(name)) for name in src.namelist()]
+    rewritten = []
+    for name, data in members:
+        if name == "docProps/core.xml":
+            data = re.sub(
+                r"(<dcterms:modified[^>]*>)[^<]*(</dcterms:modified>)",
+                r"\g<1>" + ts + r"\g<2>",
+                data.decode(),
+            ).encode()
+        rewritten.append((name, data))
+    with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED, allowZip64=True) as out:
+        for name, data in rewritten:
+            info = zipfile.ZipInfo(name, date_time=_ZIP_EPOCH)
+            info.compress_type = zipfile.ZIP_DEFLATED
+            out.writestr(info, data)
+
+
 def generate(out_path, *, enrollment_sample=False, seed=42):
     """Build the three-sheet workbook and write it to out_path.
 
@@ -469,15 +506,19 @@ def generate(out_path, *, enrollment_sample=False, seed=42):
     programs_df = _build_programs_df()
 
     os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
-    # xlsxwriter is pandas' default .xlsx engine here; naming it explicitly keeps
-    # the byte layout stable regardless of which optional engines are installed.
-    with pd.ExcelWriter(out_path, engine="xlsxwriter") as xl:
+    # openpyxl is the declared .xlsx engine (requirements.txt) and the same one
+    # sources/mapping.py writes with. We freeze the created/creator/modifiedBy
+    # core properties here; `modified` and the ZIP member timestamps are then
+    # frozen by repacking the archive (see _freeze_workbook_timestamps).
+    with pd.ExcelWriter(out_path, engine="openpyxl") as xl:
         sections.to_excel(xl, sheet_name="sections", index=False)
         catalog_df.to_excel(xl, sheet_name="catalog", index=False)
         programs_df.to_excel(xl, sheet_name="programs", index=False)
-        # Freeze the embedded created timestamp -> byte-for-byte reproducible
-        # (xlsxwriter otherwise stamps docProps/core.xml with the current clock).
-        xl.book.set_properties({"created": _FROZEN_TS})
+        xl.book.properties.created = _FROZEN_TS
+        xl.book.properties.modified = _FROZEN_TS
+        xl.book.properties.creator = ""
+        xl.book.properties.lastModifiedBy = ""
+    _freeze_workbook_timestamps(out_path)
     return sections, catalog_df, programs_df
 
 

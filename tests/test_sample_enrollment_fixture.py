@@ -122,3 +122,17 @@ def test_sample_generation_is_byte_identical(tmp_path):
     assert SAMPLE.read_bytes() == a.read_bytes(), (
         "files/lamc_sample_enrollment.xlsx is stale; regenerate with "
         "python3 generate_synthetic.py --enrollment-sample")
+
+
+def test_demo_generation_is_byte_identical(tmp_path):
+    """Two DEMO-mode generations are byte-for-byte identical.
+
+    This exercises the random.Random(seed) isolation in the demo RNG path
+    (the sample mode draws no randomness, so only this test guards that the
+    seeded local RNG -- not the global one -- and the frozen timestamp keep the
+    demo workbook reproducible)."""
+    a = tmp_path / "demo_a.xlsx"
+    b = tmp_path / "demo_b.xlsx"
+    generate(str(a), enrollment_sample=False)
+    generate(str(b), enrollment_sample=False)
+    assert a.read_bytes() == b.read_bytes()
