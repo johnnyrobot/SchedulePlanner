@@ -8,15 +8,31 @@ Produces three artifacts matching the real data spec schema:
 
 Bottlenecks are deliberately planted so the analysis layer has something to find.
 All instructor PII fields are intentionally absent.
+
+Two modes (see generate()):
+  * default ("demo")          - the bundled 8-term files/lamc_data.xlsx workbook.
+  * enrollment_sample=True     - a smaller, multi-term (Fall+Spring) workbook whose
+                                 sections sheet mirrors the REAL IR PeopleSoft column
+                                 shape with POPULATED Cap Enrl / Tot Enrl / Wait Tot
+                                 (and PII absent), so ingestion is exercised against
+                                 the production layout before real IR data arrives.
+
+Determinism: all randomness flows through a single seeded random.Random(seed)
+instance created inside generate(), never the global RNG, and the workbook's
+embedded core-properties timestamp is frozen, so each mode's output is
+byte-for-byte reproducible run to run.
 """
 
 import argparse
+import datetime
 import os
 import random
-import pandas as pd
-from datetime import date
 
-random.seed(42)  # reproducible demo
+import pandas as pd
+
+# Frozen workbook timestamp so the emitted .xlsx is byte-for-byte reproducible
+# (openpyxl otherwise stamps docProps/core.xml with the current wall clock).
+_FROZEN_TS = datetime.datetime(2024, 1, 1, 0, 0, 0)
 
 # --------------------------------------------------------------------------
 # Term scheme.  Confirmed from real data: Fall 2024 = 2248.
@@ -199,20 +215,20 @@ def day_cols(days):
     return out
 
 
-def pick_block(mode, bottleneck):
+def pick_block(rng, mode, bottleneck):
     if mode in ("OA",):                       # async = no meeting
         return TIME_BLOCKS[-1]
     if bottleneck in ("single_inperson","bad_modality"):
         return TIME_BLOCKS[0]                 # 8am TR — unpopular slot
-    return random.choice(TIME_BLOCKS[:-1])
+    return rng.choice(TIME_BLOCKS[:-1])
 
 
-def fill_for(mode, bottleneck, cap):
+def fill_for(rng, mode, bottleneck, cap):
     base = MODES[mode][1]
     if bottleneck == "oversubscribed": base = 1.05
     elif bottleneck == "single_inperson": base = 1.08
     elif bottleneck == "bad_modality": base = 0.42
-    base += random.uniform(-0.06, 0.06)
+    base += rng.uniform(-0.06, 0.06)
     enr = int(round(cap * base))
     enr = max(0, min(enr, int(cap*1.15)))
     wait = max(0, enr - cap)
@@ -220,110 +236,270 @@ def fill_for(mode, bottleneck, cap):
     return enr, wait
 
 
-rows = []
-crn = 10000
-for term, descr, season, year, sdate, edate in TERMS:
-    for cid, title, units, prereqs, igetc, oer, disc, org in CATALOG:
-        rule = OFFERING[cid]
-        offered = rule["offered"]
-        if offered == "fall" and season != "Fall":   continue
-        if offered == "spring" and season != "Spring": continue
-        bottleneck = rule.get("bottleneck")
-        n = rule["base"]
-        if season == "Summer": n = max(1, n//2)
-        modes = MIX[rule["mix"]]
-        subj, cat = cid.split(" ")
-        for i in range(n):
-            crn += 1
-            mode = modes[i % len(modes)]
-            mname, _, inperson = MODES[mode]
-            # course-wide bottlenecks affect every section; supply bottlenecks only the first
-            course_wide = bottleneck if bottleneck in ("bad_modality","oversubscribed") else None
-            supply_bn = bottleneck if bottleneck in ("single_inperson",) and i==0 else None
-            start,end,days,block = pick_block(mode, course_wide or supply_bn)
-            cap = random.choice([30,35,40,45]) if mode!="P" else random.choice([24,28,32])
-            enr, wait = fill_for(mode, course_wide or supply_bn, cap)
-            cancelled = (random.random() < 0.03 and enr < cap*0.3)
-            pacoima = "Y" if random.random() < 0.08 else ""
-            dc = day_cols(days)
-            rows.append({
-                "Term": term, "Descr": descr, "Campus": "LAMC",
-                "Class Nbr": crn, "Subject": subj, "Catalog": cat,
-                "Section": f"M{i+1:02d}", "Session": "1",
-                "Class Type": "E", "Component": "LEC",
-                "Assoc": 1, "Comb Sects ID": "",
-                "Class Status": "Cancelled" if cancelled else "Active",
-                "Cancel Dt": sdate if cancelled else "",
-                "Mode": mode, "IN_PERSON": "Y" if inperson else "",
-                "Location": "Pacoima" if pacoima else "Main",
-                "BUILDING": random.choice(BUILDINGS) if start else "ONLINE",
-                "Room Descr": f"{random.choice(BUILDINGS)}-{random.randint(100,399)}" if start else "ONLINE",
-                "Facil ID": f"F{random.randint(1000,9999)}" if start else "",
-                "Pacoima": pacoima,
-                "Mtg Start": start or "", "Mtg End": end or "",
-                "Meetings": days, **dc, "TBA Hours": "" if start else units*16,
-                "DAYBLOCK": block,
-                "HOURS": f"{start}-{end}" if start else "TBA",
-                "STARTEND": f"{sdate}-{edate}",
-                "Class Start Date": sdate, "Class End Date": edate,
-                "Nbr Mtgs": 16 if start else 0,
-                "LATE-START": "",
-                "Cap Enrl": cap, "Tot Enrl": 0 if cancelled else enr,
-                "Wait Cap": 10, "Wait Tot": 0 if cancelled else wait,
-                "Combined Cap Enrl":"", "Combined Tot Enrl":"",
-                "FILLD": 0 if cancelled else round(enr/cap,3),
-                ".FILLPERCNT": 0 if cancelled else round(enr/cap*100,1),
-                "ENRL": 0 if cancelled else enr, "LMT": cap,
-                "Acad Org": org, "Dep": disc, "Discipline": disc,
-                "IGETC": igetc or "", "OER": "Y" if oer else "",
-                "FTE": round(enr*units/525,3) if not cancelled else 0,
-                "Class Workload Hrs": units,
-                "LEVEL": "UG",
-                "CLASS": cid, "SEC": f"M{i+1:02d}",
-                "DAYS": days, "ROOM": "ONLINE" if not start else f"{random.choice(BUILDINGS)}-{random.randint(100,399)}",
+def _build_demo_sections(rng):
+    """Build the bundled 8-term demo sections rows (one dict per section).
+
+    Preserves the exact RNG draw order of the original module-level loop so the
+    default workbook is byte-for-byte identical to the historical generator.
+    """
+    rows = []
+    crn = 10000
+    for term, descr, season, year, sdate, edate in TERMS:
+        for cid, title, units, prereqs, igetc, oer, disc, org in CATALOG:
+            rule = OFFERING[cid]
+            offered = rule["offered"]
+            if offered == "fall" and season != "Fall":   continue
+            if offered == "spring" and season != "Spring": continue
+            bottleneck = rule.get("bottleneck")
+            n = rule["base"]
+            if season == "Summer": n = max(1, n//2)
+            modes = MIX[rule["mix"]]
+            subj, cat = cid.split(" ")
+            for i in range(n):
+                crn += 1
+                mode = modes[i % len(modes)]
+                mname, _, inperson = MODES[mode]
+                # course-wide bottlenecks affect every section; supply bottlenecks only the first
+                course_wide = bottleneck if bottleneck in ("bad_modality","oversubscribed") else None
+                supply_bn = bottleneck if bottleneck in ("single_inperson",) and i==0 else None
+                start,end,days,block = pick_block(rng, mode, course_wide or supply_bn)
+                cap = rng.choice([30,35,40,45]) if mode!="P" else rng.choice([24,28,32])
+                enr, wait = fill_for(rng, mode, course_wide or supply_bn, cap)
+                cancelled = (rng.random() < 0.03 and enr < cap*0.3)
+                pacoima = "Y" if rng.random() < 0.08 else ""
+                dc = day_cols(days)
+                rows.append({
+                    "Term": term, "Descr": descr, "Campus": "LAMC",
+                    "Class Nbr": crn, "Subject": subj, "Catalog": cat,
+                    "Section": f"M{i+1:02d}", "Session": "1",
+                    "Class Type": "E", "Component": "LEC",
+                    "Assoc": 1, "Comb Sects ID": "",
+                    "Class Status": "Cancelled" if cancelled else "Active",
+                    "Cancel Dt": sdate if cancelled else "",
+                    "Mode": mode, "IN_PERSON": "Y" if inperson else "",
+                    "Location": "Pacoima" if pacoima else "Main",
+                    "BUILDING": rng.choice(BUILDINGS) if start else "ONLINE",
+                    "Room Descr": f"{rng.choice(BUILDINGS)}-{rng.randint(100,399)}" if start else "ONLINE",
+                    "Facil ID": f"F{rng.randint(1000,9999)}" if start else "",
+                    "Pacoima": pacoima,
+                    "Mtg Start": start or "", "Mtg End": end or "",
+                    "Meetings": days, **dc, "TBA Hours": "" if start else units*16,
+                    "DAYBLOCK": block,
+                    "HOURS": f"{start}-{end}" if start else "TBA",
+                    "STARTEND": f"{sdate}-{edate}",
+                    "Class Start Date": sdate, "Class End Date": edate,
+                    "Nbr Mtgs": 16 if start else 0,
+                    "LATE-START": "",
+                    "Cap Enrl": cap, "Tot Enrl": 0 if cancelled else enr,
+                    "Wait Cap": 10, "Wait Tot": 0 if cancelled else wait,
+                    "Combined Cap Enrl":"", "Combined Tot Enrl":"",
+                    "FILLD": 0 if cancelled else round(enr/cap,3),
+                    ".FILLPERCNT": 0 if cancelled else round(enr/cap*100,1),
+                    "ENRL": 0 if cancelled else enr, "LMT": cap,
+                    "Acad Org": org, "Dep": disc, "Discipline": disc,
+                    "IGETC": igetc or "", "OER": "Y" if oer else "",
+                    "FTE": round(enr*units/525,3) if not cancelled else 0,
+                    "Class Workload Hrs": units,
+                    "LEVEL": "UG",
+                    "CLASS": cid, "SEC": f"M{i+1:02d}",
+                    "DAYS": days, "ROOM": "ONLINE" if not start else f"{rng.choice(BUILDINGS)}-{rng.randint(100,399)}",
+                })
+    return rows
+
+
+# --------------------------------------------------------------------------
+# Enrollment-sample mode.
+#
+# A compact two-term (Fall 2024 + Spring 2025) workbook whose sections sheet
+# mirrors the REAL IR PeopleSoft layout with POPULATED Cap Enrl / Tot Enrl /
+# Wait Tot and NO instructor PII columns. The demo already fires the detectors;
+# the value here is exercising ingestion against the production column shape
+# with deliberately *planted, snapshot-pinned* enrollment bottlenecks:
+#
+#   ACCTG 2  -> chronic LOW FILL (drives modality_mismatch: fill < 55%)
+#   ENGL 101 -> chronic WAITLIST (drives under_supply: Wait Tot > 15/course)
+#
+# Every other course is kept comfortably mid-fill with zero waitlist so those
+# two planted courses are the *only* enrollment-driven detector hits and the
+# causation test (zero the counts -> hits collapse) is unambiguous.
+# Offerings stay rotation-complete (both terms) and single-section-free so the
+# rotation_gaps / single_section detectors do not muddy the enrollment story,
+# and so every program's cohorts remain feasible for the solver.
+# --------------------------------------------------------------------------
+
+# (course_id -> per-term enrollment recipe) for the sample. Each course is
+# offered in BOTH terms with TWO sections so single_section never fires.
+# cap/enrl/wait are fixed integers (no RNG) -> the planted bottleneck is exact.
+_SAMPLE_TERMS = [
+    ("2248", "2024 Fall",   "Fall",   2024, "08/26/2024", "12/15/2024"),
+    ("2252", "2025 Spring", "Spring", 2025, "02/03/2025", "06/02/2025"),
+]
+
+# Courses needed so every program closure is fully offered & feasible. We offer
+# the union of all program-required courses (+ their prereqs are within the set).
+_SAMPLE_COURSES = [
+    # cid, mode, cap, enrl, wait  (per section; two identical sections per term)
+    # --- planted CHRONIC LOW FILL: ACCTG 2 (fill ~ 28/80 = 35% < 55%) ---
+    ("ACCTG 2", "P",  40, 14, 0),   # 2 sections => cap 80, enrl 28 => 35% fill
+    # --- planted CHRONIC WAITLIST: ENGL 101 (Wait Tot 30/term > 15) ---
+    ("ENGL 101","OA", 40, 40, 15),  # 2 sections => cap 80, enrl 80, wait 30
+    # --- healthy filler courses (mid fill, no waitlist) ---
+    ("ENGL 102","OA", 40, 30, 0),
+    ("MATH 245","P",  35, 26, 0),
+    ("MATH 246","P",  35, 25, 0),
+    ("MATH 247","H",  35, 24, 0),
+    ("MATH 236","OA", 40, 30, 0),
+    ("CS 101",  "OA", 40, 31, 0),
+    ("CS 102",  "H",  35, 25, 0),
+    ("CS 103",  "P",  30, 21, 0),
+    ("PHYS 101","P",  32, 23, 0),
+    ("PHYS 102","P",  32, 22, 0),
+    ("CHEM 101","P",  35, 26, 0),
+    ("CHEM 102","P",  35, 25, 0),
+    ("CHEM 211","P",  30, 21, 0),
+    ("CHEM 212","P",  30, 20, 0),
+    ("BIOL 6",  "OA", 40, 30, 0),
+    ("BIOL 7",  "H",  35, 25, 0),
+    ("ACCTG 1", "OA", 40, 30, 0),
+    ("ECON 1",  "OA", 40, 31, 0),
+    ("ECON 2",  "OA", 40, 30, 0),
+    ("BUS 1",   "OA", 40, 31, 0),
+    ("BUS 5",   "H",  35, 25, 0),
+    ("COMM 101","OA", 40, 30, 0),
+    ("HIST 11", "OA", 40, 31, 0),
+    ("PSYC 1",  "OA", 40, 30, 0),
+    ("ENGR 101","P",  30, 21, 0),
+    ("ENGR 102","P",  30, 20, 0),
+    ("ENGR 103","P",  30, 20, 0),
+]
+
+# Snapshot of the planted bottlenecks, pinned by the fixture test so a future
+# tweak cannot silently move the bottleneck. fill_pct is summed enrl/cap across
+# both terms (4 sections total); waitlisted is summed Wait Tot across the run.
+SAMPLE_BOTTLENECKS = {
+    "modality_mismatch": {"course": "ACCTG 2",  "fill_pct": 35},  # 56/160 = 35%
+    "under_supply":      {"course": "ENGL 101", "waitlisted": 60},  # 15 * 4 sections
+}
+
+_CATALOG_BY_ID = {c[0]: c for c in CATALOG}
+
+
+def _build_sample_sections():
+    """Live-shaped IR enrollment sample rows: PII absent, Cap/Tot/Wait populated,
+    two terms x two sections per course, deterministic (no RNG)."""
+    rows = []
+    crn = 20000
+    for term, descr, season, year, sdate, edate in _SAMPLE_TERMS:
+        for cid, mode, cap, enrl, wait in _SAMPLE_COURSES:
+            _, title, units, prereqs, igetc, oer, disc, org = _CATALOG_BY_ID[cid]
+            subj, cat = cid.split(" ")
+            mname, _fill, inperson = MODES[mode]
+            for i in range(2):  # two sections so single_section never fires
+                crn += 1
+                rows.append({
+                    "Term": term, "Descr": descr, "Campus": "LAMC",
+                    "Class Nbr": crn, "Subject": subj, "Catalog": cat,
+                    "Section": f"M{i+1:02d}", "Session": "1",
+                    "Class Type": "E", "Component": "LEC",
+                    "Class Status": "Active",
+                    "Mode": mode, "IN_PERSON": "Y" if inperson else "",
+                    # POPULATED IR enrollment columns (the point of this fixture)
+                    "Cap Enrl": cap, "Tot Enrl": enrl,
+                    "Wait Cap": 10, "Wait Tot": wait,
+                    "FILLD": round(enrl / cap, 3),
+                    ".FILLPERCNT": round(enrl / cap * 100, 1),
+                    "ENRL": enrl, "LMT": cap,
+                    "Acad Org": org, "Dep": disc, "Discipline": disc,
+                    "IGETC": igetc or "", "OER": "Y" if oer else "",
+                    "FTE": round(enrl * units / 525, 3),
+                    "Class Workload Hrs": units,
+                    "LEVEL": "UG",
+                    "CLASS": cid, "SEC": f"M{i+1:02d}",
+                    "Class Start Date": sdate, "Class End Date": edate,
+                })
+    return rows
+
+
+def _build_catalog_df():
+    def prereq_str(p):
+        if not p:
+            return ""
+        return " AND ".join("(" + " OR ".join(grp) + ")" for grp in p)
+    return pd.DataFrame([{
+        "Course ID": cid, "Subject": cid.split(" ")[0], "Catalog": cid.split(" ")[1],
+        "Title": title, "Units": units,
+        "Prerequisites (structured)": prereq_str(prereqs),
+        "Prerequisites (raw)": prereq_str(prereqs).replace("(", "").replace(")", ""),
+        "IGETC Area": igetc or "", "OER": "Y" if oer else "",
+        "Discipline": disc, "Acad Org": org, "Status": "Active",
+    } for cid, title, units, prereqs, igetc, oer, disc, org in CATALOG])
+
+
+def _build_programs_df():
+    prog_rows = []
+    for pcode, p in PROGRAMS.items():
+        seq_lookup = {c: t for t, cs in p["sequence"].items() for c in cs}
+        for c in p["required"]:
+            prog_rows.append({
+                "Program Code": pcode, "Program Title": p["title"],
+                "GE Pattern": p["ge_pattern"], "Course ID": c,
+                "Requirement Type": "Required",
+                "Recommended Semester": seq_lookup.get(c, ""),
             })
+    return pd.DataFrame(prog_rows)
 
-sections = pd.DataFrame(rows)
 
-# catalog frame (prereqs serialized as readable structured string)
-def prereq_str(p):
-    if not p: return ""
-    return " AND ".join("(" + " OR ".join(grp) + ")" for grp in p)
+def generate(out_path, *, enrollment_sample=False, seed=42):
+    """Build the three-sheet workbook and write it to out_path.
 
-catalog_df = pd.DataFrame([{
-    "Course ID": cid, "Subject": cid.split(" ")[0], "Catalog": cid.split(" ")[1],
-    "Title": title, "Units": units,
-    "Prerequisites (structured)": prereq_str(prereqs),
-    "Prerequisites (raw)": prereq_str(prereqs).replace("(","").replace(")",""),
-    "IGETC Area": igetc or "", "OER": "Y" if oer else "",
-    "Discipline": disc, "Acad Org": org, "Status": "Active",
-} for cid,title,units,prereqs,igetc,oer,disc,org in CATALOG])
+    enrollment_sample=False (default) reproduces the bundled 8-term demo
+    workbook (files/lamc_data.xlsx) byte-for-byte. enrollment_sample=True emits
+    the live-shaped IR enrollment sample described in the module docstring.
 
-# programs frame (one row per program-course with sequence term)
-prog_rows = []
-for pcode, p in PROGRAMS.items():
-    seq_lookup = {c:t for t,cs in p["sequence"].items() for c in cs}
-    for c in p["required"]:
-        prog_rows.append({
-            "Program Code": pcode, "Program Title": p["title"],
-            "GE Pattern": p["ge_pattern"], "Course ID": c,
-            "Requirement Type": "Required",
-            "Recommended Semester": seq_lookup.get(c, ""),
-        })
-programs_df = pd.DataFrame(prog_rows)
+    Randomness is confined to a local random.Random(seed); the global RNG is
+    never touched, and the workbook timestamp is frozen, so output is
+    byte-for-byte reproducible.
+    """
+    rng = random.Random(seed)
+    if enrollment_sample:
+        sections = pd.DataFrame(_build_sample_sections())
+    else:
+        sections = pd.DataFrame(_build_demo_sections(rng))
+    catalog_df = _build_catalog_df()
+    programs_df = _build_programs_df()
 
-# write output
+    os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
+    # xlsxwriter is pandas' default .xlsx engine here; naming it explicitly keeps
+    # the byte layout stable regardless of which optional engines are installed.
+    with pd.ExcelWriter(out_path, engine="xlsxwriter") as xl:
+        sections.to_excel(xl, sheet_name="sections", index=False)
+        catalog_df.to_excel(xl, sheet_name="catalog", index=False)
+        programs_df.to_excel(xl, sheet_name="programs", index=False)
+        # Freeze the embedded created timestamp -> byte-for-byte reproducible
+        # (xlsxwriter otherwise stamps docProps/core.xml with the current clock).
+        xl.book.set_properties({"created": _FROZEN_TS})
+    return sections, catalog_df, programs_df
+
+
 _DEFAULT_OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "files", "lamc_data.xlsx")
-if __name__ == "__main__":
-    _parser = argparse.ArgumentParser(description="Generate the LAMC synthetic demo workbook.")
-    _parser.add_argument("--out", default=_DEFAULT_OUT, help="output .xlsx path (3 sheets)")
-    _args = _parser.parse_args()
-    os.makedirs(os.path.dirname(_args.out) or ".", exist_ok=True)
-    with pd.ExcelWriter(_args.out) as _xl:
-        sections.to_excel(_xl, sheet_name="sections", index=False)
-        catalog_df.to_excel(_xl, sheet_name="catalog", index=False)
-        programs_df.to_excel(_xl, sheet_name="programs", index=False)
-    print(f"Wrote {_args.out}: {len(sections)} sections, {len(catalog_df)} courses, {len(programs_df)} program-course rows")
+
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(description="Generate the LAMC synthetic demo workbook.")
+    parser.add_argument("--out", default=_DEFAULT_OUT, help="output .xlsx path (3 sheets)")
+    parser.add_argument("--enrollment-sample", action="store_true",
+                        help="emit the live-shaped IR enrollment sample instead of the demo")
+    args = parser.parse_args(argv)
+    sections, catalog_df, programs_df = generate(
+        args.out, enrollment_sample=args.enrollment_sample)
+    label = "enrollment sample" if args.enrollment_sample else "demo"
+    print(f"Wrote {args.out} ({label}): {len(sections)} sections, "
+          f"{len(catalog_df)} courses, {len(programs_df)} program-course rows")
     print("\nModality fill (sanity check vs real Spring data):")
-    act = sections[sections['Class Status']=='Active']
-    print(act.groupby('Mode').apply(lambda d:(d['Tot Enrl'].sum()/d['Cap Enrl'].sum())).round(2).to_string())
+    act = sections[sections['Class Status'] == 'Active']
+    print(act.groupby('Mode').apply(
+        lambda d: (d['Tot Enrl'].sum() / d['Cap Enrl'].sum())).round(2).to_string())
+
+
+if __name__ == "__main__":
+    main()
