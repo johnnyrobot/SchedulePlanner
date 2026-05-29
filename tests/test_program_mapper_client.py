@@ -76,3 +76,20 @@ def test_get_program_courses_falls_back_to_first_pathway(make_client):
     client = make_client(routes)
     courses = pm.get_program_courses("LAMC", "p2", client=client)
     assert [c["course_id"] for c in courses] == ["ENGL 101"]
+
+
+def test_get_program_courses_raises_on_malformed_program_map(make_client):
+    # Drift: the program-map came back valid JSON but the wrong shape (a list).
+    # Fail by endpoint name instead of a bare AttributeError on .get().
+    from sources.http import SourceDataError
+    import pytest
+    routes = {
+        "/programs/p3": {"pathways": [{"defaultPathway": True, "programMapId": "m3"}]},
+        "/program-maps/m3": ["unexpected", "list", "shape"],
+    }
+    client = make_client(routes)
+    with pytest.raises(SourceDataError) as ei:
+        pm.get_program_courses("LAMC", "p3", client=client)
+    msg = str(ei.value)
+    assert "program-maps/m3" in msg
+    assert "pathwayElements" in msg

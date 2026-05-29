@@ -85,6 +85,12 @@ def get_program_courses(campus, program_id, *, client=None):
         reqs = get_json(_site_url(campus, f"/program-maps/{map_id}"),
                         headers=_headers(campus), client=client,
                         source=f"{SOURCE} program-maps/{map_id} ({campus})")
+        if not isinstance(reqs, dict) or "pathwayElements" not in reqs:
+            raise SourceDataError(
+                f"{SOURCE} program-maps/{map_id} ({campus}): response missing "
+                f"'pathwayElements' key (got {type(reqs).__name__}). "
+                "The Program Mapper schema may have changed."
+            )
         for element in reqs.get("pathwayElements", []):
             opp = element.get("recommendedOpportunity") or {}
             if opp.get("type") != "COURSE":

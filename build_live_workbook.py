@@ -90,7 +90,7 @@ def analyze_live(campus, terms, program_query, out_path, *, client=None):
         "section_count": len(sections),
         "program": None,
         "reconciliation": None,
-        "inert_detectors": INERT_DETECTORS,
+        "inert_detectors": list(INERT_DETECTORS),
         "results": None,
         "error": None,
     }

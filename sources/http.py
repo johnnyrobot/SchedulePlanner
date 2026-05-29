@@ -72,7 +72,7 @@ def get_json(url, *, params=None, headers=None, client=None, timeout=DEFAULT_TIM
             )
         try:
             return resp.json()
-        except (ValueError, _json.JSONDecodeError) as exc:
+        except _json.JSONDecodeError as exc:
             preview = body[:120].replace("\n", " ")
             raise SourceDataError(
                 f"{source}: non-JSON response from {url} "

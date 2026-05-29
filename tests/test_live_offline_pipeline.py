@@ -1,8 +1,8 @@
 """Offline proof that the LIVE pipeline works, driven by committed fixtures.
 
-These fixtures are REAL responses captured once from the public LACCD APIs
-(see tests/fixtures/README is not used; provenance is in the m3 commit). We
-replay them through a FakeClient so the full chain runs with NO network:
+These fixtures are REAL responses captured once from the public LACCD APIs;
+their provenance is recorded in the m3 fixture commit message. We replay them
+through a FakeClient so the full chain runs with NO network:
 
     schedule.fetch_sections + program_mapper.fetch_program
         -> mapping.reconcile_courses
@@ -118,7 +118,7 @@ def test_build_live_workbook_emits_structured_report(lamc_routes, make_client,
     # inert-detector gaps surfaced as structured machine-readable fields
     inert = report["inert_detectors"]
     assert {d["detector"] for d in inert} >= {
-        "modality_mismatch", "under_supply"}
+        "modality_mismatch", "under_supply", "prerequisite_ordering"}
     for d in inert:
         assert d["reason"]            # human-readable why
         assert "remedy" in d          # what would un-inert it
