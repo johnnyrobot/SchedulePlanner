@@ -84,8 +84,12 @@
 
 <main>
   <div class="drop" id="drop">
-    <button onclick="pick()">Choose data file</button>
+    <div class="row" style="justify-content:center">
+      <button onclick="pick()">Choose data file</button>
+      <button class="ghost" id="demoBtn" onclick="loadDemo()">Load demo data</button>
+    </div>
     <p>.xlsx workbook with sheets: sections · catalog · programs</p>
+    <p class="hint">No file? Click <b>Load demo data</b> for the bundled sample.</p>
     <p id="picked"></p>
   </div>
 
@@ -138,8 +142,29 @@ async function runAnalysis(){
   document.getElementById('status').innerHTML='<span class="spinner"></span> running solver';
   const res = await window.pywebview.api.analyze(dataPath);
   btn.disabled=false; btn.textContent='Generate schedules';
+  showResult(res);
+}
+
+async function loadDemo(){
+  const btn=document.getElementById('demoBtn');
+  btn.disabled=true; btn.textContent='Loading…';
+  document.getElementById('actions').style.display='flex';
+  document.getElementById('picked').textContent='bundled demo data';
+  document.getElementById('status').innerHTML='<span class="spinner"></span> running solver on demo data';
+  const res = await window.pywebview.api.load_demo();
+  btn.disabled=false; btn.textContent='Load demo data';
+  showResult(res);
+}
+
+// Shared rendering for both a picked file and the bundled demo.
+function showResult(res){
   document.getElementById('status').textContent = res.ai_used ? 'parsed with Gemma 4' : 'regex parse (offline)';
-  if(res.error){ document.getElementById('out').innerHTML='<div class="card" style="color:var(--red)">'+res.error+'</div>'; return; }
+  if(res.error){
+    document.getElementById('out').innerHTML='<div class="card" style="color:var(--red)">'+res.error+'</div>';
+    document.getElementById('explainBtn').style.display='none';
+    document.getElementById('explainBox').innerHTML='';
+    return;
+  }
   render(res);
   document.getElementById('explainBtn').style.display='inline-block';
 }
