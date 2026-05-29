@@ -22,6 +22,7 @@ Axes asserted:
 The companion ``scripts/run_qa.sh`` is the single human/CI entry point; this
 test locks what that gate must keep covering.
 """
+import os
 import pathlib
 import subprocess
 import sys
@@ -51,7 +52,7 @@ def _collect_nodeids_with_markers():
         f"collection failed (rc={out.returncode}):\n{out.stdout}\n{out.stderr}"
     )
     return {ln.strip() for ln in out.stdout.splitlines()
-            if "::" in ln.strip() and "test" in ln}
+            if ln.strip().startswith("tests/") and "::" in ln}
 
 
 def _live_nodeids():
@@ -146,7 +147,6 @@ def test_mocked_live_app_node_uses_fakeclient(collected):
 def test_run_qa_script_exists_and_is_executable():
     """The single QA entry point exists and is runnable."""
     assert SCRIPT.exists(), f"missing QA gate script at {SCRIPT}"
-    import os
     assert os.access(SCRIPT, os.X_OK), f"{SCRIPT} is not executable (chmod +x)"
     text = SCRIPT.read_text()
     # It must deselect live EXPLICITLY (not lean on pytest.ini addopts) and use python3.

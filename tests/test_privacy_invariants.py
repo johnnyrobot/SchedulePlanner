@@ -161,6 +161,7 @@ def test_engine_run_offline_matches_normal_run(monkeypatch):
     monkeypatch.setattr(httpx, "Client", boom)
     monkeypatch.setattr(urllib.request, "urlopen", boom)
     monkeypatch.setattr(socket, "socket", boom)
+    monkeypatch.setattr(socket, "create_connection", boom, raising=False)
 
     offline = engine.run(engine._default_data_path())
     assert json.dumps(offline, sort_keys=True) == json.dumps(normal, sort_keys=True)
@@ -176,11 +177,13 @@ def test_engine_module_does_not_import_network_libs():
     assert "httpx" not in run_src
     assert "urllib" not in run_src
     assert "requests" not in run_src
-    # The whole engine module imports neither network client library.
+    # The whole engine module references no network client library. Use bare
+    # tokens (not "import httpx") so a `from httpx import Client` regression is
+    # also caught.
     engine_src = inspect.getsource(engine)
-    assert "import httpx" not in engine_src
-    assert "import urllib" not in engine_src
-    assert "import requests" not in engine_src
+    assert "httpx" not in engine_src
+    assert "urllib" not in engine_src
+    assert "requests" not in engine_src
 
 
 def test_live_pipeline_keeps_network_behind_injected_client():
