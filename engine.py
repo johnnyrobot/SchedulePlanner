@@ -135,6 +135,8 @@ def solve_cohort(pcode, prog, course_seasons, units, prereqs, cohort, allow_fixe
 
     solver = cp_model.CpSolver()
     solver.parameters.max_time_in_seconds = 10
+    solver.parameters.random_seed = 42
+    solver.parameters.num_search_workers = 1
     st = solver.Solve(m)
     if st not in (cp_model.OPTIMAL, cp_model.FEASIBLE):
         return None
