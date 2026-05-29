@@ -11,6 +11,12 @@ import re
 
 import pandas as pd
 
+from .http import SourceDataError
+
+# Human label so a malformed-record guard names where the bad data came from
+# (the live source -> mapping step), mirroring sources/http.py's style.
+SOURCE = "live-source mapping"
+
 SECTION_COLUMNS = ["Term", "CLASS", "Class Status", "Cap Enrl", "Tot Enrl", "Wait Tot"]
 CATALOG_COLUMNS = ["Course ID", "Units", "Prerequisites (structured)"]
 PROGRAM_COLUMNS = ["Program Code", "Program Title", "Course ID", "Recommended Semester"]
@@ -30,25 +36,52 @@ def _to_units(value, default=3.0):
 
 
 def build_sections_df(section_records):
-    rows = [{
-        "Term": int(r["term"]),
-        "CLASS": _norm(r["course"]),
-        # The schedule API only returns offered sections (cancelled ones are
-        # absent); its status field is enrollment availability (Open/Closed/
-        # Waitlist), not lifecycle. So every fetched section is an active offering.
-        "Class Status": "Active",
-        "Cap Enrl": 0,
-        "Tot Enrl": 0,
-        "Wait Tot": 0,
-    } for r in section_records]
+    rows = []
+    for i, r in enumerate(section_records):
+        if "term" not in r or "course" not in r:
+            # A section record missing a required key is schema drift from the
+            # schedule source: name the context instead of a bare KeyError.
+            raise SourceDataError(
+                f"{SOURCE}: section record #{i} missing required key "
+                f"('term'/'course'); got keys {sorted(r)[:8]}. "
+                "The schedule source shape may have changed."
+            )
+        try:
+            term = int(r["term"])
+        except (ValueError, TypeError) as exc:
+            raise SourceDataError(
+                f"{SOURCE}: section record #{i} has non-numeric term "
+                f"{r['term']!r}; expected an integer term code."
+            ) from exc
+        rows.append({
+            "Term": term,
+            "CLASS": _norm(r["course"]),
+            # The schedule API only returns offered sections (cancelled ones are
+            # absent); its status field is enrollment availability (Open/Closed/
+            # Waitlist), not lifecycle. So every fetched section is an active offering.
+            "Class Status": "Active",
+            "Cap Enrl": 0,
+            "Tot Enrl": 0,
+            "Wait Tot": 0,
+        })
     return pd.DataFrame(rows, columns=SECTION_COLUMNS)
 
 
 def build_catalog_df(section_records, program):
     units = {}
-    for r in section_records:
+    for i, r in enumerate(section_records):
+        if "course" not in r:
+            raise SourceDataError(
+                f"{SOURCE}: section record #{i} missing 'course'; got keys "
+                f"{sorted(r)[:8]}. The schedule source shape may have changed."
+            )
         units.setdefault(_norm(r["course"]), _to_units(r.get("units")))
-    for c in (program or {}).get("courses", []):
+    for i, c in enumerate((program or {}).get("courses", [])):
+        if "course_id" not in c:
+            raise SourceDataError(
+                f"{SOURCE}: program course #{i} missing 'course_id'; got keys "
+                f"{sorted(c)[:8]}. The Program Mapper shape may have changed."
+            )
         units.setdefault(_norm(c["course_id"]), _to_units(c.get("units")))
     rows = [{"Course ID": cid, "Units": u, "Prerequisites (structured)": ""}
             for cid, u in sorted(units.items())]
@@ -56,12 +89,26 @@ def build_catalog_df(section_records, program):
 
 
 def build_programs_df(program):
-    rows = [{
-        "Program Code": program["code"],
-        "Program Title": program["title"],
-        "Course ID": _norm(c["course_id"]),
-        "Recommended Semester": c.get("recommended_semester"),
-    } for c in (program or {}).get("courses", [])]
+    program = program or {}
+    missing = [k for k in ("code", "title") if k not in program]
+    if missing:
+        raise SourceDataError(
+            f"{SOURCE}: program missing required key(s) {missing}; got keys "
+            f"{sorted(program)[:8]}. The Program Mapper shape may have changed."
+        )
+    rows = []
+    for i, c in enumerate(program.get("courses", [])):
+        if "course_id" not in c:
+            raise SourceDataError(
+                f"{SOURCE}: program course #{i} missing 'course_id'; got keys "
+                f"{sorted(c)[:8]}. The Program Mapper shape may have changed."
+            )
+        rows.append({
+            "Program Code": program["code"],
+            "Program Title": program["title"],
+            "Course ID": _norm(c["course_id"]),
+            "Recommended Semester": c.get("recommended_semester"),
+        })
     return pd.DataFrame(rows, columns=PROGRAM_COLUMNS)
 
 
