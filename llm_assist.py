@@ -18,7 +18,12 @@ import subprocess
 import urllib.request
 
 OLLAMA_URL = "http://localhost:11434"
-MODEL = "gemma4:e2b"          # the edge model; swap for gemma4:e4b if more RAM
+# Lightweight edge default (real published tag, ollama.com/library/gemma4):
+# gemma4:e2b is the ~1-2 GB model the PRD intends for on-device use. Heavier
+# swaps gemma4:e4b / gemma4:31b are valid where more RAM is available — set
+# MODEL accordingly and pull the matching tag. Matching is tag-exact, so an
+# un-pulled tag reports absent and the engine uses the templated fallback.
+MODEL = "gemma4:e2b"
 
 
 # ----------------------------------------------------------- availability
@@ -34,11 +39,26 @@ def ollama_running() -> bool:
         return False
 
 
+def _name_matches(installed: str, wanted: str) -> bool:
+    """Match an installed Ollama model name against a wanted tag.
+
+    Matching is tag-exact: 'gemma4:e2b' must NOT be satisfied by 'gemma4:31b'.
+    A wanted name with no ':' (bare family) matches the ':latest' tag.
+    """
+    if not installed:
+        return False
+    if installed == wanted:
+        return True
+    if ":" not in wanted:
+        return installed == f"{wanted}:latest"
+    return False
+
+
 def model_present(model: str = MODEL) -> bool:
     try:
         with urllib.request.urlopen(f"{OLLAMA_URL}/api/tags", timeout=3) as r:
             tags = json.load(r)
-        return any(m.get("name", "").startswith(model.split(":")[0])
+        return any(_name_matches(m.get("name", ""), model)
                    for m in tags.get("models", []))
     except Exception:
         return False
