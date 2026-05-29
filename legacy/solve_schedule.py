@@ -20,9 +20,9 @@ DERIVED from the sections data, so this runs unchanged on real exports.
 import pandas as pd
 from ortools.sat.python import cp_model
 
-SECTIONS = "/home/claude/sections.xlsx"
-CATALOG  = "/home/claude/catalog.csv"
-PROGRAMS = "/home/claude/programs.csv"
+SECTIONS = "path/to/sections.xlsx"
+CATALOG  = "path/to/catalog.csv"
+PROGRAMS = "path/to/programs.csv"
 
 # Cohort profiles. horizon = max terms allowed; max_units = per-term cap.
 # Fall start assumed: odd term = Fall, even term = Spring.
