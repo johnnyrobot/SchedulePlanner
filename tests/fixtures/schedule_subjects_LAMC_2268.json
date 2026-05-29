@@ -1,0 +1,34 @@
+[
+  {
+    "code": "ANTHRO",
+    "name": "Anthropology"
+  },
+  {
+    "code": "BIOLOGY",
+    "name": "Biology"
+  },
+  {
+    "code": "CHEM",
+    "name": "Chemistry"
+  },
+  {
+    "code": "ENGLISH",
+    "name": "English"
+  },
+  {
+    "code": "MATH",
+    "name": "Mathematics"
+  },
+  {
+    "code": "MICRO",
+    "name": "Microbiology"
+  },
+  {
+    "code": "PHYSICS",
+    "name": "Physics"
+  },
+  {
+    "code": "PSYCH",
+    "name": "Psychology"
+  }
+]

@@ -1,0 +1,664 @@
+{
+  "programMapId": "c9380a8d-158f-44a8-b8b3-ddebba81a8a8",
+  "siteContentId": "0055f609-1a83-4937-8356-c67ec89cb496",
+  "collegeId": "la_mission",
+  "programId": "Biology",
+  "programTitle": "Associate in Science for Transfer",
+  "programAward": "a4060608-61af-8a69-5d00-66fc77c61774",
+  "label": "to CSU",
+  "emphasis": "Cal-GETC General Education Plan",
+  "termsToCompletion": 4,
+  "pathwayElements": [
+    {
+      "id": "86cdddf6-3845-4fa9-bac4-2eba4955053f",
+      "name": "CHEM 065",
+      "shortDescription": "Introductory General Chemistry",
+      "requirement": {
+        "requirementType": "MAJOR_CORE"
+      },
+      "recommendedOpportunity": {
+        "type": "COURSE",
+        "term": {
+          "customLabel": null,
+          "termNumber": 1,
+          "year": 2025
+        },
+        "courseCode": "CHEM 065",
+        "courseName": "Introductory General Chemistry",
+        "mappedCourseId": "8eb27542-b773-40ad-f1ca-237940d0c9d3",
+        "hasBadge": false,
+        "recommended": true,
+        "minUnits": 4.0,
+        "maxUnits": 4.0,
+        "dualRequirement": "GEN",
+        "courseNotes": null,
+        "minHours": 0.0,
+        "maxHours": 0.0,
+        "lectureHours": 3.0,
+        "labHours": 3.0,
+        "units": -1.0
+      },
+      "elementAssociations": [
+        {
+          "elementId": "86cdddf6-3845-4fa9-bac4-2eba4955053f",
+          "type": "REQUIREMENT_OF",
+          "associatedElementId": "1f07654d-4161-46cd-9349-d239b3b223ec"
+        },
+        {
+          "elementId": "86cdddf6-3845-4fa9-bac4-2eba4955053f",
+          "type": "REQUIREMENT_OF",
+          "associatedElementId": "177c0495-e738-4e05-b255-0099e80feade"
+        }
+      ],
+      "hasPriorLearningCredit": false
+    },
+    {
+      "id": "19415ba2-2eb0-4339-91a5-d7f7bf28764d",
+      "name": "MATH 261 or MATH 247",
+      "shortDescription": "Choose a course",
+      "requirement": {
+        "requirementType": "MAJOR_CORE"
+      },
+      "recommendedOpportunity": {
+        "type": "CHOICE",
+        "masterRecordId": "e39dc186-5311-40ae-bedb-7158f1909a2a",
+        "name": "Choose a course",
+        "description": "Choose a course from the following",
+        "term": {
+          "customLabel": null,
+          "termNumber": 1,
+          "year": 2025
+        },
+        "minUnits": 4.0,
+        "maxUnits": 5.0,
+        "dualRequirement": "GEN",
+        "minHours": 0.0,
+        "maxHours": 0.0,
+        "units": -1.0
+      },
+      "elementAssociations": [],
+      "hasPriorLearningCredit": false
+    },
+    {
+      "id": "09f3c4e2-481e-4a77-9b7b-c568b4e71a1b",
+      "name": "Arts",
+      "shortDescription": "Choose a course from Area 3A.",
+      "requirement": {
+        "requirementType": "GENERAL_EDUCATION"
+      },
+      "recommendedOpportunity": {
+        "type": "CHOICE",
+        "masterRecordId": "e48a10b1-94e8-4fdd-a23f-6a1b246ec3b1",
+        "name": "Choose a course from Area 3A.",
+        "description": "Choose a course from Area 3A that is either 3 semesters or 4 quarter units. Program requires at least one course from Area 3A.",
+        "term": {
+          "customLabel": null,
+          "termNumber": 1,
+          "year": 2025
+        },
+        "minUnits": 3.0,
+        "maxUnits": 3.0,
+        "dualRequirement": null,
+        "minHours": 0.0,
+        "maxHours": 0.0,
+        "units": -1.0
+      },
+      "elementAssociations": [],
+      "hasPriorLearningCredit": false
+    },
+    {
+      "id": "c063c142-d46d-4852-813c-f4752ad80bc8",
+      "name": "English Composition",
+      "shortDescription": "Choose a course from Area 1A.",
+      "requirement": {
+        "requirementType": "GENERAL_EDUCATION"
+      },
+      "recommendedOpportunity": {
+        "type": "CHOICE",
+        "masterRecordId": "2c347ad8-0c89-486b-ae0c-ae2535b937e0",
+        "name": "Choose a course from Area 1A.",
+        "description": "Choose a course from Area 1A that is either 3 semesters or 4 quarter units. Program requires at least one course.",
+        "term": {
+          "customLabel": null,
+          "termNumber": 1,
+          "year": 2025
+        },
+        "minUnits": 3.0,
+        "maxUnits": 3.0,
+        "dualRequirement": null,
+        "minHours": 0.0,
+        "maxHours": 0.0,
+        "units": -1.0
+      },
+      "elementAssociations": [],
+      "hasPriorLearningCredit": false
+    },
+    {
+      "id": "fb888765-143d-4ec8-bca2-025f00c1d26b",
+      "name": "Student Educational Plan",
+      "shortDescription": "Create a Comprehensive Student Educational Plan ",
+      "requirement": {
+        "requirementType": "MILESTONE"
+      },
+      "recommendedOpportunity": {
+        "type": "MILESTONE",
+        "title": "Student Educational Plan",
+        "shortDescription": "Create a Comprehensive Student Educational Plan ",
+        "longDescription": "Meet with your counselor to create a comprehensive student educational plan to make a tailored plan to transfer and graduate!",
+        "term": {
+          "customLabel": null,
+          "termNumber": 1,
+          "year": 2025
+        },
+        "linkUrl": "https://www.lamission.edu/Counseling/Home.aspx",
+        "linkName": " Make an appointment with your counselor today!"
+      },
+      "elementAssociations": [],
+      "hasPriorLearningCredit": false
+    },
+    {
+      "id": "1f07654d-4161-46cd-9349-d239b3b223ec",
+      "name": "CHEM 101",
+      "shortDescription": "General Chemistry I",
+      "requirement": {
+        "requirementType": "MAJOR_CORE"
+      },
+      "recommendedOpportunity": {
+        "type": "COURSE",
+        "term": {
+          "customLabel": null,
+          "termNumber": 2,
+          "year": 2026
+        },
+        "courseCode": "CHEM 101",
+        "courseName": "General Chemistry I",
+        "mappedCourseId": "bb3b0e0b-1287-f586-3321-5aefa54961b1",
+        "hasBadge": false,
+        "recommended": true,
+        "minUnits": 5.0,
+        "maxUnits": 5.0,
+        "dualRequirement": "GEN",
+        "courseNotes": null,
+        "minHours": 0.0,
+        "maxHours": 0.0,
+        "lectureHours": 3.0,
+        "labHours": 6.0,
+        "units": -1.0
+      },
+      "elementAssociations": [
+        {
+          "elementId": "1f07654d-4161-46cd-9349-d239b3b223ec",
+          "type": "REQUIRES",
+          "associatedElementId": "86cdddf6-3845-4fa9-bac4-2eba4955053f"
+        },
+        {
+          "elementId": "1f07654d-4161-46cd-9349-d239b3b223ec",
+          "type": "REQUIREMENT_OF",
+          "associatedElementId": "177c0495-e738-4e05-b255-0099e80feade"
+        },
+        {
+          "elementId": "1f07654d-4161-46cd-9349-d239b3b223ec",
+          "type": "REQUIREMENT_OF",
+          "associatedElementId": "ac4a0f2a-1d44-4f84-b121-d6d8ec6b6def"
+        }
+      ],
+      "hasPriorLearningCredit": false
+    },
+    {
+      "id": "177c0495-e738-4e05-b255-0099e80feade",
+      "name": "BIOLOGY 006",
+      "shortDescription": "General Biology I",
+      "requirement": {
+        "requirementType": "MAJOR_CORE"
+      },
+      "recommendedOpportunity": {
+        "type": "COURSE",
+        "term": {
+          "customLabel": null,
+          "termNumber": 2,
+          "year": 2026
+        },
+        "courseCode": "BIOLOGY 006",
+        "courseName": "General Biology I",
+        "mappedCourseId": "a4945573-d7a6-bd9c-1766-012e88ac0dac",
+        "hasBadge": false,
+        "recommended": true,
+        "minUnits": 5.0,
+        "maxUnits": 5.0,
+        "dualRequirement": "GEN",
+        "courseNotes": null,
+        "minHours": 0.0,
+        "maxHours": 0.0,
+        "lectureHours": 3.0,
+        "labHours": 6.0,
+        "units": -1.0
+      },
+      "elementAssociations": [
+        {
+          "elementId": "177c0495-e738-4e05-b255-0099e80feade",
+          "type": "REQUIRES",
+          "associatedElementId": "86cdddf6-3845-4fa9-bac4-2eba4955053f"
+        },
+        {
+          "elementId": "177c0495-e738-4e05-b255-0099e80feade",
+          "type": "REQUIRES",
+          "associatedElementId": "1f07654d-4161-46cd-9349-d239b3b223ec"
+        }
+      ],
+      "hasPriorLearningCredit": false
+    },
+    {
+      "id": "6f1f7c93-6849-46bb-81bb-26508467c0e2",
+      "name": "Critical Thinking and Composition",
+      "shortDescription": "Choose a course from Area 1B.",
+      "requirement": {
+        "requirementType": "GENERAL_EDUCATION"
+      },
+      "recommendedOpportunity": {
+        "type": "CHOICE",
+        "masterRecordId": "b7f07f91-56d0-4795-9f52-df8a69046d0f",
+        "name": "Choose a course from Area 1B.",
+        "description": "Choose a course from Area 1B that is either 3 semesters or 4 quarter units. Program requires at least one course.",
+        "term": {
+          "customLabel": null,
+          "termNumber": 2,
+          "year": 2026
+        },
+        "minUnits": 3.0,
+        "maxUnits": 3.0,
+        "dualRequirement": null,
+        "minHours": 0.0,
+        "maxHours": 0.0,
+        "units": -1.0
+      },
+      "elementAssociations": [],
+      "hasPriorLearningCredit": false
+    },
+    {
+      "id": "35409003-d263-4907-b7cf-0d026bfacf69",
+      "name": "Oral Communication",
+      "shortDescription": "Choose a course from Area 1C.",
+      "requirement": {
+        "requirementType": "GENERAL_EDUCATION"
+      },
+      "recommendedOpportunity": {
+        "type": "CHOICE",
+        "masterRecordId": "33407f40-119b-4d4d-a8e0-de57a9ae3629",
+        "name": "Choose a course from Area 1C.",
+        "description": "Choose a course from Area 1C that is either 3 semesters or 4 quarter units. Program requires at least one course.",
+        "term": {
+          "customLabel": null,
+          "termNumber": 2,
+          "year": 2026
+        },
+        "minUnits": 3.0,
+        "maxUnits": 3.0,
+        "dualRequirement": null,
+        "minHours": 0.0,
+        "maxHours": 0.0,
+        "units": -1.0
+      },
+      "elementAssociations": [],
+      "hasPriorLearningCredit": false
+    },
+    {
+      "id": "00889806-0a78-48d5-bd53-ecb028474c5c",
+      "name": "Visit the Career Center",
+      "shortDescription": "Visit the Career Center",
+      "requirement": {
+        "requirementType": "MILESTONE"
+      },
+      "recommendedOpportunity": {
+        "type": "MILESTONE",
+        "title": "Visit the Career Center",
+        "shortDescription": "Visit the Career Center",
+        "longDescription": "The Career Center can help you research careers within your major, register for the Mission College job board to find internship & employment opportunities, attend \u201cJob Ready\u201d workshops, and if you\u2019re undecided take a career assessment to help choose your major!",
+        "term": {
+          "customLabel": null,
+          "termNumber": 2,
+          "year": 2026
+        },
+        "linkUrl": "https://www.lamission.edu/Career-Center/Home.aspx",
+        "linkName": "LAMC Career Center"
+      },
+      "elementAssociations": [],
+      "hasPriorLearningCredit": false
+    },
+    {
+      "id": "ac4a0f2a-1d44-4f84-b121-d6d8ec6b6def",
+      "name": "CHEM 102",
+      "shortDescription": "General Chemistry II",
+      "requirement": {
+        "requirementType": "MAJOR_CORE"
+      },
+      "recommendedOpportunity": {
+        "type": "COURSE",
+        "term": {
+          "customLabel": null,
+          "termNumber": 3,
+          "year": 2026
+        },
+        "courseCode": "CHEM 102",
+        "courseName": "General Chemistry II",
+        "mappedCourseId": "087edfab-6c36-224c-b635-1b46bff22b19",
+        "hasBadge": false,
+        "recommended": true,
+        "minUnits": 5.0,
+        "maxUnits": 5.0,
+        "dualRequirement": null,
+        "courseNotes": null,
+        "minHours": 0.0,
+        "maxHours": 0.0,
+        "lectureHours": 3.0,
+        "labHours": 6.0,
+        "units": -1.0
+      },
+      "elementAssociations": [
+        {
+          "elementId": "ac4a0f2a-1d44-4f84-b121-d6d8ec6b6def",
+          "type": "REQUIRES",
+          "associatedElementId": "1f07654d-4161-46cd-9349-d239b3b223ec"
+        }
+      ],
+      "hasPriorLearningCredit": false
+    },
+    {
+      "id": "4ba02b1f-f0a1-44b5-8704-5407aeaf66bf",
+      "name": "BIOLOGY 007",
+      "shortDescription": "General Biology II",
+      "requirement": {
+        "requirementType": "MAJOR_CORE"
+      },
+      "recommendedOpportunity": {
+        "type": "COURSE",
+        "term": {
+          "customLabel": null,
+          "termNumber": 3,
+          "year": 2026
+        },
+        "courseCode": "BIOLOGY 007",
+        "courseName": "General Biology II",
+        "mappedCourseId": "576f2e44-04c0-a8a5-8415-77caf35a95a8",
+        "hasBadge": false,
+        "recommended": true,
+        "minUnits": 5.0,
+        "maxUnits": 5.0,
+        "dualRequirement": null,
+        "courseNotes": null,
+        "minHours": 0.0,
+        "maxHours": 0.0,
+        "lectureHours": 3.0,
+        "labHours": 6.0,
+        "units": -1.0
+      },
+      "elementAssociations": [],
+      "hasPriorLearningCredit": false
+    },
+    {
+      "id": "ad77365f-ce86-4c59-8f8c-9b9a14375bd8",
+      "name": "PHYSICS 006",
+      "shortDescription": "General Physics I",
+      "requirement": {
+        "requirementType": "MAJOR_CORE"
+      },
+      "recommendedOpportunity": {
+        "type": "COURSE",
+        "term": {
+          "customLabel": null,
+          "termNumber": 3,
+          "year": 2026
+        },
+        "courseCode": "PHYSICS 006",
+        "courseName": "General Physics I",
+        "mappedCourseId": "c1985dd6-cad3-bb1a-4fdb-fce98507afd0",
+        "hasBadge": false,
+        "recommended": true,
+        "minUnits": 4.0,
+        "maxUnits": 4.0,
+        "dualRequirement": "GEN",
+        "courseNotes": null,
+        "minHours": 0.0,
+        "maxHours": 0.0,
+        "lectureHours": 3.0,
+        "labHours": 3.0,
+        "units": -1.0
+      },
+      "elementAssociations": [
+        {
+          "elementId": "ad77365f-ce86-4c59-8f8c-9b9a14375bd8",
+          "type": "REQUIREMENT_OF",
+          "associatedElementId": "2ff8142d-691a-4e04-b1d4-e4c0d8e673ff"
+        }
+      ],
+      "hasPriorLearningCredit": false
+    },
+    {
+      "id": "7459adb0-2cfa-4977-8931-a0b058a7e6c1",
+      "name": "Social and Behavioral Sciences",
+      "shortDescription": "Choose a course from Area 4.",
+      "requirement": {
+        "requirementType": "GENERAL_EDUCATION"
+      },
+      "recommendedOpportunity": {
+        "type": "CHOICE",
+        "masterRecordId": "1045139e-a716-4f20-853f-1cbadb744cfe",
+        "name": "Choose a course from Area 4.",
+        "description": "Choose a course from Area 4. Program requires at least two courses in at least two different subject areas totaling either 6 semesters or 8 quarter units.",
+        "term": {
+          "customLabel": null,
+          "termNumber": 3,
+          "year": 2026
+        },
+        "minUnits": 3.0,
+        "maxUnits": 3.0,
+        "dualRequirement": null,
+        "minHours": 0.0,
+        "maxHours": 0.0,
+        "units": -1.0
+      },
+      "elementAssociations": [],
+      "hasPriorLearningCredit": false
+    },
+    {
+      "id": "0781cf0f-ea59-4108-8f11-c26ee09bcb45",
+      "name": "Apply for Transfer (if applicable)",
+      "shortDescription": "Visit the Transfer Center to learn how to apply",
+      "requirement": {
+        "requirementType": "MILESTONE"
+      },
+      "recommendedOpportunity": {
+        "type": "MILESTONE",
+        "title": "Apply for Transfer (if applicable)",
+        "shortDescription": "Visit the Transfer Center to learn how to apply",
+        "longDescription": "Transfer Center has workshops available for you to learn how to transfer, guarantee admissions to a UC and CSU through pathways, assistance with transfer applications, and connect with university representatives and mentors! ",
+        "term": {
+          "customLabel": null,
+          "termNumber": 3,
+          "year": 2026
+        },
+        "linkUrl": "https://www.lamission.edu/student-services/transfer-center/services",
+        "linkName": "LAMC Transfer Center"
+      },
+      "elementAssociations": [],
+      "hasPriorLearningCredit": false
+    },
+    {
+      "id": "2ff8142d-691a-4e04-b1d4-e4c0d8e673ff",
+      "name": "PHYSICS 007",
+      "shortDescription": "General Physics II",
+      "requirement": {
+        "requirementType": "MAJOR_CORE"
+      },
+      "recommendedOpportunity": {
+        "type": "COURSE",
+        "term": {
+          "customLabel": null,
+          "termNumber": 4,
+          "year": 2027
+        },
+        "courseCode": "PHYSICS 007",
+        "courseName": "General Physics II",
+        "mappedCourseId": "329e1c94-6394-51cb-d138-0ea5a47aac37",
+        "hasBadge": false,
+        "recommended": true,
+        "minUnits": 4.0,
+        "maxUnits": 4.0,
+        "dualRequirement": null,
+        "courseNotes": null,
+        "minHours": 0.0,
+        "maxHours": 0.0,
+        "lectureHours": 3.0,
+        "labHours": 3.0,
+        "units": -1.0
+      },
+      "elementAssociations": [
+        {
+          "elementId": "2ff8142d-691a-4e04-b1d4-e4c0d8e673ff",
+          "type": "REQUIRES",
+          "associatedElementId": "ad77365f-ce86-4c59-8f8c-9b9a14375bd8"
+        }
+      ],
+      "hasPriorLearningCredit": false
+    },
+    {
+      "id": "c4a97f9d-c851-48ae-9eba-3d21b2a7ed5a",
+      "name": "Ethnic Studies",
+      "shortDescription": "Choose a course from Area 6.",
+      "requirement": {
+        "requirementType": "GENERAL_EDUCATION"
+      },
+      "recommendedOpportunity": {
+        "type": "CHOICE",
+        "masterRecordId": "667728f6-2f2d-49a5-a047-fabc27565166",
+        "name": "Choose a course from Area 6.",
+        "description": "Choose a course from Area 6 that is either 3 semesters or 4 quarter units. This course must be in ethnic studies or in a similar field provided that the course is cross-listed with ethnic studies.",
+        "term": {
+          "customLabel": null,
+          "termNumber": 4,
+          "year": 2027
+        },
+        "minUnits": 3.0,
+        "maxUnits": 3.0,
+        "dualRequirement": null,
+        "minHours": 0.0,
+        "maxHours": 0.0,
+        "units": -1.0
+      },
+      "elementAssociations": [],
+      "hasPriorLearningCredit": false
+    },
+    {
+      "id": "ec09c434-d3a2-4f2d-8309-5709a4aa2cbd",
+      "name": "Social and Behavioral Sciences",
+      "shortDescription": "Choose a course from Area 4.",
+      "requirement": {
+        "requirementType": "GENERAL_EDUCATION"
+      },
+      "recommendedOpportunity": {
+        "type": "CHOICE",
+        "masterRecordId": "39d4a98c-b270-4f3a-b40f-7f54208e11d3",
+        "name": "Choose a course from Area 4.",
+        "description": "Choose a course from Area 4. Program requires at least two courses in at least two different subject areas totaling either 6 semesters or 8 quarter units.",
+        "term": {
+          "customLabel": null,
+          "termNumber": 4,
+          "year": 2027
+        },
+        "minUnits": 3.0,
+        "maxUnits": 3.0,
+        "dualRequirement": null,
+        "minHours": 0.0,
+        "maxHours": 0.0,
+        "units": -1.0
+      },
+      "elementAssociations": [],
+      "hasPriorLearningCredit": false
+    },
+    {
+      "id": "29942c74-db0a-46f5-af6f-a339006fda81",
+      "name": "Humanities",
+      "shortDescription": "Choose a course from Area 3B.",
+      "requirement": {
+        "requirementType": "GENERAL_EDUCATION"
+      },
+      "recommendedOpportunity": {
+        "type": "CHOICE",
+        "masterRecordId": "a333e47c-7838-42d5-a845-b41ee168907b",
+        "name": "Choose a course from Area 3B.",
+        "description": "Choose a course from Area 3B that is either 3 semesters or 4 quarter units. Program requires at least one course from Area 3B.",
+        "term": {
+          "customLabel": null,
+          "termNumber": 4,
+          "year": 2027
+        },
+        "minUnits": 3.0,
+        "maxUnits": 3.0,
+        "dualRequirement": null,
+        "minHours": 0.0,
+        "maxHours": 0.0,
+        "units": -1.0
+      },
+      "elementAssociations": [],
+      "hasPriorLearningCredit": false
+    },
+    {
+      "id": "b1aae379-d1ca-4e3e-8fc9-879adccb8ddd",
+      "name": "Petition to Graduate",
+      "shortDescription": "Visit your counselor to petition to graduate",
+      "requirement": {
+        "requirementType": "MILESTONE"
+      },
+      "recommendedOpportunity": {
+        "type": "MILESTONE",
+        "title": "Petition to Graduate",
+        "shortDescription": "Visit your counselor to petition to graduate",
+        "longDescription": "Make an appointment with your counselor to petition for graduation if this is your final semester. Not sure? Request for a graduation check!",
+        "term": {
+          "customLabel": null,
+          "termNumber": 4,
+          "year": 2027
+        },
+        "linkUrl": "https://www.lamission.edu/Counseling/Home.aspx",
+        "linkName": " Make an appointment with your counselor today!"
+      },
+      "elementAssociations": [],
+      "hasPriorLearningCredit": false
+    }
+  ],
+  "layout": null,
+  "missingPrerequisites": [
+    {
+      "masterRecordId": "06e1282d-fcef-77a9-b036-f3d969958405",
+      "courseCode": "MATH 240",
+      "title": "Trigonometry",
+      "hasBadge": false,
+      "minUnits": 3.0,
+      "maxUnits": 3.0,
+      "courseMinUnits": -1.0,
+      "courseMaxUnits": -1.0
+    },
+    {
+      "masterRecordId": "e731212b-4807-33e4-0bf9-a944bfc2f95c",
+      "courseCode": "MATH 240S",
+      "title": "Trigonometry with Support",
+      "hasBadge": false,
+      "minUnits": 4.0,
+      "maxUnits": 4.0,
+      "courseMinUnits": -1.0,
+      "courseMaxUnits": -1.0
+    },
+    {
+      "masterRecordId": "d8ffda25-c1d7-b5fc-e351-995ea33a12c4",
+      "courseCode": "CHEM 051",
+      "title": "Fundamentals Of Chemistry I",
+      "hasBadge": false,
+      "minUnits": 5.0,
+      "maxUnits": 5.0,
+      "courseMinUnits": -1.0,
+      "courseMaxUnits": -1.0
+    }
+  ],
+  "defaultMap": true,
+  "hideYears": true,
+  "nonCreditAward": false
+}

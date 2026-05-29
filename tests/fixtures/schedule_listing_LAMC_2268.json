@@ -1,0 +1,1884 @@
+{
+  "campuscode": "LAMC",
+  "campusname": "Mission College",
+  "termcode": "2268",
+  "termname": "Fall 2026",
+  "subjectlist": [
+    "BIOLOGY",
+    "CHEM",
+    "ENGLISH",
+    "MATH",
+    "MICRO",
+    "PHYSICS"
+  ],
+  "classTypeList": [
+    {
+      "name": "IN-PERSON",
+      "value": "01  In Person"
+    },
+    {
+      "name": "ONLINE",
+      "value": "02  Online"
+    },
+    {
+      "name": "C19S",
+      "value": "03  Online Live"
+    },
+    {
+      "name": "HYFLEX",
+      "value": "04  HyFlex-In Person or Online"
+    },
+    {
+      "name": "HYBRID",
+      "value": "05  Hybrid-Partially Online"
+    },
+    {
+      "name": "OER",
+      "value": "06  Zero Textbook Cost (ZTC)"
+    },
+    {
+      "name": "LCT",
+      "value": "07  Low Textbook Cost"
+    }
+  ],
+  "subjects": [
+    {
+      "name": "Biology",
+      "code": "BIOLOGY",
+      "courses": [
+        {
+          "subject": "BIOLOGY",
+          "catalogNbr": "003",
+          "descr": "Introduct To Biology",
+          "units": "4.00",
+          "sections": [
+            {
+              "classNbr": "17818 (LEC)",
+              "seats": "4",
+              "woi": "16",
+              "dates": "08/31/26 - 12/20/26",
+              "status": "Open",
+              "meetings": [
+                {
+                  "days": "M",
+                  "times": "8:50 AM - 10:15 AM",
+                  "room": "Mission-CMS 004",
+                  "instr": "Jeffrey Morse"
+                },
+                {
+                  "days": "W",
+                  "times": "8:50 AM - 10:15 AM",
+                  "room": "Mission-Online Live",
+                  "instr": "Jeffrey Morse"
+                }
+              ],
+              "relsections": [
+                {
+                  "classNbr": "17819 (LAB)",
+                  "seats": "4",
+                  "woi": "16",
+                  "dates": "08/31/26 - 12/20/26",
+                  "status": "Open",
+                  "meetings": [
+                    {
+                      "days": "M",
+                      "times": "10:30 AM - 1:40 PM",
+                      "room": "Mission-CMS 110",
+                      "instr": "Jeffrey Morse"
+                    }
+                  ],
+                  "relsections": [],
+                  "classType": [
+                    "HYBRID",
+                    "OER"
+                  ]
+                }
+              ],
+              "classType": [
+                "HYBRID",
+                "OER"
+              ]
+            },
+            {
+              "classNbr": "11266 (LEC)",
+              "seats": "47",
+              "woi": "16",
+              "dates": "08/31/26 - 12/20/26",
+              "status": "Open",
+              "meetings": [
+                {
+                  "days": "",
+                  "times": "",
+                  "room": "Mission-Online",
+                  "instr": "Elizabeth Jordan"
+                }
+              ],
+              "relsections": [
+                {
+                  "classNbr": "11275 (LAB)",
+                  "seats": "20",
+                  "woi": "16",
+                  "dates": "08/31/26 - 12/20/26",
+                  "status": "Open",
+                  "meetings": [
+                    {
+                      "days": "T",
+                      "times": "8:50 AM - 12:00 PM",
+                      "room": "Mission-CMS 110",
+                      "instr": "Elizabeth Jordan"
+                    }
+                  ],
+                  "relsections": [],
+                  "classType": [
+                    "HYBRID",
+                    "OER"
+                  ]
+                }
+              ],
+              "classType": [
+                "HYBRID",
+                "OER"
+              ]
+            },
+            {
+              "classNbr": "16072 (LEC)",
+              "seats": "23",
+              "woi": "16",
+              "dates": "08/31/26 - 12/20/26",
+              "status": "Open",
+              "meetings": [
+                {
+                  "days": "W",
+                  "times": "6:50 PM - 8:50 PM",
+                  "room": "Mission-Online Live",
+                  "instr": "LAMC STAFF"
+                },
+                {
+                  "days": "S",
+                  "times": "8:30 AM - 9:40 AM",
+                  "room": "Mission-CMS 105",
+                  "instr": "LAMC STAFF"
+                }
+              ],
+              "relsections": [
+                {
+                  "classNbr": "16073 (LAB)",
+                  "seats": "23",
+                  "woi": "16",
+                  "dates": "08/31/26 - 12/20/26",
+                  "status": "Open",
+                  "meetings": [
+                    {
+                      "days": "S",
+                      "times": "9:50 AM - 1:00 PM",
+                      "room": "Mission-CMS 110",
+                      "instr": "LAMC STAFF"
+                    }
+                  ],
+                  "relsections": [],
+                  "classType": [
+                    "HYBRID",
+                    "OER"
+                  ]
+                }
+              ],
+              "classType": [
+                "HYBRID",
+                "OER"
+              ]
+            }
+          ]
+        },
+        {
+          "subject": "BIOLOGY",
+          "catalogNbr": "005",
+          "descr": "Intro to Human Biol",
+          "units": "4.00",
+          "sections": [
+            {
+              "classNbr": "12211 (LEC)",
+              "seats": "43",
+              "woi": "16",
+              "dates": "08/31/26 - 12/20/26",
+              "status": "Open",
+              "meetings": [
+                {
+                  "days": "M W",
+                  "times": "8:30 AM - 9:55 AM",
+                  "room": "Mission-CMS 105",
+                  "instr": "Brian Gadd"
+                }
+              ],
+              "relsections": [
+                {
+                  "classNbr": "12212 (LAB)",
+                  "seats": "15",
+                  "woi": "16",
+                  "dates": "08/31/26 - 12/20/26",
+                  "status": "Open",
+                  "meetings": [
+                    {
+                      "days": "M",
+                      "times": "10:10 AM - 1:20 PM",
+                      "room": "Mission-CMS 102",
+                      "instr": "Brian Gadd"
+                    }
+                  ],
+                  "relsections": [],
+                  "classType": [
+                    "IN-PERSON",
+                    "OER"
+                  ]
+                }
+              ],
+              "classType": [
+                "IN-PERSON",
+                "OER"
+              ]
+            },
+            {
+              "classNbr": "13928 (LEC)",
+              "seats": "49",
+              "woi": "16",
+              "dates": "08/31/26 - 12/20/26",
+              "status": "Open",
+              "meetings": [
+                {
+                  "days": "T Th",
+                  "times": "8:50 AM - 10:15 AM",
+                  "room": "Mission-CMS 105",
+                  "instr": "Diane Livio"
+                }
+              ],
+              "relsections": [
+                {
+                  "classNbr": "13929 (LAB)",
+                  "seats": "20",
+                  "woi": "16",
+                  "dates": "08/31/26 - 12/20/26",
+                  "status": "Open",
+                  "meetings": [
+                    {
+                      "days": "T",
+                      "times": "10:30 AM - 1:40 PM",
+                      "room": "Mission-CMS 104",
+                      "instr": "Diane Livio"
+                    }
+                  ],
+                  "relsections": [],
+                  "classType": [
+                    "IN-PERSON",
+                    "OER"
+                  ]
+                }
+              ],
+              "classType": [
+                "IN-PERSON",
+                "OER"
+              ]
+            },
+            {
+              "classNbr": "19022 (LEC)",
+              "seats": "23",
+              "woi": "16",
+              "dates": "08/31/26 - 12/20/26",
+              "status": "Open",
+              "meetings": [
+                {
+                  "days": "M",
+                  "times": "12:15 PM - 1:40 PM",
+                  "room": "Mission-CMS 104",
+                  "instr": "Diane Livio"
+                },
+                {
+                  "days": "W",
+                  "times": "12:15 PM - 1:40 PM",
+                  "room": "Mission-Online Live",
+                  "instr": "Diane Livio"
+                }
+              ],
+              "relsections": [
+                {
+                  "classNbr": "19023 (LAB)",
+                  "seats": "23",
+                  "woi": "16",
+                  "dates": "08/31/26 - 12/20/26",
+                  "status": "Open",
+                  "meetings": [
+                    {
+                      "days": "M",
+                      "times": "1:50 PM - 5:00 PM",
+                      "room": "Mission-CMS 104",
+                      "instr": "Diane Livio"
+                    }
+                  ],
+                  "relsections": [],
+                  "classType": [
+                    "HYBRID",
+                    "OER"
+                  ]
+                }
+              ],
+              "classType": [
+                "HYBRID",
+                "OER"
+              ]
+            }
+          ]
+        },
+        {
+          "subject": "BIOLOGY",
+          "catalogNbr": "006",
+          "descr": "General Biology I",
+          "units": "5.00",
+          "sections": [
+            {
+              "classNbr": "12255 (LEC)",
+              "seats": "8",
+              "woi": "16",
+              "dates": "08/31/26 - 12/20/26",
+              "status": "Open",
+              "meetings": [
+                {
+                  "days": "T Th",
+                  "times": "8:50 AM - 10:15 AM",
+                  "room": "Mission-CMS 002",
+                  "instr": "Brian Gadd"
+                }
+              ],
+              "relsections": [
+                {
+                  "classNbr": "12257 (LAB)",
+                  "seats": "8",
+                  "woi": "16",
+                  "dates": "08/31/26 - 12/20/26",
+                  "status": "Open",
+                  "meetings": [
+                    {
+                      "days": "T Th",
+                      "times": "10:30 AM - 1:40 PM",
+                      "room": "Mission-CMS 002",
+                      "instr": "Brian Gadd"
+                    }
+                  ],
+                  "relsections": [],
+                  "classType": [
+                    "IN-PERSON"
+                  ]
+                }
+              ],
+              "classType": [
+                "IN-PERSON"
+              ]
+            },
+            {
+              "classNbr": "15512 (LEC)",
+              "seats": "25",
+              "woi": "16",
+              "dates": "08/31/26 - 12/20/26",
+              "status": "Open",
+              "meetings": [
+                {
+                  "days": "T Th",
+                  "times": "1:55 PM - 3:20 PM",
+                  "room": "Mission-CMS 002",
+                  "instr": "LAMC STAFF"
+                }
+              ],
+              "relsections": [
+                {
+                  "classNbr": "15513 (LAB)",
+                  "seats": "25",
+                  "woi": "16",
+                  "dates": "08/31/26 - 12/20/26",
+                  "status": "Open",
+                  "meetings": [
+                    {
+                      "days": "T Th",
+                      "times": "3:30 PM - 6:40 PM",
+                      "room": "Mission-CMS 002",
+                      "instr": "LAMC STAFF"
+                    }
+                  ],
+                  "relsections": [],
+                  "classType": [
+                    "IN-PERSON"
+                  ]
+                }
+              ],
+              "classType": [
+                "IN-PERSON"
+              ]
+            },
+            {
+              "classNbr": "24442 (LEC)",
+              "seats": "0",
+              "woi": "16",
+              "dates": "08/31/26 - 12/20/26",
+              "status": "Waitlist",
+              "meetings": [
+                {
+                  "days": "M W",
+                  "times": "1:55 PM - 3:20 PM",
+                  "room": "Mission-CMS 002",
+                  "instr": "Allea Cauilan"
+                }
+              ],
+              "relsections": [
+                {
+                  "classNbr": "24443 (LAB)",
+                  "seats": "0",
+                  "woi": "16",
+                  "dates": "08/31/26 - 12/20/26",
+                  "status": "Waitlist",
+                  "meetings": [
+                    {
+                      "days": "M W",
+                      "times": "3:30 PM - 6:40 PM",
+                      "room": "Mission-CMS 002",
+                      "instr": "Allea Cauilan"
+                    }
+                  ],
+                  "relsections": [],
+                  "classType": [
+                    "IN-PERSON"
+                  ]
+                }
+              ],
+              "classType": [
+                "IN-PERSON"
+              ]
+            }
+          ]
+        },
+        {
+          "subject": "BIOLOGY",
+          "catalogNbr": "007",
+          "descr": "General Biology II",
+          "units": "5.00",
+          "sections": [
+            {
+              "classNbr": "12284 (LEC)",
+              "seats": "15",
+              "woi": "16",
+              "dates": "08/31/26 - 12/20/26",
+              "status": "Open",
+              "meetings": [
+                {
+                  "days": "M W",
+                  "times": "8:50 AM - 10:15 AM",
+                  "room": "Mission-CMS 106",
+                  "instr": "Elizabeth Jordan"
+                }
+              ],
+              "relsections": [
+                {
+                  "classNbr": "12285 (LAB)",
+                  "seats": "15",
+                  "woi": "16",
+                  "dates": "08/31/26 - 12/20/26",
+                  "status": "Open",
+                  "meetings": [
+                    {
+                      "days": "M W",
+                      "times": "10:30 AM - 1:40 PM",
+                      "room": "Mission-CMS 106",
+                      "instr": "Elizabeth Jordan"
+                    }
+                  ],
+                  "relsections": [],
+                  "classType": [
+                    "IN-PERSON"
+                  ]
+                }
+              ],
+              "classType": [
+                "IN-PERSON"
+              ]
+            },
+            {
+              "classNbr": "24444 (LEC)",
+              "seats": "14",
+              "woi": "16",
+              "dates": "08/31/26 - 12/20/26",
+              "status": "Open",
+              "meetings": [
+                {
+                  "days": "M W",
+                  "times": "1:55 PM - 3:20 PM",
+                  "room": "Mission-CMS 106",
+                  "instr": "LAMC STAFF"
+                }
+              ],
+              "relsections": [
+                {
+                  "classNbr": "24445 (LAB)",
+                  "seats": "14",
+                  "woi": "16",
+                  "dates": "08/31/26 - 12/20/26",
+                  "status": "Open",
+                  "meetings": [
+                    {
+                      "days": "M W",
+                      "times": "3:30 PM - 6:40 PM",
+                      "room": "Mission-CMS 106",
+                      "instr": "LAMC STAFF"
+                    }
+                  ],
+                  "relsections": [],
+                  "classType": [
+                    "IN-PERSON"
+                  ]
+                }
+              ],
+              "classType": [
+                "IN-PERSON"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Chemistry",
+      "code": "CHEM",
+      "courses": [
+        {
+          "subject": "CHEM",
+          "catalogNbr": "051",
+          "descr": "Fund Chem I",
+          "units": "5.00",
+          "sections": [
+            {
+              "classNbr": "10871 (LEC)",
+              "seats": "27",
+              "woi": "16",
+              "dates": "08/31/26 - 12/20/26",
+              "status": "Open",
+              "meetings": [
+                {
+                  "days": "T Th",
+                  "times": "10:15 AM - 12:20 PM",
+                  "room": "Mission-CMS 236",
+                  "instr": "Anjum Qureshi"
+                }
+              ],
+              "relsections": [
+                {
+                  "classNbr": "10875 (LAB)",
+                  "seats": "27",
+                  "woi": "16",
+                  "dates": "08/31/26 - 12/20/26",
+                  "status": "Open",
+                  "meetings": [
+                    {
+                      "days": "Th",
+                      "times": "12:30 PM - 3:40 PM",
+                      "room": "Mission-CMS 201",
+                      "instr": "Anjum Qureshi"
+                    }
+                  ],
+                  "relsections": [],
+                  "classType": [
+                    "IN-PERSON"
+                  ]
+                }
+              ],
+              "classType": [
+                "IN-PERSON"
+              ]
+            },
+            {
+              "classNbr": "10887 (LEC)",
+              "seats": "25",
+              "woi": "16",
+              "dates": "08/31/26 - 12/20/26",
+              "status": "Open",
+              "meetings": [
+                {
+                  "days": "T Th",
+                  "times": "4:00 PM - 6:05 PM",
+                  "room": "Mission-CMS 236",
+                  "instr": "LAMC STAFF"
+                }
+              ],
+              "relsections": [
+                {
+                  "classNbr": "10893 (LAB)",
+                  "seats": "25",
+                  "woi": "16",
+                  "dates": "08/31/26 - 12/20/26",
+                  "status": "Open",
+                  "meetings": [
+                    {
+                      "days": "Th",
+                      "times": "6:15 PM - 9:25 PM",
+                      "room": "Mission-CMS 201",
+                      "instr": "LAMC STAFF"
+                    }
+                  ],
+                  "relsections": [],
+                  "classType": [
+                    "IN-PERSON"
+                  ]
+                }
+              ],
+              "classType": [
+                "IN-PERSON"
+              ]
+            },
+            {
+              "classNbr": "14283 (LEC)",
+              "seats": "25",
+              "woi": "16",
+              "dates": "08/31/26 - 12/20/26",
+              "status": "Open",
+              "meetings": [
+                {
+                  "days": "M W",
+                  "times": "7:45 AM - 9:50 AM",
+                  "room": "Mission-CMS 028",
+                  "instr": "David Watts"
+                }
+              ],
+              "relsections": [
+                {
+                  "classNbr": "14284 (LAB)",
+                  "seats": "25",
+                  "woi": "16",
+                  "dates": "08/31/26 - 12/20/26",
+                  "status": "Open",
+                  "meetings": [
+                    {
+                      "days": "M",
+                      "times": "10:00 AM - 1:10 PM",
+                      "room": "Mission-CMS 201",
+                      "instr": "David Watts"
+                    }
+                  ],
+                  "relsections": [],
+                  "classType": [
+                    "IN-PERSON"
+                  ]
+                }
+              ],
+              "classType": [
+                "IN-PERSON"
+              ]
+            }
+          ]
+        },
+        {
+          "subject": "CHEM",
+          "catalogNbr": "065",
+          "descr": "Intro General Chem",
+          "units": "4.00",
+          "sections": [
+            {
+              "classNbr": "18491 (LEC)",
+              "seats": "18",
+              "woi": "16",
+              "dates": "08/31/26 - 12/20/26",
+              "status": "Open",
+              "meetings": [
+                {
+                  "days": "T",
+                  "times": "8:50 AM - 12:00 PM",
+                  "room": "Mission-CMS 204",
+                  "instr": "Gayane Godjoian"
+                }
+              ],
+              "relsections": [
+                {
+                  "classNbr": "18492 (LAB)",
+                  "seats": "18",
+                  "woi": "16",
+                  "dates": "08/31/26 - 12/20/26",
+                  "status": "Open",
+                  "meetings": [
+                    {
+                      "days": "Th",
+                      "times": "8:50 AM - 12:00 PM",
+                      "room": "Mission-CMS 201",
+                      "instr": "Gayane Godjoian"
+                    }
+                  ],
+                  "relsections": [],
+                  "classType": [
+                    "IN-PERSON"
+                  ]
+                }
+              ],
+              "classType": [
+                "IN-PERSON"
+              ]
+            },
+            {
+              "classNbr": "14568 (LEC)",
+              "seats": "16",
+              "woi": "16",
+              "dates": "08/31/26 - 12/20/26",
+              "status": "Open",
+              "meetings": [
+                {
+                  "days": "T Th",
+                  "times": "10:35 AM - 12:00 PM",
+                  "room": "Mission-CMS 246",
+                  "instr": "LAMC STAFF"
+                }
+              ],
+              "relsections": [
+                {
+                  "classNbr": "14569 (LAB)",
+                  "seats": "16",
+                  "woi": "16",
+                  "dates": "08/31/26 - 12/20/26",
+                  "status": "Open",
+                  "meetings": [
+                    {
+                      "days": "T",
+                      "times": "12:10 PM - 3:20 PM",
+                      "room": "Mission-CMS 201",
+                      "instr": "LAMC STAFF"
+                    }
+                  ],
+                  "relsections": [],
+                  "classType": [
+                    "IN-PERSON"
+                  ]
+                }
+              ],
+              "classType": [
+                "IN-PERSON"
+              ]
+            },
+            {
+              "classNbr": "14931 (LEC)",
+              "seats": "21",
+              "woi": "16",
+              "dates": "08/31/26 - 12/20/26",
+              "status": "Open",
+              "meetings": [
+                {
+                  "days": "",
+                  "times": "",
+                  "room": "Mission-Online",
+                  "instr": "Robert Gellert"
+                }
+              ],
+              "relsections": [
+                {
+                  "classNbr": "14932 (LAB)",
+                  "seats": "21",
+                  "woi": "16",
+                  "dates": "08/31/26 - 12/20/26",
+                  "status": "Open",
+                  "meetings": [
+                    {
+                      "days": "W",
+                      "times": "6:50 PM - 10:00 PM",
+                      "room": "Mission-CMS 203",
+                      "instr": "Robert Gellert"
+                    }
+                  ],
+                  "relsections": [],
+                  "classType": [
+                    "HYBRID"
+                  ]
+                }
+              ],
+              "classType": [
+                "HYBRID"
+              ]
+            }
+          ]
+        },
+        {
+          "subject": "CHEM",
+          "catalogNbr": "101",
+          "descr": "General Chemistry I",
+          "units": "5.00",
+          "sections": [
+            {
+              "classNbr": "11744 (LEC)",
+              "seats": "0",
+              "woi": "16",
+              "dates": "08/31/26 - 12/20/26",
+              "status": "Waitlist",
+              "meetings": [
+                {
+                  "days": "",
+                  "times": "",
+                  "room": "Mission-Online",
+                  "instr": "Marcos Alvarez"
+                }
+              ],
+              "relsections": [
+                {
+                  "classNbr": "11746 (LAB)",
+                  "seats": "0",
+                  "woi": "16",
+                  "dates": "08/31/26 - 12/20/26",
+                  "status": "Waitlist",
+                  "meetings": [
+                    {
+                      "days": "T Th",
+                      "times": "6:50 PM - 10:00 PM",
+                      "room": "Mission-CMS 210",
+                      "instr": "Marcos Alvarez"
+                    }
+                  ],
+                  "relsections": [],
+                  "classType": [
+                    "HYBRID"
+                  ]
+                }
+              ],
+              "classType": [
+                "HYBRID"
+              ]
+            },
+            {
+              "classNbr": "14570 (LEC)",
+              "seats": "34",
+              "woi": "16",
+              "dates": "08/31/26 - 12/20/26",
+              "status": "Open",
+              "meetings": [
+                {
+                  "days": "T Th",
+                  "times": "8:55 AM - 10:20 AM",
+                  "room": "Mission-CMS 028",
+                  "instr": "Michael Fenton"
+                }
+              ],
+              "relsections": [
+                {
+                  "classNbr": "14571 (LAB)",
+                  "seats": "3",
+                  "woi": "16",
+                  "dates": "08/31/26 - 12/20/26",
+                  "status": "Open",
+                  "meetings": [
+                    {
+                      "days": "T Th",
+                      "times": "10:30 AM - 1:40 PM",
+                      "room": "Mission-CMS 203",
+                      "instr": "Michael Fenton"
+                    }
+                  ],
+                  "relsections": [],
+                  "classType": [
+                    "IN-PERSON"
+                  ]
+                }
+              ],
+              "classType": [
+                "IN-PERSON"
+              ]
+            }
+          ]
+        },
+        {
+          "subject": "CHEM",
+          "catalogNbr": "102",
+          "descr": "General Chemistry II",
+          "units": "5.00",
+          "sections": [
+            {
+              "classNbr": "14572 (LEC)",
+              "seats": "11",
+              "woi": "16",
+              "dates": "08/31/26 - 12/20/26",
+              "status": "Open",
+              "meetings": [
+                {
+                  "days": "M W",
+                  "times": "8:55 AM - 10:20 AM",
+                  "room": "Mission-CMS 236",
+                  "instr": "Michael Fenton"
+                }
+              ],
+              "relsections": [
+                {
+                  "classNbr": "14573 (LAB)",
+                  "seats": "11",
+                  "woi": "16",
+                  "dates": "08/31/26 - 12/20/26",
+                  "status": "Open",
+                  "meetings": [
+                    {
+                      "days": "M W",
+                      "times": "10:30 AM - 1:40 PM",
+                      "room": "Mission-CMS 206",
+                      "instr": "Michael Fenton"
+                    }
+                  ],
+                  "relsections": [],
+                  "classType": [
+                    "IN-PERSON"
+                  ]
+                }
+              ],
+              "classType": [
+                "IN-PERSON"
+              ]
+            },
+            {
+              "classNbr": "26109 (LEC)",
+              "seats": "23",
+              "woi": "16",
+              "dates": "08/31/26 - 12/20/26",
+              "status": "Open",
+              "meetings": [
+                {
+                  "days": "M W",
+                  "times": "5:15 PM - 6:40 PM",
+                  "room": "Mission-CMS 236",
+                  "instr": "LAMC STAFF"
+                }
+              ],
+              "relsections": [
+                {
+                  "classNbr": "26110 (LAB)",
+                  "seats": "23",
+                  "woi": "16",
+                  "dates": "08/31/26 - 12/20/26",
+                  "status": "Open",
+                  "meetings": [
+                    {
+                      "days": "M W",
+                      "times": "6:50 PM - 10:00 PM",
+                      "room": "Mission-CMS 210",
+                      "instr": "LAMC STAFF"
+                    }
+                  ],
+                  "relsections": [],
+                  "classType": [
+                    "IN-PERSON"
+                  ]
+                }
+              ],
+              "classType": [
+                "IN-PERSON"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "English",
+      "code": "ENGLISH",
+      "courses": [
+        {
+          "subject": "ENGLISH",
+          "catalogNbr": "101Z",
+          "descr": "Coll Rdg&Comp I+++",
+          "units": "4.00",
+          "sections": [
+            {
+              "classNbr": "16568 (LEC)",
+              "seats": "9",
+              "woi": "16",
+              "dates": "08/31/26 - 12/20/26",
+              "status": "Open",
+              "meetings": [
+                {
+                  "days": "",
+                  "times": "",
+                  "room": "Mission-Online",
+                  "instr": "Andzhela Keshishyan"
+                }
+              ],
+              "relsections": [
+                {
+                  "classNbr": "16569 (LAB)",
+                  "seats": "9",
+                  "woi": "16",
+                  "dates": "08/31/26 - 12/20/26",
+                  "status": "Open",
+                  "meetings": [
+                    {
+                      "days": "",
+                      "times": "",
+                      "room": "Mission-Online",
+                      "instr": "Andzhela Keshishyan"
+                    }
+                  ],
+                  "relsections": [],
+                  "classType": [
+                    "ONLINE",
+                    "OER"
+                  ]
+                }
+              ],
+              "classType": [
+                "ONLINE",
+                "OER"
+              ]
+            }
+          ]
+        },
+        {
+          "subject": "ENGLISH",
+          "catalogNbr": "102",
+          "descr": "College Rdg&Comp 2",
+          "units": "3.00",
+          "sections": [
+            {
+              "classNbr": "12928 (LEC)",
+              "seats": "25",
+              "woi": "16",
+              "dates": "08/31/26 - 12/20/26",
+              "status": "Open",
+              "meetings": [
+                {
+                  "days": "M W",
+                  "times": "10:35 AM - 12:00 PM",
+                  "room": "Mission-INST 1003",
+                  "instr": "Trevor Westmoreland"
+                }
+              ],
+              "relsections": [],
+              "classType": [
+                "IN-PERSON"
+              ]
+            },
+            {
+              "classNbr": "12929 (LEC)",
+              "seats": "19",
+              "woi": "16",
+              "dates": "08/31/26 - 12/20/26",
+              "status": "Open",
+              "meetings": [
+                {
+                  "days": "",
+                  "times": "",
+                  "room": "Mission-Online",
+                  "instr": "Carolyn Daly"
+                }
+              ],
+              "relsections": [],
+              "classType": [
+                "ONLINE",
+                "OER"
+              ]
+            },
+            {
+              "classNbr": "19040 (LEC)",
+              "seats": "28",
+              "woi": "16",
+              "dates": "08/31/26 - 12/20/26",
+              "status": "Open",
+              "meetings": [
+                {
+                  "days": "M",
+                  "times": "6:50 PM - 10:00 PM",
+                  "room": "Mission-INST 1010",
+                  "instr": "John Orozco"
+                }
+              ],
+              "relsections": [],
+              "classType": [
+                "IN-PERSON"
+              ]
+            }
+          ]
+        },
+        {
+          "subject": "ENGLISH",
+          "catalogNbr": "109",
+          "descr": "Writing for Social Media",
+          "units": "3.00",
+          "sections": [
+            {
+              "classNbr": "24316 (LEC)",
+              "seats": "34",
+              "woi": "16",
+              "dates": "08/31/26 - 12/20/26",
+              "status": "Open",
+              "meetings": [
+                {
+                  "days": "",
+                  "times": "",
+                  "room": "Mission-Online",
+                  "instr": "Karen Crozer"
+                }
+              ],
+              "relsections": [],
+              "classType": [
+                "ONLINE"
+              ]
+            }
+          ]
+        },
+        {
+          "subject": "ENGLISH",
+          "catalogNbr": "124",
+          "descr": "Short Story Wrtng I",
+          "units": "3.00",
+          "sections": [
+            {
+              "classNbr": "19042 (LEC)",
+              "seats": "30",
+              "woi": "16",
+              "dates": "08/31/26 - 12/20/26",
+              "status": "Open",
+              "meetings": [
+                {
+                  "days": "",
+                  "times": "",
+                  "room": "Mission-Online",
+                  "instr": "Andzhela Keshishyan"
+                }
+              ],
+              "relsections": [],
+              "classType": [
+                "ONLINE"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Mathematics",
+      "code": "MATH",
+      "courses": [
+        {
+          "subject": "MATH",
+          "catalogNbr": "215",
+          "descr": "Math Concepts for Teachers I",
+          "units": "3.00",
+          "sections": [
+            {
+              "classNbr": "13955 (LEC)",
+              "seats": "34",
+              "woi": "16",
+              "dates": "08/31/26 - 12/20/26",
+              "status": "Open",
+              "meetings": [
+                {
+                  "days": "T",
+                  "times": "8:50 AM - 11:00 AM",
+                  "room": "Mission-CMS 128",
+                  "instr": "Emil Sargsyan"
+                },
+                {
+                  "days": "Th",
+                  "times": "8:50 AM - 9:40 AM",
+                  "room": "Mission-CMS 128",
+                  "instr": "Emil Sargsyan"
+                }
+              ],
+              "relsections": [
+                {
+                  "classNbr": "13956 (LAB)",
+                  "seats": "34",
+                  "woi": "16",
+                  "dates": "08/31/26 - 12/20/26",
+                  "status": "Open",
+                  "meetings": [
+                    {
+                      "days": "Th",
+                      "times": "9:50 AM - 10:40 AM",
+                      "room": "Mission-CMS 128",
+                      "instr": "Emil Sargsyan"
+                    }
+                  ],
+                  "relsections": [],
+                  "classType": [
+                    "HYFLEX",
+                    "OER"
+                  ]
+                }
+              ],
+              "classType": [
+                "HYFLEX",
+                "OER"
+              ]
+            }
+          ]
+        },
+        {
+          "subject": "MATH",
+          "catalogNbr": "230",
+          "descr": "Math/Lib Arts Stud",
+          "units": "3.00",
+          "sections": [
+            {
+              "classNbr": "14620 (LEC)",
+              "seats": "25",
+              "woi": "16",
+              "dates": "08/31/26 - 12/20/26",
+              "status": "Open",
+              "meetings": [
+                {
+                  "days": "",
+                  "times": "",
+                  "room": "Mission-Online",
+                  "instr": "Ingrid Barbullushi"
+                }
+              ],
+              "relsections": [
+                {
+                  "classNbr": "14621 (LAB)",
+                  "seats": "25",
+                  "woi": "16",
+                  "dates": "08/31/26 - 12/20/26",
+                  "status": "Open",
+                  "meetings": [
+                    {
+                      "days": "",
+                      "times": "",
+                      "room": "Mission-Online",
+                      "instr": "Ingrid Barbullushi"
+                    }
+                  ],
+                  "relsections": [],
+                  "classType": [
+                    "ONLINE",
+                    "OER"
+                  ]
+                }
+              ],
+              "classType": [
+                "ONLINE",
+                "OER"
+              ]
+            },
+            {
+              "classNbr": "15571 (LEC)",
+              "seats": "37",
+              "woi": "16",
+              "dates": "08/31/26 - 12/20/26",
+              "status": "Open",
+              "meetings": [
+                {
+                  "days": "",
+                  "times": "",
+                  "room": "Mission-Online",
+                  "instr": "Karineh Abed"
+                }
+              ],
+              "relsections": [
+                {
+                  "classNbr": "15572 (LAB)",
+                  "seats": "37",
+                  "woi": "16",
+                  "dates": "08/31/26 - 12/20/26",
+                  "status": "Open",
+                  "meetings": [
+                    {
+                      "days": "",
+                      "times": "",
+                      "room": "Mission-Online",
+                      "instr": "Karineh Abed"
+                    }
+                  ],
+                  "relsections": [],
+                  "classType": [
+                    "ONLINE",
+                    "OER"
+                  ]
+                }
+              ],
+              "classType": [
+                "ONLINE",
+                "OER"
+              ]
+            },
+            {
+              "classNbr": "20424 (LEC)",
+              "seats": "30",
+              "woi": "16",
+              "dates": "08/31/26 - 12/20/26",
+              "status": "Open",
+              "meetings": [
+                {
+                  "days": "M W",
+                  "times": "9:00 AM - 10:25 AM",
+                  "room": "Mission-CMS 020",
+                  "instr": "Melida Garcia"
+                }
+              ],
+              "relsections": [
+                {
+                  "classNbr": "20425 (LAB)",
+                  "seats": "30",
+                  "woi": "16",
+                  "dates": "08/31/26 - 12/20/26",
+                  "status": "Open",
+                  "meetings": [
+                    {
+                      "days": "M",
+                      "times": "10:35 AM - 11:25 AM",
+                      "room": "Mission-CMS 020",
+                      "instr": "Melida Garcia"
+                    }
+                  ],
+                  "relsections": [],
+                  "classType": [
+                    "OER",
+                    "IN-PERSON"
+                  ]
+                }
+              ],
+              "classType": [
+                "OER",
+                "IN-PERSON"
+              ]
+            }
+          ]
+        },
+        {
+          "subject": "MATH",
+          "catalogNbr": "238",
+          "descr": "Calc For Bus/Soc I",
+          "units": "5.00",
+          "sections": [
+            {
+              "classNbr": "13047 (LEC)",
+              "seats": "30",
+              "woi": "16",
+              "dates": "08/31/26 - 12/20/26",
+              "status": "Open",
+              "meetings": [
+                {
+                  "days": "",
+                  "times": "",
+                  "room": "Mission-Online",
+                  "instr": "Ryan Yamada"
+                }
+              ],
+              "relsections": [
+                {
+                  "classNbr": "13961 (LAB)",
+                  "seats": "30",
+                  "woi": "16",
+                  "dates": "08/31/26 - 12/20/26",
+                  "status": "Open",
+                  "meetings": [
+                    {
+                      "days": "",
+                      "times": "",
+                      "room": "Mission-Online",
+                      "instr": "Ryan Yamada"
+                    }
+                  ],
+                  "relsections": [],
+                  "classType": [
+                    "ONLINE"
+                  ]
+                }
+              ],
+              "classType": [
+                "ONLINE"
+              ]
+            },
+            {
+              "classNbr": "16290 (LEC)",
+              "seats": "0",
+              "woi": "16",
+              "dates": "08/31/26 - 12/20/26",
+              "status": "Waitlist",
+              "meetings": [
+                {
+                  "days": "",
+                  "times": "",
+                  "room": "Mission-Online",
+                  "instr": "Jeffrey Burke"
+                }
+              ],
+              "relsections": [
+                {
+                  "classNbr": "16291 (LAB)",
+                  "seats": "0",
+                  "woi": "16",
+                  "dates": "08/31/26 - 12/20/26",
+                  "status": "Waitlist",
+                  "meetings": [
+                    {
+                      "days": "",
+                      "times": "",
+                      "room": "Mission-Online",
+                      "instr": "Jeffrey Burke"
+                    }
+                  ],
+                  "relsections": [],
+                  "classType": []
+                }
+              ],
+              "classType": []
+            },
+            {
+              "classNbr": "17374 (LEC)",
+              "seats": "21",
+              "woi": "8",
+              "dates": "10/26/26 - 12/20/26",
+              "status": "Open",
+              "meetings": [
+                {
+                  "days": "",
+                  "times": "",
+                  "room": "Mission-Online",
+                  "instr": "Ingrid Barbullushi"
+                }
+              ],
+              "relsections": [
+                {
+                  "classNbr": "17375 (LAB)",
+                  "seats": "21",
+                  "woi": "8",
+                  "dates": "10/26/26 - 12/20/26",
+                  "status": "Open",
+                  "meetings": [
+                    {
+                      "days": "",
+                      "times": "",
+                      "room": "Mission-Online",
+                      "instr": "Ingrid Barbullushi"
+                    }
+                  ],
+                  "relsections": [],
+                  "classType": []
+                }
+              ],
+              "classType": []
+            }
+          ]
+        },
+        {
+          "subject": "MATH",
+          "catalogNbr": "240",
+          "descr": "Trigonometry",
+          "units": "3.00",
+          "sections": [
+            {
+              "classNbr": "14297 (LEC)",
+              "seats": "34",
+              "woi": "16",
+              "dates": "08/31/26 - 12/20/26",
+              "status": "Open",
+              "meetings": [
+                {
+                  "days": "S",
+                  "times": "8:00 AM - 11:10 AM",
+                  "room": "Mission-CMS 021",
+                  "instr": "Jose Avendano"
+                }
+              ],
+              "relsections": [
+                {
+                  "classNbr": "14717 (LAB)",
+                  "seats": "34",
+                  "woi": "16",
+                  "dates": "08/31/26 - 12/20/26",
+                  "status": "Open",
+                  "meetings": [
+                    {
+                      "days": "S",
+                      "times": "11:20 AM - 12:10 PM",
+                      "room": "Mission-CMS 021",
+                      "instr": "Jose Avendano"
+                    }
+                  ],
+                  "relsections": [],
+                  "classType": [
+                    "OER",
+                    "IN-PERSON"
+                  ]
+                }
+              ],
+              "classType": [
+                "OER",
+                "IN-PERSON"
+              ]
+            },
+            {
+              "classNbr": "14308 (LEC)",
+              "seats": "36",
+              "woi": "8",
+              "dates": "08/31/26 - 10/25/26",
+              "status": "Open",
+              "meetings": [
+                {
+                  "days": "",
+                  "times": "",
+                  "room": "Mission-Online",
+                  "instr": "Melida Garcia"
+                }
+              ],
+              "relsections": [
+                {
+                  "classNbr": "14716 (LAB)",
+                  "seats": "36",
+                  "woi": "8",
+                  "dates": "08/31/26 - 10/25/26",
+                  "status": "Open",
+                  "meetings": [
+                    {
+                      "days": "",
+                      "times": "",
+                      "room": "Mission-Online",
+                      "instr": "Melida Garcia"
+                    }
+                  ],
+                  "relsections": [],
+                  "classType": [
+                    "ONLINE",
+                    "OER"
+                  ]
+                }
+              ],
+              "classType": [
+                "ONLINE",
+                "OER"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Microbiology",
+      "code": "MICRO",
+      "courses": [
+        {
+          "subject": "MICRO",
+          "catalogNbr": "020",
+          "descr": "General Microbiology",
+          "units": "4.00",
+          "sections": [
+            {
+              "classNbr": "19024 (LEC)",
+              "seats": "0",
+              "woi": "16",
+              "dates": "08/31/26 - 12/20/26",
+              "status": "Waitlist",
+              "meetings": [
+                {
+                  "days": "",
+                  "times": "",
+                  "room": "Mission-Online",
+                  "instr": "Allea Cauilan"
+                }
+              ],
+              "relsections": [
+                {
+                  "classNbr": "19025 (LAB)",
+                  "seats": "0",
+                  "woi": "16",
+                  "dates": "08/31/26 - 12/20/26",
+                  "status": "Waitlist",
+                  "meetings": [
+                    {
+                      "days": "M",
+                      "times": "8:50 AM - 12:00 PM",
+                      "room": "Mission-CMS 002",
+                      "instr": "Allea Cauilan"
+                    }
+                  ],
+                  "relsections": [],
+                  "classType": [
+                    "HYBRID"
+                  ]
+                }
+              ],
+              "classType": [
+                "HYBRID"
+              ]
+            },
+            {
+              "classNbr": "18296 (LEC)",
+              "seats": "16",
+              "woi": "16",
+              "dates": "08/31/26 - 12/20/26",
+              "status": "Open",
+              "meetings": [
+                {
+                  "days": "Th",
+                  "times": "5:15 PM - 6:40 PM",
+                  "room": "Mission-Online Live",
+                  "instr": "Angela Echeverri"
+                },
+                {
+                  "days": "T",
+                  "times": "5:15 PM - 6:40 PM",
+                  "room": "Mission-CMS 004",
+                  "instr": "Angela Echeverri"
+                }
+              ],
+              "relsections": [
+                {
+                  "classNbr": "13149 (LAB)",
+                  "seats": "16",
+                  "woi": "16",
+                  "dates": "08/31/26 - 12/20/26",
+                  "status": "Open",
+                  "meetings": [
+                    {
+                      "days": "T",
+                      "times": "6:50 PM - 10:00 PM",
+                      "room": "Mission-CMS 002",
+                      "instr": "Angela Echeverri"
+                    }
+                  ],
+                  "relsections": [],
+                  "classType": [
+                    "HYBRID",
+                    "LCT"
+                  ]
+                }
+              ],
+              "classType": [
+                "HYBRID",
+                "LCT"
+              ]
+            },
+            {
+              "classNbr": "16030 (LEC)",
+              "seats": "42",
+              "woi": "16",
+              "dates": "08/31/26 - 12/20/26",
+              "status": "Open",
+              "meetings": [
+                {
+                  "days": "",
+                  "times": "",
+                  "room": "Mission-Online",
+                  "instr": "Patricia Medina"
+                }
+              ],
+              "relsections": [
+                {
+                  "classNbr": "16031 (LAB)",
+                  "seats": "19",
+                  "woi": "16",
+                  "dates": "08/31/26 - 12/20/26",
+                  "status": "Open",
+                  "meetings": [
+                    {
+                      "days": "M",
+                      "times": "6:50 PM - 10:00 PM",
+                      "room": "Mission-CMS 002",
+                      "instr": "Patricia Medina"
+                    }
+                  ],
+                  "relsections": [],
+                  "classType": [
+                    "HYBRID"
+                  ]
+                }
+              ],
+              "classType": [
+                "HYBRID"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Physics",
+      "code": "PHYSICS",
+      "courses": [
+        {
+          "subject": "PHYSICS",
+          "catalogNbr": "006",
+          "descr": "General Physics I",
+          "units": "4.00",
+          "sections": [
+            {
+              "classNbr": "11103 (LEC)",
+              "seats": "21",
+              "woi": "16",
+              "dates": "08/31/26 - 12/20/26",
+              "status": "Open",
+              "meetings": [
+                {
+                  "days": "W",
+                  "times": "6:50 PM - 10:00 PM",
+                  "room": "Mission-CMS 006",
+                  "instr": "Richard Rains"
+                }
+              ],
+              "relsections": [
+                {
+                  "classNbr": "11105 (LAB)",
+                  "seats": "21",
+                  "woi": "16",
+                  "dates": "08/31/26 - 12/20/26",
+                  "status": "Open",
+                  "meetings": [
+                    {
+                      "days": "M",
+                      "times": "6:50 PM - 10:00 PM",
+                      "room": "Mission-CMS 006",
+                      "instr": "Richard Rains"
+                    }
+                  ],
+                  "relsections": [],
+                  "classType": [
+                    "HYBRID"
+                  ]
+                }
+              ],
+              "classType": [
+                "HYBRID"
+              ]
+            }
+          ]
+        },
+        {
+          "subject": "PHYSICS",
+          "catalogNbr": "037",
+          "descr": "Eng & Scientists I",
+          "units": "5.00",
+          "sections": [
+            {
+              "classNbr": "17115 (LEC)",
+              "seats": "4",
+              "woi": "16",
+              "dates": "08/31/26 - 12/20/26",
+              "status": "Open",
+              "meetings": [
+                {
+                  "days": "M W",
+                  "times": "11:30 AM - 1:35 PM",
+                  "room": "Mission-CMS 246",
+                  "instr": "Rodolfo Santana"
+                }
+              ],
+              "relsections": [
+                {
+                  "classNbr": "17116 (LAB)",
+                  "seats": "4",
+                  "woi": "16",
+                  "dates": "08/31/26 - 12/20/26",
+                  "status": "Open",
+                  "meetings": [
+                    {
+                      "days": "F",
+                      "times": "11:00 AM - 2:10 PM",
+                      "room": "Mission-CMS 006",
+                      "instr": "Rodolfo Santana"
+                    }
+                  ],
+                  "relsections": [],
+                  "classType": [
+                    "IN-PERSON",
+                    "OER"
+                  ]
+                }
+              ],
+              "classType": [
+                "IN-PERSON",
+                "OER"
+              ]
+            }
+          ]
+        },
+        {
+          "subject": "PHYSICS",
+          "catalogNbr": "038",
+          "descr": "Eng & Scientists 2",
+          "units": "5.00",
+          "sections": [
+            {
+              "classNbr": "17119 (LEC)",
+              "seats": "0",
+              "woi": "8",
+              "dates": "08/31/26 - 10/25/26",
+              "status": "Waitlist",
+              "meetings": [
+                {
+                  "days": "M W F",
+                  "times": "8:00 AM - 10:50 AM",
+                  "room": "Mission-CMS 246",
+                  "instr": "Rodolfo Santana"
+                }
+              ],
+              "relsections": [
+                {
+                  "classNbr": "17120 (LAB)",
+                  "seats": "0",
+                  "woi": "8",
+                  "dates": "08/31/26 - 10/25/26",
+                  "status": "Waitlist",
+                  "meetings": [
+                    {
+                      "days": "T Th",
+                      "times": "8:00 AM - 11:10 AM",
+                      "room": "Mission-CMS 006",
+                      "instr": "Rodolfo Santana"
+                    }
+                  ],
+                  "relsections": [],
+                  "classType": [
+                    "IN-PERSON",
+                    "OER"
+                  ]
+                }
+              ],
+              "classType": [
+                "IN-PERSON",
+                "OER"
+              ]
+            }
+          ]
+        },
+        {
+          "subject": "PHYSICS",
+          "catalogNbr": "039",
+          "descr": "Eng &Scientists 3",
+          "units": "5.00",
+          "sections": [
+            {
+              "classNbr": "17121 (LEC)",
+              "seats": "9",
+              "woi": "8",
+              "dates": "10/26/26 - 12/20/26",
+              "status": "Open",
+              "meetings": [
+                {
+                  "days": "M W F",
+                  "times": "7:55 AM - 11:00 AM",
+                  "room": "Mission-CMS 246",
+                  "instr": "Rodolfo Santana"
+                }
+              ],
+              "relsections": [
+                {
+                  "classNbr": "17122 (LAB)",
+                  "seats": "9",
+                  "woi": "8",
+                  "dates": "10/26/26 - 12/20/26",
+                  "status": "Open",
+                  "meetings": [
+                    {
+                      "days": "T Th",
+                      "times": "7:55 AM - 11:15 AM",
+                      "room": "Mission-CMS 006",
+                      "instr": "Rodolfo Santana"
+                    }
+                  ],
+                  "relsections": [],
+                  "classType": [
+                    "IN-PERSON",
+                    "OER"
+                  ]
+                }
+              ],
+              "classType": [
+                "IN-PERSON",
+                "OER"
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
