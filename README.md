@@ -73,26 +73,31 @@ setup required for core functionality. The AI layer talks to Ollama over
 HTTP (no extra Python dependency) and the schedule itself is always produced
 by the deterministic solver, never the model.
 
-The model is `llm_assist.MODEL`, set to the published Ollama tag
-`gemma4:31b`. Install Ollama and pull it if you want the AI layer:
+The model is `llm_assist.MODEL`, set to the lightweight published edge tag
+`gemma4:e2b` (~1-2 GB) — the on-device model this tool is built around.
+Install Ollama and pull it if you want the AI layer:
 
 ```bash
-ollama pull gemma4:31b
+ollama pull gemma4:e2b
 ```
 
-Smaller edge variants such as `gemma4:e2b` (~7 GB) or `gemma4:e4b` (~10 GB)
-are valid swaps where RAM is tight — set `MODEL` accordingly and pull the
-matching tag. Tag matching is exact, so the configured tag must be installed
-(`ollama list`); a different tag of the same family does not count as present.
+Heavier swaps such as `gemma4:e4b` or `gemma4:31b` are valid where more RAM
+is available — set `MODEL` accordingly and pull the matching tag. Tag
+matching is exact, so the configured tag must itself be installed
+(`ollama list`); a different tag of the same family (e.g. an installed
+`gemma4:31b` when `MODEL` is `gemma4:e2b`) does **not** count as present.
 
 Whether the model is found is detected automatically:
 
 - **model present** — prerequisite parsing and the dean briefing use Gemma.
-- **Ollama or model absent** — both degrade silently: prereq parsing uses the
-  regex parser in `engine.py`, and `explain()` returns a templated summary.
+- **Ollama or model absent / un-pulled** — both degrade silently: prereq
+  parsing uses the regex parser in `engine.py`, and `explain()` returns a
+  templated summary. An un-pulled model is correctly treated as absent
+  (thanks to tag-exact matching), so it never errors — it just falls back.
 
 The `ai_status()` / `setup_ai()` hooks in `app.py` surface this state in the
-desktop UI and offer a one-time `ollama pull` on first run.
+desktop UI; `setup_ai()` pulls the configured model with a one-time
+`ollama pull` on first run.
 
 ### Neo4j graph layer (reference prototype, not wired in)
 

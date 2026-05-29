@@ -18,10 +18,12 @@ import subprocess
 import urllib.request
 
 OLLAMA_URL = "http://localhost:11434"
-# Real, published Ollama tag (ollama.com/library/gemma4). Defaulted to the
-# variant actually installed/verified on the build machine; smaller edge
-# variants like gemma4:e2b / gemma4:e4b are valid swaps where RAM is tight.
-MODEL = "gemma4:31b"
+# Lightweight edge default (real published tag, ollama.com/library/gemma4):
+# gemma4:e2b is the ~1-2 GB model the PRD intends for on-device use. Heavier
+# swaps gemma4:e4b / gemma4:31b are valid where more RAM is available — set
+# MODEL accordingly and pull the matching tag. Matching is tag-exact, so an
+# un-pulled tag reports absent and the engine uses the templated fallback.
+MODEL = "gemma4:e2b"
 
 
 # ----------------------------------------------------------- availability

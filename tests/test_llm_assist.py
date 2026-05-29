@@ -344,7 +344,7 @@ def test_ai_status_shape_mirrors_module(monkeypatch):
         "model_name": llm_assist.MODEL,
     }
     assert status == {"installed": True, "running": True,
-                      "model": False, "model_name": "gemma4:31b"}
+                      "model": False, "model_name": llm_assist.MODEL}
 
 
 # --------------------------------------------------------------------------- #
