@@ -43,3 +43,33 @@ def test_llm_assist_cli_no_args_runs():
                          capture_output=True, text=True)
     assert out.returncode == 0, out.stderr
     assert out.stdout.strip()  # non-empty briefing output
+
+
+# ----------------------------------------------------------------- PRD F3: input validation
+import pandas as pd
+
+
+def test_non_workbook_input_raises_clear_error():
+    with pytest.raises(engine.InputDataError) as exc:
+        engine.run("files/programs.csv")
+    msg = str(exc.value).lower()
+    assert "workbook" in msg or "csv" in msg
+    assert "excel file format cannot be determined" not in msg  # not the raw pandas text
+
+
+def test_missing_required_column_raises_clear_error(tmp_path):
+    # a 3-sheet workbook whose sections sheet is missing 'Cap Enrl'
+    wb = tmp_path / "bad.xlsx"
+    sections = pd.DataFrame([{"Term": 2248, "CLASS": "CS 101", "Class Status": "Active",
+                              "Tot Enrl": 10, "Wait Tot": 0}])  # no 'Cap Enrl'
+    catalog = pd.DataFrame([{"Course ID": "CS 101", "Units": 3, "Prerequisites (structured)": ""}])
+    programs = pd.DataFrame([{"Program Code": "P", "Program Title": "T",
+                              "Course ID": "CS 101", "Recommended Semester": 1}])
+    with pd.ExcelWriter(wb) as xl:
+        sections.to_excel(xl, sheet_name="sections", index=False)
+        catalog.to_excel(xl, sheet_name="catalog", index=False)
+        programs.to_excel(xl, sheet_name="programs", index=False)
+    with pytest.raises(engine.InputDataError) as exc:
+        engine.run(str(wb))
+    assert "Cap Enrl" in str(exc.value)
+    assert "sections" in str(exc.value)

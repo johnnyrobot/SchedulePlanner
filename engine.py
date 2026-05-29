@@ -14,6 +14,17 @@ import os
 import pandas as pd
 from ortools.sat.python import cp_model
 
+
+class InputDataError(ValueError):
+    """Raised when load_data receives an unreadable file or schema-invalid data."""
+
+
+REQUIRED_COLUMNS = {
+    "sections": ["Term", "CLASS", "Class Status", "Cap Enrl", "Tot Enrl", "Wait Tot"],
+    "catalog":  ["Course ID", "Units", "Prerequisites (structured)"],
+    "programs": ["Program Code", "Program Title", "Course ID", "Recommended Semester"],
+}
+
 COHORTS = {
     "full_time": {"max_units": 18, "horizon": 4, "label": "Full-time"},
     "part_time": {"max_units": 9,  "horizon": 8, "label": "Part-time"},
@@ -23,6 +34,20 @@ season_of_code = lambda t: "Fall" if str(t).endswith("8") else "Spring"
 
 
 # ----------------------------------------------------------------- data load
+def _validate_schema(sec: pd.DataFrame, cat: pd.DataFrame, prog: pd.DataFrame) -> None:
+    """Raise InputDataError if any required column is absent from a frame."""
+    for sheet, frame, cols in (
+        ("sections", sec,  REQUIRED_COLUMNS["sections"]),
+        ("catalog",  cat,  REQUIRED_COLUMNS["catalog"]),
+        ("programs", prog, REQUIRED_COLUMNS["programs"]),
+    ):
+        missing = [c for c in cols if c not in frame.columns]
+        if missing:
+            raise InputDataError(
+                f"{sheet} sheet missing required column(s): {missing}"
+            )
+
+
 def load_data(path: str):
     """Accept an .xlsx workbook (3 sheets) or a directory of 3 CSVs."""
     if os.path.isdir(path):
@@ -32,9 +57,23 @@ def load_data(path: str):
         cat = pd.read_csv(os.path.join(path, "catalog.csv"))
         prog = pd.read_csv(os.path.join(path, "programs.csv"))
     else:
-        xl = pd.ExcelFile(path)
-        sec = xl.parse("sections")
-        cat = xl.parse("catalog")
+        try:
+            xl = pd.ExcelFile(path)
+        except Exception as exc:
+            raise InputDataError(
+                f"Cannot open '{path}' as an .xlsx workbook. "
+                "Input must be an .xlsx workbook (with sheets: sections, catalog, programs) "
+                "or a directory containing sections.csv (or sections.xlsx), catalog.csv, "
+                "and programs.csv."
+            ) from exc
+        for sheet in ("sections", "catalog", "programs"):
+            if sheet not in xl.sheet_names:
+                raise InputDataError(
+                    f"Workbook '{path}' is missing required sheet '{sheet}'. "
+                    f"Expected sheets: sections, catalog, programs."
+                )
+        sec  = xl.parse("sections")
+        cat  = xl.parse("catalog")
         prog = xl.parse("programs")
     return sec, cat, prog
 
@@ -168,6 +207,7 @@ def official_map_issues(pcode, prog, course_seasons, prereqs):
 # ----------------------------------------------------------------- top level
 def run(path: str, llm=None) -> dict:
     sec, cat, prog = load_data(path)
+    _validate_schema(sec, cat, prog)
     active, course_seasons, units, prereqs = build_model(sec, cat, prog, llm)
     n_terms = sec["Term"].nunique()
 
