@@ -9,8 +9,10 @@ import pandas as pd
 import pytest
 
 import engine
+import llm_assist
 
 DEMO = str(pathlib.Path(__file__).resolve().parent.parent / "files" / "lamc_data.xlsx")
+FILES_DIR = str(pathlib.Path(__file__).resolve().parent.parent / "files")
 
 
 def test_engine_run_is_deterministic():
@@ -81,3 +83,201 @@ def test_csv_directory_missing_file_raises_clear_error(tmp_path):
     # catalog.csv intentionally missing
     with pytest.raises(engine.InputDataError):
         engine.run(str(tmp_path))
+
+
+# ================================================================= PRD §6 regression backbone
+# F1: XLSX workbook load
+def test_f1_xlsx_loads():
+    """PRD F1: engine.run accepts an .xlsx workbook and returns correct term count."""
+    assert engine.run(DEMO)["terms_in_data"] == 8
+
+
+# F2: CSV folder load
+def test_f2_csv_folder_loads():
+    """PRD F2: engine.run accepts a folder of CSVs and returns same term count."""
+    assert engine.run(FILES_DIR)["terms_in_data"] == 8
+
+
+# F4: rotation gaps detection
+def test_f4_rotation_gaps_fires():
+    """PRD F4: rotation-gap detector fires for fall-only courses (ENGR 101, BIOL 7, etc.)."""
+    r = engine.run(DEMO)
+    gaps = r["analysis"]["rotation_gaps"]
+    assert len(gaps) > 0
+    gap_courses = {g["course"] for g in gaps}
+    # Fall-only courses known from the data generator
+    assert "ENGR 101" in gap_courses or "BIOL 7" in gap_courses
+
+
+# F5: single-section detection
+def test_f5_single_section_fires():
+    """PRD F5: single-section flag fires when a course runs with only one section per term."""
+    r = engine.run(DEMO)
+    assert len(r["analysis"]["single_section"]) > 0
+
+
+# F6: modality mismatch detection
+def test_f6_modality_mismatch_fires():
+    """PRD F6: low-fill in-person courses appear in modality_mismatch (MATH 246 or ACCTG 2)."""
+    r = engine.run(DEMO)
+    mm = r["analysis"]["modality_mismatch"]
+    assert len(mm) > 0
+    mm_courses = {m["course"] for m in mm}
+    assert "MATH 246" in mm_courses or "ACCTG 2" in mm_courses
+
+
+# F7: under-supply detection
+def test_f7_under_supply_fires():
+    """PRD F7: heavily waitlisted courses appear in under_supply; ENGL 101 must be present."""
+    r = engine.run(DEMO)
+    us = r["analysis"]["under_supply"]
+    assert len(us) > 0
+    us_courses = {u["course"] for u in us}
+    assert "ENGL 101" in us_courses
+
+
+# F8: official map violation detection
+def test_f8_official_map_violation():
+    """PRD F8: official map issues detected for AS-T-CSCI; CS 103 season conflict flagged."""
+    r = engine.run(DEMO)
+    issues = r["programs"]["AS-T-CSCI"]["official_map_issues"]
+    assert len(issues) > 0
+    assert any("CS 103" in issue for issue in issues)
+
+
+# F9/F10: both cohorts solved for all programs
+def test_f9_f10_both_cohorts_all_programs():
+    """PRD F9/F10: every program has both full_time and part_time cohort results (not None)."""
+    r = engine.run(DEMO)
+    for pcode, pdata in r["programs"].items():
+        for cohort_key in ("full_time", "part_time"):
+            result = pdata["cohorts"].get(cohort_key)
+            assert result is not None, (
+                f"{pcode} {cohort_key} cohort returned None (infeasible)"
+            )
+            assert isinstance(result, dict), (
+                f"{pcode} {cohort_key} cohort result is not a dict"
+            )
+            assert "plan" in result, (
+                f"{pcode} {cohort_key} cohort result missing 'plan' key"
+            )
+            assert len(result["plan"]) > 0, (
+                f"{pcode} {cohort_key} plan is empty"
+            )
+
+
+# F11: ENGR minimum fix
+def test_f11_engr_minfix():
+    """PRD F11: AS-T-ENGR full_time requires exactly one fix: ENGR 102 in Spring."""
+    r = engine.run(DEMO)
+    ft = r["programs"]["AS-T-ENGR"]["cohorts"]["full_time"]
+    assert ft["needs_fix"] is True
+    assert ft["fixes"] == [{"course": "ENGR 102", "season": "Spring"}]
+
+
+# F12: prereq ordering in CSCI plan
+def test_f12_prereq_ordering():
+    """PRD F12: AS-T-CSCI full_time plan schedules prereqs before their dependents."""
+    r = engine.run(DEMO)
+    plan = r["programs"]["AS-T-CSCI"]["cohorts"]["full_time"]["plan"]
+    # Build course -> term map
+    course_term = {}
+    for t, courses in plan.items():
+        for c in courses:
+            course_term[c] = int(t)
+    # MATH 245 -> MATH 246 -> MATH 247
+    assert course_term["MATH 245"] < course_term["MATH 246"], (
+        "MATH 246 scheduled before its prereq MATH 245"
+    )
+    assert course_term["MATH 246"] < course_term["MATH 247"], (
+        "MATH 247 scheduled before its prereq MATH 246"
+    )
+    # CS 101 -> CS 102 -> CS 103
+    assert course_term["CS 101"] < course_term["CS 102"], (
+        "CS 102 scheduled before its prereq CS 101"
+    )
+    assert course_term["CS 102"] < course_term["CS 103"], (
+        "CS 103 scheduled before its prereq CS 102"
+    )
+
+
+# F13: unit caps respected
+def test_f13_unit_caps_respected():
+    """PRD F13: no plan term exceeds the cohort's max_units."""
+    sec, cat, prog = engine.load_data(DEMO)
+    _, _, units, _ = engine.build_model(sec, cat, prog)
+    r = engine.run(DEMO)
+    for pcode, pdata in r["programs"].items():
+        for ck, cohort_spec in engine.COHORTS.items():
+            result = pdata["cohorts"].get(ck)
+            if result is None:
+                continue
+            max_u = cohort_spec["max_units"]
+            for t, courses in result["plan"].items():
+                total = sum(int(units.get(c, 3)) for c in courses)
+                assert total <= max_u, (
+                    f"{pcode} {ck} term {t}: {total} units exceeds cap {max_u}"
+                )
+
+
+# F14: season availability respected in fixed plans
+def test_f14_season_availability_respected():
+    """PRD F14: every scheduled course appears in a term whose season it is offered (no-fix plans)."""
+    sec, cat, prog = engine.load_data(DEMO)
+    _, course_seasons, _, _ = engine.build_model(sec, cat, prog)
+    r = engine.run(DEMO)
+    # Use AS-T-CSCI full_time: solves without fixes, so all seasons must be valid
+    csci_ft = r["programs"]["AS-T-CSCI"]["cohorts"]["full_time"]
+    assert not csci_ft.get("needs_fix"), "Expected AS-T-CSCI full_time to solve without fixes"
+    for t, courses in csci_ft["plan"].items():
+        t_int = int(t)
+        season = engine.term_season(t_int)
+        for c in courses:
+            avail = course_seasons.get(c)
+            if avail is None:
+                continue  # course not in course_seasons (no active sections) — skip
+            assert season in avail, (
+                f"AS-T-CSCI full_time: {c} placed in term {t_int} ({season}) "
+                f"but only offered in {avail}"
+            )
+
+
+# F18: corrected plan exists for CSCI despite map violation
+def test_f18_corrected_plan_solves():
+    """PRD F18: AS-T-CSCI full_time produces a feasible corrected plan despite official map error."""
+    r = engine.run(DEMO)
+    csci_ft = r["programs"]["AS-T-CSCI"]["cohorts"]["full_time"]
+    assert csci_ft is not None, "AS-T-CSCI full_time cohort returned None"
+    assert len(csci_ft["plan"]) > 0, "AS-T-CSCI full_time plan is empty"
+
+
+# parse_prereq forms
+def test_parse_prereq_forms():
+    """parse_prereq handles structured, simple, empty, None, and llm-delegate forms."""
+    # Structured AND/OR expression
+    assert engine.parse_prereq("(A OR B) AND (C)") == [["A", "B"], ["C"]]
+    # Single course (short alphanumeric, ≤2 words) — treated as structured
+    assert engine.parse_prereq("MATH 245") == [["MATH 245"]]
+    # Empty string
+    assert engine.parse_prereq("") == []
+    # None (NaN-like)
+    assert engine.parse_prereq(None) == []
+    # Unstructured text with llm delegate — "see catalog page 5" is not structured
+    result = engine.parse_prereq("see catalog page 5", llm=lambda s: [["X 1"]])
+    assert result == [["X 1"]], (
+        f"Expected llm delegate to fire for unstructured text, got {result!r}"
+    )
+
+
+# F17: briefing fallback (offline, no Ollama required)
+def test_f17_briefing_fallback(monkeypatch):
+    """PRD F17: explain() returns a non-empty templated briefing when Ollama is unavailable."""
+    # Force the no-AI path by patching the availability gate
+    monkeypatch.setattr(llm_assist, "available", lambda model=llm_assist.MODEL: False)
+    r = engine.run(DEMO)
+    text = llm_assist.explain(r)
+    assert text.strip(), "explain() returned empty string on fallback path"
+    # Template includes program titles; at least one of these should appear
+    assert "Computer Science" in text or "Engineering" in text, (
+        f"Expected program title in briefing, got:\n{text}"
+    )
