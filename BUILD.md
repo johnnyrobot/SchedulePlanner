@@ -27,7 +27,8 @@ deterministic OR-Tools engine (`engine.py`) and the optional Ollama AI layer
 | Ollama | optional, external; the app runs fully without it |
 
 PyInstaller is not a cross-compiler: build the macOS artifact on macOS. Windows
-is a later target (see "Windows (later)").
+and Linux are prepared but unbuilt here (see "Windows / Linux (prepared, not
+built on the macOS host)").
 
 ## Prerequisites
 

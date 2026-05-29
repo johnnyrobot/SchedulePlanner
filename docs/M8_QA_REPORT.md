@@ -1,12 +1,18 @@
 # M8 QA Report — EdgeSched
 
+Date: 2026-05-29 · Python 3.13, ortools 9.15, macOS (Darwin arm64).
+(This report records point-in-time counts/timings; re-run the commands to refresh.)
+
 Final m8 reconciliation report. It records **what was verified headlessly**
 (with the exact command to reproduce each claim), **what can only be verified
 manually** (and why), and a **PRD F/N coverage matrix** flagging which
 requirements are tested vs. untested-headlessly.
 
 - Scope: the merged `main` including engineering milestones `m1`–`m6` and all of
-  `m8`.
+  `m8`. **m7 was not issued as a separate engineering milestone** — it is the
+  next deferred milestone (real-data enrichment: eLumen prerequisites + the real
+  IR PeopleSoft enrollment export). (Note `m5` shipped after `m6` in commit
+  order; that is fine — there is simply no `m7` yet.)
 - Suite baseline at time of writing: **148 passed, 3 deselected** (offline);
   the 3 deselected are the `live`-marked network tests.
 - Environment observed: macOS (Darwin arm64), Python 3.13, `python3` on PATH
@@ -29,8 +35,12 @@ python3 -m pytest -q
 ```
 
 Observed: `148 passed, 3 deselected in ~9.5s`. The 3 deselected are the
-`live`-marked tests in `tests/test_live_roundtrip.py` (deselected by default via
-`pytest.ini`).
+`live`-marked tests, one each in three files (confirm with
+`python3 -m pytest -m live --collect-only -q`):
+`tests/test_live_roundtrip.py::test_live_lamc_end_to_end`,
+`tests/test_llm_assist.py::test_live_explain_against_real_ollama`, and
+`tests/test_engine_features.py::test_llm_assist_cli_no_args_runs` (deselected by
+default via `pytest.ini`).
 
 The single green gate wraps this and additionally asserts the deselected count
 is exactly 3 (so a silently-added/removed live test trips it):
@@ -148,7 +158,7 @@ After a build, the full check (bundle exists, Mach-O executable, `ui.html` +
 
 ```bash
 ./scripts/build_macos.sh                 # produces dist/SchedulePlanner.app (needs venv + pyinstaller)
-./scripts/verify_macos_build.sh          # headless checks 1-3 from BUILD.md
+./scripts/verify_macos_build.sh          # headless checks 1-3 from BUILD.md (resource/binary; check 4 is the separate console-smoke harness)
 ./scripts/verify_build_resources.sh dist/SchedulePlanner.app
 ```
 
@@ -190,7 +200,7 @@ python3 -m pytest -m live -q -rs
 
 Observed on the dev host with network up: `2 passed, 1 skipped, 148 deselected`
 — the skip is the AI round-trip (`test_live_explain_against_real_ollama`) which
-skips when Ollama/the model is absent (see B3). With no network the two LACCD
+skips when Ollama/the model is absent (see §B3). With no network the two LACCD
 round-trips will error/skip; the offline pipeline (above) is the durable guard.
 
 ---
@@ -241,7 +251,8 @@ dist/SchedulePlanner` and the per-OS GUI checklist — both in
 **Why not headless on this host:** these require a running Ollama daemon with the
 configured model (`llm_assist.MODEL = "gemma4:e2b"`) pulled. The presence
 detection, tag-exact matching, and **templated fallback when absent** are fully
-unit-tested with mocks (`tests/test_llm_assist.py`, 27 tests); but a real Gemma
+unit-tested with mocks (`tests/test_llm_assist.py`, 27 offline tests (+1
+live-marked)); but a real Gemma
 parse/briefing is gated. The live AI round-trip skips cleanly when the model is
 absent:
 
