@@ -6,15 +6,19 @@ an Open/Closed/Waitlist status — but NOT enrollment/capacity/waitlist counts.
 """
 from __future__ import annotations
 
-from .http import get_json
+from .http import SourceDataError, get_json
 
 API_BASE = "https://services.laccd.edu/apps/api/classschedule"
 # Currently-published terms as of 2026-05; override per call as needed.
 DEFAULT_TERMS = [2264, 2266, 2268]
+SOURCE = "LACCD schedule"
 
 
 def get_subjects(campus, term, *, client=None):
-    return get_json(f"{API_BASE}/subjects/{campus}/{term}", client=client)
+    return get_json(
+        f"{API_BASE}/subjects/{campus}/{term}", client=client,
+        source=f"{SOURCE} subjects endpoint ({campus} {term})",
+    )
 
 
 def get_class_listing(campus, term, subjects=None, *, client=None):
@@ -23,6 +27,7 @@ def get_class_listing(campus, term, subjects=None, *, client=None):
         f"{API_BASE}/listing/{campus}/{term}",
         params=params,
         client=client,
+        source=f"{SOURCE} listing endpoint ({campus} {term})",
     )
 
 
@@ -35,11 +40,23 @@ def _iter_sections(course):
 
 
 def fetch_sections(campus, terms=None, *, client=None):
-    """Return a flat list of section records across the given terms."""
+    """Return a flat list of section records across the given terms.
+
+    A term that legitimately has no published classes contributes no records;
+    a malformed (non-dict / missing-``subjects``) payload raises SourceDataError
+    so schema drift surfaces by endpoint name instead of a bare AttributeError.
+    """
     terms = terms or DEFAULT_TERMS
     records = []
     for term in terms:
         listing = get_class_listing(campus, str(term), client=client)
+        if not isinstance(listing, dict) or "subjects" not in listing:
+            raise SourceDataError(
+                f"{SOURCE} listing endpoint ({campus} {term}): response missing "
+                f"'subjects' key (got {type(listing).__name__} with keys "
+                f"{sorted(listing)[:8] if isinstance(listing, dict) else 'n/a'}). "
+                "The schedule API schema may have changed."
+            )
         for subject in listing.get("subjects", []):
             for course in subject.get("courses", []):
                 subj = (course.get("subject") or "").strip()

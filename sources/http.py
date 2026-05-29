@@ -6,8 +6,20 @@ is passed, get_json creates and closes its own. Note: the timeout argument
 applies only to a self-created client; an injected client uses its own
 configured timeout. A browser User-Agent is always
 sent because the Program Mapper API rejects script UAs with HTTP 403.
+
+Error handling: the LACCD APIs are the most fragile dependency in the system,
+so get_json never lets a raw httpx traceback or a JSONDecodeError escape.
+Instead it raises a SourceError subclass carrying the source name and URL:
+  - SourceHTTPError on any 4xx/5xx (403 gets an explicit UA/Origin hint, since
+    Program Mapper 403s browsers-only requests);
+  - SourceDataError on an empty body or a non-JSON payload (HTML error page,
+    truncated response, etc).
+Callers (schedule.py, program_mapper.py) pass a human source label so the
+message names the endpoint that drifted rather than a bare URL.
 """
 from __future__ import annotations
+
+import json as _json
 
 import httpx
 
@@ -21,14 +33,54 @@ DEFAULT_HEADERS = {
 }
 
 
-def get_json(url: str, *, params=None, headers=None, client=None, timeout=DEFAULT_TIMEOUT):
+class SourceError(RuntimeError):
+    """Base class for any failure talking to a live LACCD source."""
+
+
+class SourceHTTPError(SourceError):
+    """A live source returned a 4xx/5xx HTTP status."""
+
+
+class SourceDataError(SourceError):
+    """A live source returned an empty or non-JSON body where JSON was expected."""
+
+
+def get_json(url, *, params=None, headers=None, client=None, timeout=DEFAULT_TIMEOUT,
+             source="LACCD API"):
     owns_client = client is None
     client = client or httpx.Client(timeout=timeout)
     try:
         merged = {**DEFAULT_HEADERS, **(headers or {})}
         resp = client.get(url, params=params, headers=merged)
-        resp.raise_for_status()
-        return resp.json()
+        try:
+            resp.raise_for_status()
+        except httpx.HTTPStatusError as exc:
+            status = exc.response.status_code
+            if status == 403:
+                raise SourceHTTPError(
+                    f"{source}: HTTP 403 Forbidden from {url} — the API rejected the "
+                    "request (likely a missing/blocked browser User-Agent or Origin "
+                    "header). Program Mapper requires a browser UA and the campus Origin."
+                ) from exc
+            raise SourceHTTPError(
+                f"{source}: HTTP {status} from {url}."
+            ) from exc
+        body = (resp.text or "").strip()
+        if not body:
+            raise SourceDataError(
+                f"{source}: empty response body from {url} (expected JSON)."
+            )
+        try:
+            return resp.json()
+        except (ValueError, _json.JSONDecodeError) as exc:
+            preview = body[:120].replace("\n", " ")
+            raise SourceDataError(
+                f"{source}: non-JSON response from {url} "
+                f"(first bytes: {preview!r})."
+            ) from exc
+    except httpx.HTTPError as exc:
+        # Connection/timeout/transport errors (not status errors, handled above).
+        raise SourceError(f"{source}: request to {url} failed: {exc}") from exc
     finally:
         if owns_client:
             client.close()

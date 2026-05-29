@@ -1,4 +1,7 @@
+import pytest
+
 from sources import schedule
+from sources.http import SourceDataError
 
 LISTING_2268 = {
     "campuscode": "LAMC", "campusname": "Mission College",
@@ -47,3 +50,19 @@ def test_get_subjects_returns_payload(make_client):
     client = make_client({"/subjects/LAMC/2268": [{"code": "MATH", "name": "Mathematics"}]})
     subjects = schedule.get_subjects("LAMC", "2268", client=client)
     assert subjects == [{"code": "MATH", "name": "Mathematics"}]
+
+
+def test_fetch_sections_empty_subjects_yields_no_records(make_client):
+    # A term with no published classes is legitimate: 'subjects' present, empty.
+    client = make_client({"/listing/LAMC/2270": {"subjects": []}})
+    assert schedule.fetch_sections("LAMC", [2270], client=client) == []
+
+
+def test_fetch_sections_raises_endpoint_named_on_missing_subjects_key(make_client):
+    # Drift: the listing came back without a 'subjects' key. Fail by endpoint name.
+    client = make_client({"/listing/LAMC/2268": {"unexpected": "shape"}})
+    with pytest.raises(SourceDataError) as ei:
+        schedule.fetch_sections("LAMC", [2268], client=client)
+    msg = str(ei.value)
+    assert "listing endpoint" in msg
+    assert "LAMC 2268" in msg

@@ -9,9 +9,10 @@ from __future__ import annotations
 
 import re
 
-from .http import get_json
+from .http import SourceDataError, get_json
 
 API_BASE = "https://b.api.programmapper.com"
+SOURCE = "Program Mapper"
 
 COLLEGE_CONFIGS = {
     "LAMC":  {"name": "Los Angeles Mission College",     "origin": "https://la-mission.programmapper.ws",        "site_content_id": "0055f609-1a83-4937-8356-c67ec89cb496"},
@@ -38,14 +39,22 @@ def _site_url(campus, suffix):
 
 def get_all_programs(campus, *, client=None):
     home = get_json(_site_url(campus, "/home-page-content"),
-                    headers=_headers(campus), client=client)
+                    headers=_headers(campus), client=client,
+                    source=f"{SOURCE} home-page-content ({campus})")
+    if not isinstance(home, dict) or "programGroups" not in home:
+        raise SourceDataError(
+            f"{SOURCE} home-page-content ({campus}): response missing "
+            f"'programGroups' key (got {type(home).__name__}). "
+            "The Program Mapper schema may have changed."
+        )
     programs = []
     for group in home.get("programGroups", []):
         gid = group.get("masterRecordId")
         if not gid:
             continue
         data = get_json(_site_url(campus, f"/program-groups/{gid}"),
-                        headers=_headers(campus), client=client)
+                        headers=_headers(campus), client=client,
+                        source=f"{SOURCE} program-groups/{gid} ({campus})")
         for program in data.get("programs", []):
             prog = dict(program)
             prog["group_title"] = group.get("title")
@@ -65,14 +74,17 @@ def search_program(campus, query, *, client=None):
 
 def get_program_courses(campus, program_id, *, client=None):
     detail = get_json(_site_url(campus, f"/programs/{program_id}"),
-                      headers=_headers(campus), client=client)
-    pathways = detail.get("pathways", [])
+                      headers=_headers(campus), client=client,
+                      source=f"{SOURCE} programs/{program_id} ({campus})")
+    pathways = detail.get("pathways", []) if isinstance(detail, dict) else []
     chosen = next((p for p in pathways if p.get("defaultPathway")),
                   pathways[0] if pathways else None)
     courses = []
     if chosen and chosen.get("programMapId"):
-        reqs = get_json(_site_url(campus, f"/program-maps/{chosen['programMapId']}"),
-                        headers=_headers(campus), client=client)
+        map_id = chosen["programMapId"]
+        reqs = get_json(_site_url(campus, f"/program-maps/{map_id}"),
+                        headers=_headers(campus), client=client,
+                        source=f"{SOURCE} program-maps/{map_id} ({campus})")
         for element in reqs.get("pathwayElements", []):
             opp = element.get("recommendedOpportunity") or {}
             if opp.get("type") != "COURSE":
