@@ -44,11 +44,13 @@ class Api:
         return {"path": result[0]}
 
     # ---- bundled demo data -------------------------------------------
-    def demo_path(self):
+    def _demo_path(self):
         """Absolute path to the bundled synthetic demo workbook.
 
-        Resolved relative to the app (sys._MEIPASS-aware) so it works in dev
-        and when frozen — the user never has to hunt for a file.
+        Underscore-prefixed so pywebview does not expose it to JS (it is an
+        internal helper; JS only needs load_demo). Resolved relative to the app
+        (sys._MEIPASS-aware) so it works in dev and when frozen — the user
+        never has to hunt for a file.
         """
         return resource_path("files", "lamc_data.xlsx")
 
@@ -58,7 +60,7 @@ class Api:
         Goes through the exact same code path as analyzing a user-picked file
         so the one-click demo and a normal analyze are identical.
         """
-        return self.analyze(self.demo_path())
+        return self.analyze(self._demo_path())
 
     # ---- AI status / setup -------------------------------------------
     def ai_status(self):

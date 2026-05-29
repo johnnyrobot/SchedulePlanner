@@ -4,7 +4,7 @@ The pywebview window is only created inside main() under
 `if __name__ == "__main__"`, so importing `app` and exercising `Api`
 directly never opens a window — safe for CI and offline runs.
 
-Covers the m2 "one-click demo" path: Api.demo_path() resolves the bundled
+Covers the m2 "one-click demo" path: Api._demo_path() resolves the bundled
 synthetic workbook, Api.load_demo() runs the same code path as a normal
 analyze, and a non-workbook path surfaces a readable error dict instead of
 raising.
@@ -15,7 +15,7 @@ import app
 
 
 def test_demo_path_points_at_bundled_workbook():
-    p = app.Api().demo_path()
+    p = app.Api()._demo_path()
     assert p.replace(os.sep, "/").endswith("files/lamc_data.xlsx")
     assert os.path.exists(p), f"bundled demo workbook missing at {p}"
 
@@ -36,8 +36,8 @@ def test_load_demo_returns_full_analysis():
 
 def test_load_demo_uses_same_path_as_analyze():
     api = app.Api()
-    via_analyze = api.analyze(api.demo_path())
-    via_demo = app.Api().load_demo()
+    via_analyze = api.analyze(api._demo_path())
+    via_demo = api.load_demo()
     assert via_demo["terms_in_data"] == via_analyze["terms_in_data"]
     assert set(via_demo["programs"]) == set(via_analyze["programs"])
 
