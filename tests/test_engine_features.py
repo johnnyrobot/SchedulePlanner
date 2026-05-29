@@ -5,6 +5,8 @@ import pathlib
 import subprocess
 import sys
 
+import pytest
+
 import engine
 
 DEMO = str(pathlib.Path(__file__).resolve().parent.parent / "files" / "lamc_data.xlsx")
@@ -23,7 +25,7 @@ def test_default_data_path_exists():
     assert os.path.exists(p)
 
 
-def test_engine_cli_no_args_runs(tmp_path):
+def test_engine_cli_no_args_runs():
     """`python3 engine.py` (no args) must run on the bundled demo, not a dead path."""
     repo = pathlib.Path(__file__).resolve().parent.parent
     out = subprocess.run([sys.executable, "engine.py"], cwd=repo,
@@ -33,6 +35,7 @@ def test_engine_cli_no_args_runs(tmp_path):
     assert data["terms_in_data"] == 8
 
 
+@pytest.mark.live
 def test_llm_assist_cli_no_args_runs():
     """`python3 llm_assist.py` (no args, no Ollama) must run via fallback and exit 0."""
     repo = pathlib.Path(__file__).resolve().parent.parent
