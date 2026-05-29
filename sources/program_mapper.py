@@ -117,7 +117,16 @@ def fetch_program(campus, query, *, client=None):
     program = search_program(campus, query, client=client)
     if program is None:
         return None
-    courses = get_program_courses(campus, program["masterRecordId"], client=client)
+    pid = program.get("masterRecordId")
+    if not pid:
+        # Matched a program by title/award but it carries no id to fetch its
+        # map with: schema drift. Name the source instead of a bare KeyError.
+        raise SourceDataError(
+            f"{SOURCE} ({campus}): matched program {program.get('title', '')!r} "
+            "is missing 'masterRecordId'; cannot fetch its courses. "
+            "The Program Mapper schema may have changed."
+        )
+    courses = get_program_courses(campus, pid, client=client)
     code = _slug(program.get("title", "")) or program["masterRecordId"][:8].upper()
     return {
         "code": code,

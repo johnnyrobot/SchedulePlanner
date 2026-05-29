@@ -57,6 +57,14 @@ def fetch_sections(campus, terms=None, *, client=None):
                 f"{sorted(listing)[:8] if isinstance(listing, dict) else 'n/a'}). "
                 "The schedule API schema may have changed."
             )
+        if not isinstance(listing["subjects"], list):
+            # 'subjects' present but the wrong type (e.g. a dict): iterating it
+            # would blow up opaquely on subject.get(...). Name the endpoint.
+            raise SourceDataError(
+                f"{SOURCE} listing endpoint ({campus} {term}): 'subjects' is "
+                f"{type(listing['subjects']).__name__}, expected a list. "
+                "The schedule API schema may have changed."
+            )
         for subject in listing.get("subjects", []):
             for course in subject.get("courses", []):
                 subj = (course.get("subject") or "").strip()
