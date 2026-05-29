@@ -46,13 +46,45 @@ def test_mapped_workbook_runs_through_engine(tmp_path):
 
 @pytest.mark.live
 def test_live_lamc_end_to_end(tmp_path):
-    """Hits the real LACCD APIs. Run with: pytest -m live"""
+    """Hits the real LACCD APIs. Run with: pytest -m live
+
+    Every assertion names the endpoint it guards so an API change surfaces as a
+    readable failure ("schedule listing ... returned no subjects") instead of a
+    raw httpx/pandas traceback. SourceError subclasses already give a clear
+    message for transport/JSON failures; these assertions cover the
+    shape-is-valid-but-empty drift cases.
+    """
     import build_live_workbook
+    from sources import schedule
+
+    campus, term = "LAMC", 2268
+
+    # 1. subjects endpoint must still enumerate subjects for this campus/term.
+    subjects = schedule.get_subjects(campus, str(term))
+    assert isinstance(subjects, list) and subjects, (
+        f"schedule subjects endpoint returned no subjects for {campus} {term} "
+        "— the schedule API may have changed or the term is unpublished")
+
+    # 2. full build: schedule + Program Mapper.
     out = tmp_path / "live_real.xlsx"
-    sections, program = build_live_workbook.build("LAMC", [2268], "Biology")
-    assert len(sections) > 0
-    if program is None:
-        pytest.fail("Program mapper returned None for 'Biology' at LAMC — API may have changed")
+    sections, program = build_live_workbook.build(campus, [term], "Biology")
+
+    assert len(sections) > 0, (
+        f"schedule listing endpoint returned no sections for {campus} {term} "
+        "— the listing API may have changed or the term is unpublished")
+    assert program is not None, (
+        "Program Mapper returned no program matching 'Biology' for LAMC "
+        "— the home-page-content/program-groups schema or the program title "
+        "may have changed")
+    assert program["courses"], (
+        f"Program Mapper returned the {program['title']!r} program but with no "
+        "courses — the program-maps/pathwayElements schema may have changed")
+
+    # 3. mapped workbook must run through the engine.
     mapping.write_workbook(sections, program, str(out))
     results = engine.run(str(out))
-    assert results["terms_in_data"] >= 1
+    assert results["terms_in_data"] >= 1, (
+        "engine.run produced no terms from the live workbook "
+        f"({campus} {term}) — the mapping schema may have drifted")
+    assert program["code"] in results["programs"], (
+        f"engine.run did not surface program {program['code']!r} in its results")
