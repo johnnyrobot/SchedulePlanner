@@ -10,6 +10,8 @@ Bottlenecks are deliberately planted so the analysis layer has something to find
 All instructor PII fields are intentionally absent.
 """
 
+import argparse
+import os
 import random
 import pandas as pd
 from datetime import date
@@ -310,14 +312,17 @@ for pcode, p in PROGRAMS.items():
         })
 programs_df = pd.DataFrame(prog_rows)
 
-# write files
-sections.to_excel("/home/claude/sections.xlsx", index=False)
-catalog_df.to_csv("/home/claude/catalog.csv", index=False)
-programs_df.to_csv("/home/claude/programs.csv", index=False)
-
-print(f"sections.xlsx : {len(sections)} section-rows across {len(TERMS)} terms")
-print(f"catalog.csv   : {len(catalog_df)} courses")
-print(f"programs.csv  : {len(programs_df)} program-course requirements ({len(PROGRAMS)} programs)")
+# write output
+_DEFAULT_OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "files", "lamc_data.xlsx")
+_parser = argparse.ArgumentParser(description="Generate the LAMC synthetic demo workbook.")
+_parser.add_argument("--out", default=_DEFAULT_OUT, help="output .xlsx path (3 sheets)")
+_args = _parser.parse_args()
+os.makedirs(os.path.dirname(_args.out) or ".", exist_ok=True)
+with pd.ExcelWriter(_args.out) as _xl:
+    sections.to_excel(_xl, sheet_name="sections", index=False)
+    catalog_df.to_excel(_xl, sheet_name="catalog", index=False)
+    programs_df.to_excel(_xl, sheet_name="programs", index=False)
+print(f"Wrote {_args.out}: {len(sections)} sections, {len(catalog_df)} courses, {len(programs_df)} program-course rows")
 print("\nModality fill (sanity check vs real Spring data):")
 act = sections[sections['Class Status']=='Active']
 print(act.groupby('Mode').apply(lambda d:(d['Tot Enrl'].sum()/d['Cap Enrl'].sum())).round(2).to_string())
