@@ -14,6 +14,17 @@ import os
 import pandas as pd
 from ortools.sat.python import cp_model
 
+
+class InputDataError(ValueError):
+    """Raised when load_data receives an unreadable file or schema-invalid data."""
+
+
+REQUIRED_COLUMNS = {
+    "sections": ["Term", "CLASS", "Class Status", "Cap Enrl", "Tot Enrl", "Wait Tot"],
+    "catalog":  ["Course ID", "Units", "Prerequisites (structured)"],
+    "programs": ["Program Code", "Program Title", "Course ID", "Recommended Semester"],
+}
+
 COHORTS = {
     "full_time": {"max_units": 18, "horizon": 4, "label": "Full-time"},
     "part_time": {"max_units": 9,  "horizon": 8, "label": "Part-time"},
@@ -23,19 +34,55 @@ season_of_code = lambda t: "Fall" if str(t).endswith("8") else "Spring"
 
 
 # ----------------------------------------------------------------- data load
+def _validate_schema(sec: pd.DataFrame, cat: pd.DataFrame, prog: pd.DataFrame) -> None:
+    """Raise InputDataError if any required column is absent from a frame."""
+    for sheet, frame, cols in (
+        ("sections", sec,  REQUIRED_COLUMNS["sections"]),
+        ("catalog",  cat,  REQUIRED_COLUMNS["catalog"]),
+        ("programs", prog, REQUIRED_COLUMNS["programs"]),
+    ):
+        missing = [c for c in cols if c not in frame.columns]
+        if missing:
+            raise InputDataError(
+                f"{sheet} sheet missing required column(s): {missing}"
+            )
+
+
 def load_data(path: str):
     """Accept an .xlsx workbook (3 sheets) or a directory of 3 CSVs."""
     if os.path.isdir(path):
-        sec = pd.read_excel(os.path.join(path, "sections.xlsx")) \
-            if os.path.exists(os.path.join(path, "sections.xlsx")) \
-            else pd.read_csv(os.path.join(path, "sections.csv"))
-        cat = pd.read_csv(os.path.join(path, "catalog.csv"))
-        prog = pd.read_csv(os.path.join(path, "programs.csv"))
+        try:
+            sec = pd.read_excel(os.path.join(path, "sections.xlsx")) \
+                if os.path.exists(os.path.join(path, "sections.xlsx")) \
+                else pd.read_csv(os.path.join(path, "sections.csv"))
+            cat = pd.read_csv(os.path.join(path, "catalog.csv"))
+            prog = pd.read_csv(os.path.join(path, "programs.csv"))
+        except Exception as exc:
+            raise InputDataError(
+                f"Cannot read the data CSVs from directory '{path}'. "
+                "The directory must contain sections.xlsx or sections.csv, "
+                "catalog.csv, and programs.csv."
+            ) from exc
     else:
-        xl = pd.ExcelFile(path)
-        sec = xl.parse("sections")
-        cat = xl.parse("catalog")
+        try:
+            xl = pd.ExcelFile(path)
+        except Exception as exc:
+            raise InputDataError(
+                f"Cannot open '{path}' as an .xlsx workbook. "
+                "Input must be an .xlsx workbook (with sheets: sections, catalog, programs) "
+                "or a directory containing sections.csv (or sections.xlsx), catalog.csv, "
+                "and programs.csv."
+            ) from exc
+        for sheet in ("sections", "catalog", "programs"):
+            if sheet not in xl.sheet_names:
+                raise InputDataError(
+                    f"Workbook '{path}' is missing required sheet '{sheet}'. "
+                    "Expected sheets: sections, catalog, programs."
+                )
+        sec  = xl.parse("sections")
+        cat  = xl.parse("catalog")
         prog = xl.parse("programs")
+    _validate_schema(sec, cat, prog)
     return sec, cat, prog
 
 
@@ -135,6 +182,8 @@ def solve_cohort(pcode, prog, course_seasons, units, prereqs, cohort, allow_fixe
 
     solver = cp_model.CpSolver()
     solver.parameters.max_time_in_seconds = 10
+    solver.parameters.random_seed = 42        # arbitrary fixed value; preserves determinism
+    solver.parameters.num_search_workers = 1  # PRD N11: single worker required for reproducible CP-SAT output
     st = solver.Solve(m)
     if st not in (cp_model.OPTIMAL, cp_model.FEASIBLE):
         return None
@@ -191,7 +240,11 @@ def run(path: str, llm=None) -> dict:
     return results
 
 
+def _default_data_path() -> str:
+    return os.path.join(os.path.dirname(os.path.abspath(__file__)), "files", "lamc_data.xlsx")
+
+
 if __name__ == "__main__":
     import json, sys
-    path = sys.argv[1] if len(sys.argv) > 1 else "/home/claude/lamc_data.xlsx"
+    path = sys.argv[1] if len(sys.argv) > 1 else _default_data_path()
     print(json.dumps(run(path), indent=2))

@@ -1,5 +1,12 @@
 """
-Neo4j loader for LAMC scheduling graph.
+OPTIONAL / NON-CORE: Neo4j graph layer (TECH_SPEC §6).
+
+This module is an optional, non-core integration that loads the scheduling
+data into a Neo4j graph database for advanced graph queries and dashboards.
+It is NOT wired into the main scheduling engine (engine.py), the desktop
+app (app.py), or the live data pipeline (build_live_workbook.py). Running
+the product does not require or call this module. It requires a separately
+installed and running Neo4j instance to do anything useful beyond --dry-run.
 
 Builds the graph the solver and dashboards query against:
 
