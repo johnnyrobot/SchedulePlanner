@@ -69,14 +69,30 @@ python3 -m pytest -m live            # network-gated integration tests
 `llm_assist.py` uses a local Gemma model via Ollama to parse messy
 prerequisite text and write plain-English schedule briefings. The engine
 falls back gracefully to a rule-based template if Ollama is absent — no
-setup required for core functionality.
+setup required for core functionality. The AI layer talks to Ollama over
+HTTP (no extra Python dependency) and the schedule itself is always produced
+by the deterministic solver, never the model.
 
-Install Ollama and pull the model named in `llm_assist.MODEL` if you want
-the AI layer (currently `gemma4:e2b`; exact tag pending verification):
+The model is `llm_assist.MODEL`, set to the published Ollama tag
+`gemma4:31b`. Install Ollama and pull it if you want the AI layer:
 
 ```bash
-ollama pull gemma4:e2b
+ollama pull gemma4:31b
 ```
+
+Smaller edge variants such as `gemma4:e2b` (~7 GB) or `gemma4:e4b` (~10 GB)
+are valid swaps where RAM is tight — set `MODEL` accordingly and pull the
+matching tag. Tag matching is exact, so the configured tag must be installed
+(`ollama list`); a different tag of the same family does not count as present.
+
+Whether the model is found is detected automatically:
+
+- **model present** — prerequisite parsing and the dean briefing use Gemma.
+- **Ollama or model absent** — both degrade silently: prereq parsing uses the
+  regex parser in `engine.py`, and `explain()` returns a templated summary.
+
+The `ai_status()` / `setup_ai()` hooks in `app.py` surface this state in the
+desktop UI and offer a one-time `ollama pull` on first run.
 
 ### Neo4j graph layer (reference prototype, not wired in)
 
