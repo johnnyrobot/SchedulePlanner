@@ -48,9 +48,22 @@ def test_fetch_program_returns_none_when_no_match(make_client):
     assert pm.fetch_program("LAMC", "underwater basket weaving", client=client) is None
 
 
-def test_get_all_programs_empty_when_no_groups(make_client):
-    client = make_client({"/home-page-content": {"somethingElse": []}})
+def test_get_all_programs_empty_when_groups_present_but_empty(make_client):
+    # 'programGroups' present but empty is a legitimate "no programs" response.
+    client = make_client({"/home-page-content": {"programGroups": []}})
     assert pm.get_all_programs("LAMC", client=client) == []
+
+
+def test_get_all_programs_raises_on_missing_programgroups_key(make_client):
+    # A home payload WITHOUT the programGroups key is schema drift: fail loudly,
+    # endpoint-named, rather than silently returning [] and masking the break.
+    from sources.http import SourceDataError
+    import pytest
+    client = make_client({"/home-page-content": {"somethingElse": []}})
+    with pytest.raises(SourceDataError) as ei:
+        pm.get_all_programs("LAMC", client=client)
+    assert "home-page-content" in str(ei.value)
+    assert "programGroups" in str(ei.value)
 
 
 def test_get_program_courses_falls_back_to_first_pathway(make_client):
@@ -63,3 +76,20 @@ def test_get_program_courses_falls_back_to_first_pathway(make_client):
     client = make_client(routes)
     courses = pm.get_program_courses("LAMC", "p2", client=client)
     assert [c["course_id"] for c in courses] == ["ENGL 101"]
+
+
+def test_get_program_courses_raises_on_malformed_program_map(make_client):
+    # Drift: the program-map came back valid JSON but the wrong shape (a list).
+    # Fail by endpoint name instead of a bare AttributeError on .get().
+    from sources.http import SourceDataError
+    import pytest
+    routes = {
+        "/programs/p3": {"pathways": [{"defaultPathway": True, "programMapId": "m3"}]},
+        "/program-maps/m3": ["unexpected", "list", "shape"],
+    }
+    client = make_client(routes)
+    with pytest.raises(SourceDataError) as ei:
+        pm.get_program_courses("LAMC", "p3", client=client)
+    msg = str(ei.value)
+    assert "program-maps/m3" in msg
+    assert "pathwayElements" in msg

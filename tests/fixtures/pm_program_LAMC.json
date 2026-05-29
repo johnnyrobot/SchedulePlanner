@@ -1,0 +1,56 @@
+{
+  "collegeId": "la_mission",
+  "sourceProgramIri": "urn:uuid:0ea69697-2126-cee5-8d4c-982fe63c2d6d",
+  "title": "Biology",
+  "awardTitle": "Associate in Science for Transfer",
+  "description": "",
+  "additionalRequirements": "",
+  "youtubeVideoId": "77XfpItE_8c",
+  "learningOutcomes": "",
+  "careerStandardOccupationalCodes": [
+    "25-1199",
+    "11-9121",
+    "19-1099",
+    "19-4092",
+    "25-1042",
+    "19-4010",
+    "19-4021",
+    "19-1029",
+    "25-2031"
+  ],
+  "badgeClass": null,
+  "pathways": [
+    {
+      "collegeId": "la_mission",
+      "siteContentId": "0055f609-1a83-4937-8356-c67ec89cb496",
+      "programId": "a4060608-61af-8a69-5d00-66fc77c61774",
+      "label": "to CSU - Cal-GETC General Education Plan",
+      "programMapId": "c9380a8d-158f-44a8-b8b3-ddebba81a8a8",
+      "prior": null,
+      "next": {
+        "mapId": null,
+        "label": null,
+        "emphasis": null,
+        "programId": null,
+        "linkedProgramTitle": null,
+        "linkedProgramAward": null,
+        "linkedTransferCollegeId": null,
+        "linkedMapType": "CSU_GENERIC"
+      },
+      "defaultPathway": true,
+      "priorPathwayYearOffset": 0,
+      "pathwayTermOffset": 0,
+      "pathwayYearOffset": 0,
+      "nextPathwayTermOffset": 0,
+      "nextPathwayYearOffset": 0
+    }
+  ],
+  "catalogUrl": "http://www.lamission.edu/Schedule.aspx",
+  "programId": "a4060608-61af-8a69-5d00-66fc77c61774",
+  "siteContentId": "0055f609-1a83-4937-8356-c67ec89cb496",
+  "linkedPathway": true,
+  "advisingLink": "http://lamission.edu/Counseling/Services/Services-By-Appointment.aspx",
+  "registrationLink": "http://www.lamission.edu/register.aspx",
+  "controlNumber": "33950",
+  "additionalInfoLink": null
+}

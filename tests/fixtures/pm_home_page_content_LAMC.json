@@ -1,0 +1,19 @@
+{
+  "programGroups": [
+    {
+      "title": "Arts, Media, and Performance ",
+      "icon": "7",
+      "description": "Are you creative? Do you enjoy artistic expression? Are you interested in the fields of animation, graphic design, art, art history, interior design, video production, museum studies, or theatrical production?\nClick Explore to find out more!",
+      "masterRecordId": "e2068320-d2f3-421d-bbf8-a0014e859702"
+    },
+    {
+      "title": "STEM, Health, and Fitness\u00a0\u00a0",
+      "icon": "4",
+      "description": "Are you interested in science, computers and information technology, engineering, and math? Do you want to become a vital part of the healthcare industry? Do you enjoy fitness and healthy living? Click Explore to find out more!",
+      "masterRecordId": "fd4c554f-6a1c-4180-9c09-900520f4d4a8"
+    }
+  ],
+  "title": "Program Mapper",
+  "about": "The LAMC Career and Academic Pathways listed below, allow you to explore different programs of study semester-by-semester to achieve transfer readiness to CSU and UC\u2019s, complete Associate Degrees, and/or complete Occupational Certificates. Each program has Salary, Growth, and Career trends commonly associated with each program.\n\nBe sure to visit the LAMC Homepage to obtain more guidance and resources from the LAMC Transfer Center, Career Center or enroll in classes now at www.lamission.edu\n\nThis information is from the LAMC Catalog year 2025-2026. \nNote: Courses taken outside of LACCD require a transcript evaluation. Please see a counselor for assistance.\n\u00a0",
+  "siteContentId": "0055f609-1a83-4937-8356-c67ec89cb496"
+}
