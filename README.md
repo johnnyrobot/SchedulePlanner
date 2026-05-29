@@ -38,13 +38,46 @@ Opens a native window (pywebview) with the full interactive UI.
 ### Build a workbook from live LACCD data
 
 ```bash
-python3 build_live_workbook.py --campus LAMC --program Biology \
+python3 build_live_workbook.py --campus LAMC --program "Biology" \
     --terms 2264,2266,2268 --out data/live_LAMC.xlsx
 ```
 
-Scrapes live LACCD sources and writes a ready-to-use workbook (`--out`
-defaults to `data/live_LAMC.xlsx` if omitted). Use the resulting `.xlsx`
-with `engine.py` or drag it into the desktop app.
+Pulls from two **public, unauthenticated** LACCD APIs — the class schedule
+(`services.laccd.edu/apps/api/classschedule`) and Program Mapper
+(`b.api.programmapper.com`) — and writes a ready-to-use three-sheet workbook
+(`--out` defaults to `data/live_LAMC.xlsx`). Use the resulting `.xlsx` with
+`engine.py` or drag it into the desktop app.
+
+The command above is also the exact recipe for a **representative multi-term
+sample**: Biology AS-T at Mission College across the three currently-published
+terms (`2264, 2266, 2268`). It prints a structured JSON report (campus, terms,
+program, `section_count`, reconciliation, inert detectors, engine results)
+after the human banner, so the output is machine-readable.
+
+**Live reality — what one run actually produces:**
+
+- **One program per run.** Program Mapper has no bulk export; the tool resolves
+  the *first* program whose title or award matches `--program` and returns its
+  default-pathway course list. Run it once per program you care about.
+- **Term set.** `--terms` defaults to the three currently-published terms
+  (`schedule.DEFAULT_TERMS = 2264, 2266, 2268`). Each term is a separate
+  schedule API call; widen or narrow with a comma list.
+- **Honest gaps (surfaced, not hidden).** The schedule API has **no
+  enrollment/capacity/waitlist counts** and **no prerequisites**, so two
+  detectors are **inert** on live data: `modality_mismatch` and `under_supply`
+  never fire, and the solver runs without prerequisite ordering. The report's
+  `inert_detectors` field names each one with its `reason` and the `remedy`
+  that would activate it (IR PeopleSoft enrollment export for counts; eLumen
+  for prerequisites).
+- **Program Mapper requires a browser User-Agent** (and the campus Origin), or
+  it returns HTTP 403. `sources/http.py` always sends one and wraps a 403 in a
+  clear `SourceHTTPError` that names the likely cause.
+
+The live network path is exercised by `tests/test_live_roundtrip.py`
+(`pytest -m live`, deselected by default). The same chain is proven **offline**
+in `tests/test_live_offline_pipeline.py`, which replays real API responses
+captured once into `tests/fixtures/` — so the most fragile dependency is
+testable without a network and fails loudly on schema drift.
 
 ### Regenerate the bundled synthetic demo
 
