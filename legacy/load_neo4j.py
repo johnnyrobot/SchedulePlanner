@@ -29,9 +29,9 @@ import os
 import sys
 import pandas as pd
 
-SECTIONS = "/home/claude/sections.xlsx"
-CATALOG  = "/home/claude/catalog.csv"
-PROGRAMS = "/home/claude/programs.csv"
+SECTIONS = "path/to/sections.xlsx"
+CATALOG  = "path/to/catalog.csv"
+PROGRAMS = "path/to/programs.csv"
 
 
 def parse_prereq(s):

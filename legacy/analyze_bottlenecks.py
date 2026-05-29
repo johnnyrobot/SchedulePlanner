@@ -9,9 +9,9 @@ Demonstrates the core analysis the real tool will perform:
 """
 import pandas as pd
 
-sec = pd.read_excel("/home/claude/sections.xlsx")
-cat = pd.read_csv("/home/claude/catalog.csv")
-prog = pd.read_csv("/home/claude/programs.csv")
+sec = pd.read_excel("path/to/sections.xlsx")
+cat = pd.read_csv("path/to/catalog.csv")
+prog = pd.read_csv("path/to/programs.csv")
 
 active = sec[sec["Class Status"] == "Active"].copy()
 terms = sorted(sec["Term"].unique())
