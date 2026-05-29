@@ -158,7 +158,7 @@ if __name__ == "__main__":
     print("model present   :", model_present())
     # fallback demo on engine output
     import engine
-    res = engine.run("/home/claude/lamc_data.xlsx",
+    res = engine.run(engine._default_data_path(),
                      llm=make_prereq_parser())   # None if no Ollama -> regex
     print("\n--- explanation (templated fallback if no Gemma 4) ---")
     print(explain(res))

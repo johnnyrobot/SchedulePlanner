@@ -1,98 +1,128 @@
-# LAMC 2-Year Completion Scheduling — MVP Pipeline
+# EdgeSched
 
-A working prototype that finds why community-college cohorts can't finish 2-year
-programs on time, and recommends the minimum schedule changes to fix it.
+A deterministic scheduling engine that finds why community-college cohorts
+can't finish 2-year programs on time and recommends the minimum schedule
+changes to fix it. Ships as a desktop app (pywebview) backed by an OR-Tools
+CP-SAT solver. Works on real LACCD data or a bundled synthetic demo.
 
-Runs entirely on **synthetic data** today. Swap in real exports later with no
-code changes — the analysis reads files by column name.
+## Quick Start
 
-## Files
-
-| File | Role |
-|------|------|
-| `generate_synthetic.py` | Generates the three data files with planted bottlenecks |
-| `sections.xlsx` | 8 terms of section offerings (real PeopleSoft schema, no PII) |
-| `catalog.csv` | Course master with structured prerequisites |
-| `programs.csv` | Program requirements + recommended 4-semester maps |
-| `analyze_bottlenecks.py` | Descriptive report: rotation gaps, single-section risk, modality mismatch, under-supply, feasibility |
-| `solve_schedule.py` | OR-Tools solver: corrected 4-term plans + minimum schedule fixes |
-| `load_neo4j.py` | Loads everything into Neo4j as a graph |
-
-## Run order
+### Install
 
 ```bash
-pip install pandas openpyxl ortools neo4j
-
-python generate_synthetic.py     # creates sections.xlsx, catalog.csv, programs.csv
-python analyze_bottlenecks.py    # the "what's broken" report
-python solve_schedule.py         # the "here's the fix" report
-
-# graph load (needs a running Neo4j)
-export NEO4J_URI=bolt://localhost:7687
-export NEO4J_USER=neo4j
-export NEO4J_PASSWORD=yourpassword
-python load_neo4j.py --clear
-# or, without a DB handy:
-python load_neo4j.py --dry-run
+pip install -r requirements.txt
 ```
 
-## What the demo shows
+### Run the headless analysis
 
-The synthetic data has deliberately planted problems so the tools have something
-to find:
+```bash
+# Uses the bundled demo workbook (files/lamc_data.xlsx):
+python3 engine.py
 
-- **Business AS-T** — clean. Official map valid, completes in 4 terms.
-- **CS AS-T / Biology AS-T** — official Program Mapper sequence is *broken*
-  (a required course is mapped to a term it's never offered), but the solver
-  finds a corrected 4-term path by resequencing.
-- **Engineering AS-T** — genuinely impossible: a 3-deep prerequisite chain all
-  locked to Fall can't fit in two years. The solver's `minfix` mode reports the
-  single change that unblocks it: *add one ENGR 103 section in Spring.*
+# Or point at your own workbook or a folder of three CSVs:
+python3 engine.py path/to/workbook.xlsx
+python3 engine.py path/to/csv-folder/
+```
 
-## Swapping in real data
+Prints JSON: bottleneck analysis + per-program, per-cohort completion plans
+and minimum fixes.
 
-Replace the three generated files with real exports that use the same column
-headers (see the data request spec). Specifically:
+### Run the desktop app
 
-- `sections.xlsx` ← PeopleSoft enrollment report (`Data and formulas` sheet)
-- `catalog.csv` ← eLumen course outlines, prerequisites parsed to
-  `(A OR B) AND (C)` form
-- `programs.csv` ← Program Mapper requirements + recommended sequence
+```bash
+python3 app.py
+```
 
-Then re-run. Nothing else changes.
+Opens a native window (pywebview) with the full interactive UI.
+
+### Build a workbook from live LACCD data
+
+```bash
+python3 build_live_workbook.py --campus LAMC --program Biology \
+    --terms 2264,2266,2268 --out data/live_LAMC.xlsx
+```
+
+Scrapes live LACCD sources and writes a ready-to-use workbook (`--out`
+defaults to `data/live_LAMC.xlsx` if omitted). Use the resulting `.xlsx`
+with `engine.py` or drag it into the desktop app.
+
+### Regenerate the bundled synthetic demo
+
+```bash
+python3 generate_synthetic.py --out files/lamc_data.xlsx
+```
+
+Recreates the three-sheet demo workbook with planted bottlenecks so the
+engine has something interesting to find.
+
+### Run the test suite
+
+```bash
+python3 -m pytest -q                 # fast, no network
+python3 -m pytest -m live            # network-gated integration tests
+```
+
+## Optional integrations
+
+### AI briefings / prereq parsing (Ollama + Gemma)
+
+`llm_assist.py` uses a local Gemma model via Ollama to parse messy
+prerequisite text and write plain-English schedule briefings. The engine
+falls back gracefully to a rule-based template if Ollama is absent — no
+setup required for core functionality.
+
+Install Ollama and pull the model named in `llm_assist.MODEL` if you want
+the AI layer (currently `gemma4:e2b`; exact tag pending verification):
+
+```bash
+ollama pull gemma4:e2b
+```
+
+### Neo4j graph layer (reference prototype, not wired in)
+
+`legacy/load_neo4j.py` is an early reference prototype that sketches loading
+the scheduling data into a Neo4j graph for advanced graph queries and
+dashboards (TECH_SPEC §6). It is not wired into the engine, app, or live
+pipeline, and is not runnable as-is (it carries hardcoded sandbox paths). It
+is retained for reference only — treat it as design notes, not an installable
+feature.
 
 ## Architecture
 
 ```
-  data files ──► Neo4j graph ──► OR-Tools solver ──► reports / dashboard
-   (or scrape)      (load)        (feasibility +        (admin)
-                                   min fix)
+live LACCD data ──► build_live_workbook.py
+                          │
+                          ▼
+    files/lamc_data.xlsx (or user-supplied file)
+                          │
+                  engine.py  (OR-Tools CP-SAT solver)
+                          │
+            ┌─────────────┼─────────────┐
+        app.py         JSON out      llm_assist.py
+      (desktop UI)   (headless)   (optional AI layer)
 ```
 
-The synthetic generator stands in for your scraper. The graph is the shared
-substrate. The solver is the engine. Reports and dashboards sit on top.
+The schedule is always produced by the deterministic solver. The LLM layer
+only parses messy text and writes explanations — it never decides the
+schedule.
 
-## Cohort profiles
+## Demo data
 
-`solve_schedule.py` evaluates each program against multiple cohort types, defined
-in the `COHORTS` dict at the top of the file:
+The bundled demo (`files/lamc_data.xlsx`) has deliberately planted problems:
 
-- **Full-time** — 18 unit/term cap, 4-term (2-year) horizon
-- **Part-time** — 9 unit/term cap, 8-term (4-year) horizon
-
-For each it reports the fastest feasible completion time, or — if the offerings
-can't support that cohort within the horizon — the minimum schedule change that
-would. This is the analysis that separates *scheduling* problems from *structural
-load* problems: a program may be impossible full-time (needs a new section) yet
-perfectly feasible part-time (just takes more terms). Add or edit cohort rows to
-model evening-only students, summer-inclusive paths, etc.
+- **Business AS-T** — clean; official map valid, completes in 4 terms.
+- **CS AS-T / Biology AS-T** — official Program Mapper sequence is broken
+  (a required course mapped to a term it is never offered), but the solver
+  finds a corrected 4-term path.
+- **Engineering AS-T** — genuinely impossible: a 3-deep prerequisite chain
+  locked to Fall can't fit in two years. The solver reports the single change
+  that unblocks it: add one ENGR 102 section in Spring.
 
 ## Notes
 
 - No student-level data anywhere. Instructor fields are never loaded.
-- Term-season is derived from the term code (ends in 8 = Fall, 2 = Spring),
-  matching the confirmed real code (Fall 2024 = 2248). Adjust if your coding
-  differs.
-- The minfix model currently treats every "add a section" as equal cost. With
-  real data you can weight the fix penalties so recommendations respect what is
-  actually schedulable (room/faculty availability).
+- Term season is derived from the term code (ends in 8 = Fall, 2 = Spring,
+  matching Fall 2024 = 2248). Adjust in `engine.py` if your coding differs.
+- `legacy/` contains early prototype scripts (`analyze_bottlenecks.py`,
+  `solve_schedule.py`, `load_neo4j.py`) retained for reference; they are not
+  part of the product.
