@@ -1,7 +1,7 @@
 import httpx
 import pytest
 
-from sources.http import SourceDataError, SourceHTTPError, get_json
+from sources.http import SourceDataError, SourceError, SourceHTTPError, get_json
 
 
 def test_get_json_uses_injected_client_and_returns_payload(make_client):
@@ -72,3 +72,19 @@ def test_source_http_error_chains_original_httpx_error(make_client, error_resp):
         get_json("http://x/data", client=client)
     # The raw httpx error is preserved for debugging, not swallowed.
     assert isinstance(ei.value.__cause__, httpx.HTTPStatusError)
+
+
+def test_get_json_wraps_transport_errors():
+    # A connect/timeout failure (not a status error) becomes a clear SourceError.
+    class BoomClient:
+        def get(self, url, params=None, headers=None):
+            raise httpx.ConnectError("connection refused")
+
+        def close(self):
+            return None
+
+    with pytest.raises(SourceError) as ei:
+        get_json("http://x/data", client=BoomClient(), source="LACCD schedule")
+    msg = str(ei.value)
+    assert "LACCD schedule" in msg
+    assert "failed" in msg
