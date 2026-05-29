@@ -72,7 +72,8 @@ else
   bad "ui.html not found under ${DIST_DIR}"
 fi
 
-# 2. files/lamc_data.xlsx — match by filename, then confirm a 'files' parent.
+# 2. lamc_data.xlsx — match by filename anywhere under the bundle (its exact
+#    sub-path under files/ is a PyInstaller layout detail that varies).
 xlsx="$(find_first 'lamc_data.xlsx')"
 if [ -n "${xlsx}" ]; then
   ok "lamc_data.xlsx bundled (${xlsx#"${DIST_DIR}"/})"

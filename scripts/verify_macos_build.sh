@@ -34,7 +34,7 @@ negative_control() {
   echo "fake" > "${tmp}/Contents/Resources/files/lamc_data.xlsx"
 
   echo "[negative control] resource check on a bundle missing libortools*.dylib:"
-  if "${RESOURCE_CHECK}" "${tmp}" >/dev/null 2>&1; then
+  if bash "${RESOURCE_CHECK}" "${tmp}" >/dev/null 2>&1; then
     echo "  UNEXPECTED PASS — the resource check did NOT bite on a missing lib" >&2
     rm -rf "${tmp}"
     return 1
@@ -45,7 +45,7 @@ negative_control() {
 }
 
 main() {
-  if [ ! -x "${RESOURCE_CHECK}" ] && [ ! -f "${RESOURCE_CHECK}" ]; then
+  if [ ! -f "${RESOURCE_CHECK}" ]; then
     echo "FAIL: shared resource checker not found at ${RESOURCE_CHECK}" >&2
     exit 1
   fi
@@ -69,7 +69,7 @@ main() {
   fi
 
   # Check 2: the bundle executable is a Mach-O binary.
-  exe="${app}/Contents/MacOS/SchedulePlanner"
+  local exe="${app}/Contents/MacOS/SchedulePlanner"
   if [ ! -f "${exe}" ]; then
     echo "FAIL: bundle executable missing at ${exe}" >&2
     exit 1

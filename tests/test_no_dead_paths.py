@@ -27,9 +27,10 @@ def test_no_sandbox_paths_in_active_modules():
     for src in (repo / "legacy").glob("*.py"):
         if _DEAD in src.read_text():
             offenders.append(f"legacy/{src.name}")
-    # Committed Markdown (root + docs/ + legacy/) must agree with a repo-wide grep.
+    # Committed Markdown (root + docs/ recursively + legacy/) must agree with a
+    # repo-wide grep, so scan docs/ subdirs (plans/, specs/, superpowers/, ...) too.
     md_files = list(repo.glob("*.md"))
-    md_files += (repo / "docs").glob("*.md")
+    md_files += (repo / "docs").rglob("*.md")
     md_files += (repo / "legacy").glob("*.md")
     for src in md_files:
         if src.resolve() == this_file:
