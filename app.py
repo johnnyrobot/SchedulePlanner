@@ -10,9 +10,11 @@ Package:     see BUILD.md  (PyInstaller -> single binary)
 """
 import os
 import sys
+import tempfile
 import threading
 import webview
 
+import build_live_workbook
 import engine
 import llm_assist
 
@@ -88,6 +90,61 @@ class Api:
             return results
         except Exception as e:
             return {"error": f"{type(e).__name__}: {e}"}
+
+    # ---- live LACCD data ---------------------------------------------
+    def fetch_live(self, campus, terms, program, client=None):
+        """Pull live LACCD data and analyze it, entirely inside the app.
+
+        Parses the comma-separated `terms` string into ints, runs the live
+        pipeline via build_live_workbook.analyze_live (Program Mapper +
+        schedule API -> workbook -> engine), and returns a flat dict the UI
+        can hand straight to showResult(): the engine `results` (terms_in_data
+        / analysis / programs) plus the live-only `reconciliation` and
+        `inert_detectors` fields.
+
+        The optional `client` is passed through so tests can inject a
+        FakeClient (replaying committed fixtures, no network). On a no-match
+        program, any SourceError, or any other failure, returns
+        {'error': <clear message>} so the UI shows a readable card instead of
+        freezing or silently failing.
+        """
+        parsed_terms = [int(t) for t in str(terms).split(",")
+                        if t.strip().lstrip("-").isdigit()]
+        if not parsed_terms:
+            return {"error": (f"No valid term codes in {terms!r}. Enter one or "
+                              "more numeric term codes, e.g. 2264,2266,2268.")}
+        try:
+            # analyze_live writes a workbook as a side effect; route it to a
+            # throwaway temp file so nothing leaks into the user's workspace.
+            with tempfile.TemporaryDirectory() as tmp:
+                out_path = os.path.join(tmp, "live_workbook.xlsx")
+                report = build_live_workbook.analyze_live(
+                    campus, parsed_terms, program, out_path, client=client)
+        except Exception as e:
+            return {"error": (f"Could not fetch live LACCD data: "
+                              f"{type(e).__name__}: {e}")}
+
+        if report.get("error"):
+            # analyze_live already returns the "No program matched ..." guidance.
+            return {"error": report["error"]}
+
+        results = report.get("results")
+        if not isinstance(results, dict):
+            return {"error": "Live fetch produced no analysis results."}
+
+        # Flatten so the existing showResult()/render() path renders the engine
+        # results, then attach the live-only panels.
+        out = dict(results)
+        out["reconciliation"] = report.get("reconciliation")
+        out["inert_detectors"] = report.get("inert_detectors")
+        out["campus"] = report.get("campus")
+        out["live_terms"] = report.get("terms")
+        out["program_info"] = report.get("program")
+        # Live data has no prerequisite/LLM parse step; mark accordingly so the
+        # status line does not falsely claim a Gemma 4 parse.
+        out["ai_used"] = False
+        self._last_results = out
+        return out
 
     def explain(self):
         if not self._last_results:
