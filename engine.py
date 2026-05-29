@@ -51,11 +51,18 @@ def _validate_schema(sec: pd.DataFrame, cat: pd.DataFrame, prog: pd.DataFrame) -
 def load_data(path: str):
     """Accept an .xlsx workbook (3 sheets) or a directory of 3 CSVs."""
     if os.path.isdir(path):
-        sec = pd.read_excel(os.path.join(path, "sections.xlsx")) \
-            if os.path.exists(os.path.join(path, "sections.xlsx")) \
-            else pd.read_csv(os.path.join(path, "sections.csv"))
-        cat = pd.read_csv(os.path.join(path, "catalog.csv"))
-        prog = pd.read_csv(os.path.join(path, "programs.csv"))
+        try:
+            sec = pd.read_excel(os.path.join(path, "sections.xlsx")) \
+                if os.path.exists(os.path.join(path, "sections.xlsx")) \
+                else pd.read_csv(os.path.join(path, "sections.csv"))
+            cat = pd.read_csv(os.path.join(path, "catalog.csv"))
+            prog = pd.read_csv(os.path.join(path, "programs.csv"))
+        except Exception as exc:
+            raise InputDataError(
+                f"Cannot read the data CSVs from directory '{path}'. "
+                "The directory must contain sections.xlsx or sections.csv, "
+                "catalog.csv, and programs.csv."
+            ) from exc
     else:
         try:
             xl = pd.ExcelFile(path)
@@ -70,11 +77,12 @@ def load_data(path: str):
             if sheet not in xl.sheet_names:
                 raise InputDataError(
                     f"Workbook '{path}' is missing required sheet '{sheet}'. "
-                    f"Expected sheets: sections, catalog, programs."
+                    "Expected sheets: sections, catalog, programs."
                 )
         sec  = xl.parse("sections")
         cat  = xl.parse("catalog")
         prog = xl.parse("programs")
+    _validate_schema(sec, cat, prog)
     return sec, cat, prog
 
 
@@ -207,7 +215,6 @@ def official_map_issues(pcode, prog, course_seasons, prereqs):
 # ----------------------------------------------------------------- top level
 def run(path: str, llm=None) -> dict:
     sec, cat, prog = load_data(path)
-    _validate_schema(sec, cat, prog)
     active, course_seasons, units, prereqs = build_model(sec, cat, prog, llm)
     n_terms = sec["Term"].nunique()
 

@@ -5,6 +5,7 @@ import pathlib
 import subprocess
 import sys
 
+import pandas as pd
 import pytest
 
 import engine
@@ -46,12 +47,9 @@ def test_llm_assist_cli_no_args_runs():
 
 
 # ----------------------------------------------------------------- PRD F3: input validation
-import pandas as pd
-
-
 def test_non_workbook_input_raises_clear_error():
     with pytest.raises(engine.InputDataError) as exc:
-        engine.run("files/programs.csv")
+        engine.run(str(pathlib.Path(__file__).resolve().parent.parent / "files" / "programs.csv"))
     msg = str(exc.value).lower()
     assert "workbook" in msg or "csv" in msg
     assert "excel file format cannot be determined" not in msg  # not the raw pandas text
@@ -73,3 +71,13 @@ def test_missing_required_column_raises_clear_error(tmp_path):
         engine.run(str(wb))
     assert "Cap Enrl" in str(exc.value)
     assert "sections" in str(exc.value)
+
+
+def test_csv_directory_missing_file_raises_clear_error(tmp_path):
+    (tmp_path / "sections.csv").write_text(
+        "Term,CLASS,Class Status,Cap Enrl,Tot Enrl,Wait Tot\n2248,CS 101,Active,30,10,0\n")
+    (tmp_path / "programs.csv").write_text(
+        "Program Code,Program Title,Course ID,Recommended Semester\nP,T,CS 101,1\n")
+    # catalog.csv intentionally missing
+    with pytest.raises(engine.InputDataError):
+        engine.run(str(tmp_path))
