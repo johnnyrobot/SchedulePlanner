@@ -201,7 +201,7 @@ For real distribution outside the dev machine, the proper fix is an Apple
 Developer ID signature + notarization (`codesign` + `notarytool`); that is out
 of scope for internal v1 testing.
 
-## Where live-fetch outputs go (guidance for the live-in-UI feature)
+## Where live-fetch outputs go (as shipped in `app.py`)
 
 A **frozen `.app` has no writable working directory** you can rely on:
 
@@ -210,42 +210,22 @@ A **frozen `.app` has no writable working directory** you can rely on:
   bundle itself should be treated as read-only (it may live in `/Applications`,
   and writing into it breaks the code signature).
 
-So any feature that **fetches live data and writes a workbook** (the live-in-UI
-feature) must write to a **per-user, writable application-support directory**,
-not the CWD and not next to the `.app`. Recommended location on macOS:
+The **Build-from-live-LACCD** feature in `app.py` (`Api.fetch_live`) honors this
+by writing the intermediate workbook into a throwaway
+`tempfile.TemporaryDirectory()` and handing that path straight to
+`engine.run()`. The temp dir is removed when the fetch returns, so **nothing is
+written next to the `.app`, into `sys._MEIPASS`, or into the user's workspace** —
+the live-fetch path has no persistent output and no writable-bundle dependency.
+The bundled read-only demo (`files/lamc_data.xlsx`, resolved via
+`resource_path`) is unaffected.
 
-```text
-~/Library/Application Support/SchedulePlanner/
-```
-
-Suggested helper (for whoever implements live-in-UI — illustrative, not yet in
-`app.py`):
-
-```python
-import os, sys
-
-def user_data_dir(app_name="SchedulePlanner"):
-    """Writable per-user dir for generated workbooks/outputs.
-
-    Works the same in dev and when frozen; never writes into the bundle or
-    the read-only _MEIPASS extraction dir.
-    """
-    if sys.platform == "darwin":
-        base = os.path.expanduser("~/Library/Application Support")
-    elif os.name == "nt":
-        base = os.environ.get("APPDATA", os.path.expanduser("~"))
-    else:  # linux / other
-        base = os.environ.get(
-            "XDG_DATA_HOME", os.path.expanduser("~/.local/share"))
-    path = os.path.join(base, app_name)
-    os.makedirs(path, exist_ok=True)
-    return path
-```
-
-Live-fetched/generated workbooks should be written under `user_data_dir()` (e.g.
-`user_data_dir()/live_LAMC.xlsx`) and then handed to `engine.run(<that path>)`.
-This keeps the bundled read-only demo (`files/lamc_data.xlsx`, resolved via
-`resource_path`) separate from user-generated writable outputs.
+If a future feature instead needs to **persist** a generated workbook (e.g. a
+"Save workbook…" action), it must NOT write into the bundle or `_MEIPASS`; route
+it through a per-user writable application-support directory
+(`~/Library/Application Support/SchedulePlanner/` on macOS,
+`%APPDATA%\SchedulePlanner\` on Windows, `$XDG_DATA_HOME/SchedulePlanner/` on
+Linux) created on demand. As of v1 no such persistent path exists — live fetch
+is ephemeral by design.
 
 ## Privacy / network rules (unchanged)
 
@@ -268,10 +248,19 @@ optional local Ollama calls to `http://localhost:11434`. No telemetry.
 - **Gatekeeper** — see the bypass section; unsigned builds are for internal
   testers only.
 
-## Windows (later)
+## Windows / Linux (prepared, not built on the macOS host)
 
-Not built/verified here. The same structure applies, with the `--add-data`
-separator changed to `;`:
+PyInstaller is not a cross-compiler, so the Windows and Linux artifacts must be
+built **on those OSes**. The recipes, helper scripts
+(`scripts/build_windows.ps1`, `scripts/build_linux.sh`), per-OS pywebview
+backend requirements (WebView2 on Windows; GTK/Qt WebKit on Linux), and the
+`--add-data` separator gotcha (`;` on Windows, `:` on macOS/Linux) live in
+**`docs/CROSS_PLATFORM_BUILD.md`**. They are prepared but **NOT produced or
+verified on this macOS dev host** — treat them as untested until run on the
+target OS and checked with `scripts/verify_build_resources.sh` plus the manual
+GUI checklist there.
+
+The Windows command, for quick reference (note the `;` separator):
 
 ```powershell
 python -m PyInstaller `
@@ -284,9 +273,14 @@ python -m PyInstaller `
   app.py
 ```
 
-Windows uses a different pywebview backend (EdgeChromium/WebView2). Validate the
-demo path and re-derive any extra hidden imports on a Windows host before
-relying on it.
+## See also
+
+- `docs/CROSS_PLATFORM_BUILD.md` — Windows/Linux recipes, per-OS pywebview
+  backends, and the shared `verify_build_resources.sh` resource checker.
+- `docs/M8_QA_REPORT.md` — what was verified headlessly vs. what is manual-only
+  (incl. the frozen native-stack smoke test and the PRD F/N coverage matrix).
+- `scripts/build_macos_console_smoke.sh` — the `--console` smoke harness that
+  proves the frozen OR-Tools + pandas + `engine.run` stack loads end to end.
 
 ## Reference
 
