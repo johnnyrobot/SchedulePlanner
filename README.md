@@ -38,11 +38,13 @@ Opens a native window (pywebview) with the full interactive UI.
 ### Build a workbook from live LACCD data
 
 ```bash
-python3 build_live_workbook.py --campus LAMC --program Biology --terms 2264,2266,2268
+python3 build_live_workbook.py --campus LAMC --program Biology \
+    --terms 2264,2266,2268 --out data/live_LAMC.xlsx
 ```
 
-Scrapes live LACCD sources and writes a ready-to-use workbook. Use the
-resulting `.xlsx` with `engine.py` or drag it into the desktop app.
+Scrapes live LACCD sources and writes a ready-to-use workbook (`--out`
+defaults to `data/live_LAMC.xlsx` if omitted). Use the resulting `.xlsx`
+with `engine.py` or drag it into the desktop app.
 
 ### Regenerate the bundled synthetic demo
 
@@ -56,7 +58,7 @@ engine has something interesting to find.
 ### Run the test suite
 
 ```bash
-python3 -m pytest -q                 # 40 unit tests (fast, no network)
+python3 -m pytest -q                 # fast, no network
 python3 -m pytest -m live            # network-gated integration tests
 ```
 
@@ -75,20 +77,14 @@ Install Ollama and pull the model if you want the AI layer:
 ollama pull gemma3:4b
 ```
 
-### Neo4j graph layer (optional, advanced)
+### Neo4j graph layer (reference prototype, not wired in)
 
-`load_neo4j.py` loads the scheduling data into a Neo4j graph database for
-advanced graph queries and dashboards. This is an optional non-core
-integration (TECH_SPEC §6) and is not required by the engine, app, or live
-pipeline.
-
-```bash
-export NEO4J_URI=bolt://localhost:7687
-export NEO4J_USER=neo4j
-export NEO4J_PASSWORD=yourpassword
-python3 load_neo4j.py --clear    # wipe + reload
-python3 load_neo4j.py --dry-run  # parse only, no DB needed
-```
+`legacy/load_neo4j.py` is an early reference prototype that sketches loading
+the scheduling data into a Neo4j graph for advanced graph queries and
+dashboards (TECH_SPEC §6). It is not wired into the engine, app, or live
+pipeline, and is not runnable as-is (it carries hardcoded sandbox paths). It
+is retained for reference only — treat it as design notes, not an installable
+feature.
 
 ## Architecture
 
@@ -127,5 +123,5 @@ The bundled demo (`files/lamc_data.xlsx`) has deliberately planted problems:
 - Term season is derived from the term code (ends in 8 = Fall, 2 = Spring,
   matching Fall 2024 = 2248). Adjust in `engine.py` if your coding differs.
 - `legacy/` contains early prototype scripts (`analyze_bottlenecks.py`,
-  `solve_schedule.py`) retained for reference; they are not part of the
-  product.
+  `solve_schedule.py`, `load_neo4j.py`) retained for reference; they are not
+  part of the product.
