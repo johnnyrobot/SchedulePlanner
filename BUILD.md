@@ -42,8 +42,9 @@ python -m pip install pyinstaller
 ```
 
 `requirements.txt` already pins the runtime stack (pandas, openpyxl, ortools,
-pywebview, httpx). PyInstaller is a build-only tool and is intentionally not in
-`requirements.txt`.
+pywebview, httpx) plus `pytest` for the test suite. PyInstaller is the only
+build tool intentionally excluded from `requirements.txt` (install it
+separately, as above).
 
 ## The build command (tested)
 
@@ -52,6 +53,7 @@ Run from the repo root:
 ```bash
 python -m PyInstaller \
   --noconfirm \
+  --clean \
   --windowed \
   --name SchedulePlanner \
   --add-data 'ui.html:.' \
@@ -59,6 +61,9 @@ python -m PyInstaller \
   --collect-all ortools \
   app.py
 ```
+
+`--clean` forces a fresh, reproducible rebuild by dropping PyInstaller's cache
+(costs ~a minute); this matches what `scripts/build_macos.sh` does.
 
 Output:
 
@@ -77,6 +82,8 @@ committed `.spec`.
 
 | Flag | Why it is needed |
 |---|---|
+| `--noconfirm` | Suppresses the interactive "output directory already exists, overwrite?" prompt so rebuilds run unattended. |
+| `--clean` | Drops PyInstaller's build cache before building for a fresh, reproducible result. |
 | `--windowed` | No terminal/console window; produces a real `.app` GUI bundle. |
 | `--name SchedulePlanner` | Names the bundle `SchedulePlanner.app`. |
 | `--add-data 'ui.html:.'` | Ships `ui.html` at the bundle root so `resource_path("ui.html")` resolves under `sys._MEIPASS` when frozen. **Without this the window has no UI to load.** |
@@ -125,10 +132,12 @@ future dependency bump breaks the build, these are the first things to add:
    `Build complete! ... dist`. No missing-ortools error.
 2. `dist/SchedulePlanner.app` exists and is a proper bundle; its executable
    `Contents/MacOS/SchedulePlanner` is a valid `Mach-O arm64` binary.
-3. Bundled resources are present:
-   - `Contents/Resources/ui.html`
-   - `Contents/Resources/files/lamc_data.xlsx`
-   - `Contents/Frameworks/libortools.9.dylib` and `ortools/.libs/*.dylib`
+3. Bundled resources are present somewhere inside `dist/SchedulePlanner.app`
+   (locate them with `find` — the exact sub-path is a PyInstaller `--windowed`
+   layout detail and may differ between versions, so do not assert it):
+   - `ui.html`
+   - `files/lamc_data.xlsx`
+   - `libortools.*.dylib` (plus the bundled `ortools/.libs/*.dylib`)
    - the pywebview Cocoa backend + `WebKit`/`objc` bridge
 4. **Frozen native-stack smoke test.** A console PyInstaller build using the
    *same* `--collect-all ortools` + `--add-data files` flags was run and
