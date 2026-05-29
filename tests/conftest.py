@@ -1,4 +1,4 @@
-"""Shared test harness: an injectable fake HTTP client.
+"""Shared test harness: an injectable fake HTTP client + live fixture routes.
 
 FakeClient mimics the slice of httpx.Client our get_json() helper uses:
 get(url, params, headers) -> response with .raise_for_status() and .json().
@@ -7,8 +7,14 @@ Routes map a URL substring to a JSON payload.
 A route value may also be a FakeResponse (or one built via the error_response /
 json_response helpers) to simulate HTTP status errors or non-JSON / empty
 payloads, so the error paths in sources.http can be exercised without a network.
+
+The `lamc_routes` fixture below replays the committed real LACCD fixtures
+(tests/fixtures/) for the full LAMC Biology chain; it is shared by both the
+live-pipeline tests and the desktop-shell (app.py) tests so the route map and
+its identifiers live in exactly one place.
 """
 import json as _json
+import pathlib
 
 import httpx
 import pytest
@@ -87,3 +93,37 @@ def fake_response():
 @pytest.fixture
 def error_resp():
     return error_response
+
+
+# --- shared live-fixture routes -------------------------------------------
+# Real LAMC identifiers the committed fixtures (tests/fixtures/) were captured
+# under. Shared by the live-pipeline and desktop-shell tests.
+FIXTURES = pathlib.Path(__file__).parent / "fixtures"
+ARTS_GID = "e2068320-d2f3-421d-bbf8-a0014e859702"
+STEM_GID = "fd4c554f-6a1c-4180-9c09-900520f4d4a8"
+BIOLOGY_PID = "a4060608-61af-8a69-5d00-66fc77c61774"
+BIOLOGY_MAPID = "c9380a8d-158f-44a8-b8b3-ddebba81a8a8"
+
+
+def load_fixture(name):
+    """Read and parse a committed JSON fixture by filename."""
+    return _json.loads((FIXTURES / name).read_text())
+
+
+@pytest.fixture
+def lamc_routes():
+    """URL-substring -> fixture payload map for the full LAMC Biology chain.
+
+    Replays the real captured LACCD responses through FakeClient so the
+    schedule + Program Mapper -> reconcile -> workbook -> engine chain runs
+    with NO network.
+    """
+    return {
+        "/listing/LAMC/2268": load_fixture("schedule_listing_LAMC_2268.json"),
+        "/subjects/LAMC/2268": load_fixture("schedule_subjects_LAMC_2268.json"),
+        "/home-page-content": load_fixture("pm_home_page_content_LAMC.json"),
+        f"/program-groups/{ARTS_GID}": load_fixture("pm_program_group_arts_LAMC.json"),
+        f"/program-groups/{STEM_GID}": load_fixture("pm_program_group_LAMC.json"),
+        f"/programs/{BIOLOGY_PID}": load_fixture("pm_program_LAMC.json"),
+        f"/program-maps/{BIOLOGY_MAPID}": load_fixture("pm_program_map_LAMC.json"),
+    }

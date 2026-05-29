@@ -108,11 +108,15 @@ class Api:
         {'error': <clear message>} so the UI shows a readable card instead of
         freezing or silently failing.
         """
+        # Term codes are always positive integers; .isdigit() rejects empty,
+        # signed ("-2268") and non-numeric tokens, so a negative/zero term is
+        # treated as invalid rather than slipping through.
         parsed_terms = [int(t) for t in str(terms).split(",")
-                        if t.strip().lstrip("-").isdigit()]
+                        if t.strip().isdigit() and int(t.strip()) > 0]
         if not parsed_terms:
             return {"error": (f"No valid term codes in {terms!r}. Enter one or "
-                              "more numeric term codes, e.g. 2264,2266,2268.")}
+                              "more positive numeric term codes, e.g. "
+                              "2264,2266,2268.")}
         try:
             # analyze_live writes a workbook as a side effect; route it to a
             # throwaway temp file so nothing leaks into the user's workspace.

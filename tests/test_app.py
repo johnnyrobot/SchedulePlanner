@@ -17,38 +17,12 @@ surfaces a readable error dict instead of raising.
 """
 import json
 import os
-import pathlib
-
-import pytest
 
 import app
 
-FIXTURES = pathlib.Path(__file__).parent / "fixtures"
-
-# Real LAMC identifiers the committed fixtures were captured under (mirrors
-# tests/test_live_offline_pipeline.py so the FakeClient routes line up).
-ARTS_GID = "e2068320-d2f3-421d-bbf8-a0014e859702"
-STEM_GID = "fd4c554f-6a1c-4180-9c09-900520f4d4a8"
-BIOLOGY_PID = "a4060608-61af-8a69-5d00-66fc77c61774"
-BIOLOGY_MAPID = "c9380a8d-158f-44a8-b8b3-ddebba81a8a8"
-
-
-def _load(name):
-    return json.loads((FIXTURES / name).read_text())
-
-
-@pytest.fixture
-def lamc_routes():
-    """URL-substring -> fixture payload map for the full LAMC Biology chain."""
-    return {
-        "/listing/LAMC/2268": _load("schedule_listing_LAMC_2268.json"),
-        "/subjects/LAMC/2268": _load("schedule_subjects_LAMC_2268.json"),
-        "/home-page-content": _load("pm_home_page_content_LAMC.json"),
-        f"/program-groups/{ARTS_GID}": _load("pm_program_group_arts_LAMC.json"),
-        f"/program-groups/{STEM_GID}": _load("pm_program_group_LAMC.json"),
-        f"/programs/{BIOLOGY_PID}": _load("pm_program_LAMC.json"),
-        f"/program-maps/{BIOLOGY_MAPID}": _load("pm_program_map_LAMC.json"),
-    }
+# The `lamc_routes` fixture (the shared live-fixture route map replaying the
+# committed tests/fixtures/) lives in tests/conftest.py, shared with the
+# live-pipeline tests so the route map and its identifiers live in one place.
 
 
 def test_demo_path_points_at_bundled_workbook():
@@ -151,18 +125,27 @@ def test_fetch_live_no_match_returns_error(lamc_routes, make_client):
     assert "no program matched" in res["error"].lower()
 
 
-def test_fetch_live_source_error_returns_error_not_exception(make_client):
-    """A SourceError (here: a route the FakeClient can't satisfy) surfaces a
-    readable error dict rather than raising into the UI."""
-    client = make_client({})  # no routes -> the chain blows up
+def test_fetch_live_source_error_returns_error_not_exception(
+        lamc_routes, make_client, error_resp):
+    """A real source error surfaces a readable error dict rather than raising
+    into the UI. We make the schedule listing endpoint (the first call in the
+    chain) return HTTP 403, which drives the genuine
+    get_json -> SourceHTTPError -> analyze_live -> fetch_live except path."""
+    lamc_routes["/listing/LAMC/2268"] = error_resp(403)
+    client = make_client(lamc_routes)
     res = app.Api().fetch_live("LAMC", "2268", "Biology", client=client)
     assert isinstance(res, dict)
     assert "error" in res
     assert isinstance(res["error"], str) and res["error"]
+    assert "live" in res["error"].lower()  # the fetch_live wrapper message
 
 
-def test_fetch_live_blank_terms_returns_error():
-    res = app.Api().fetch_live("LAMC", "   ", "Biology")
-    assert isinstance(res, dict)
-    assert "error" in res
-    assert isinstance(res["error"], str) and res["error"]
+def test_fetch_live_blank_or_nonpositive_terms_returns_error():
+    """Blank, negative and zero term codes are all invalid (term codes are
+    always positive) and must surface a readable error, not slip through into
+    a live fetch."""
+    for bad in ("   ", "-2268", "0", "-2268,0", "abc"):
+        res = app.Api().fetch_live("LAMC", bad, "Biology")
+        assert isinstance(res, dict)
+        assert "error" in res, f"{bad!r} should be rejected"
+        assert isinstance(res["error"], str) and res["error"]

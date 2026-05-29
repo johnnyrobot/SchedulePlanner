@@ -205,8 +205,9 @@ async function loadDemo(){
 // awaited promise + spinner keeps the window responsive (PRD N7). Any no-match
 // or network/source error comes back as {error} and routes through showResult,
 // which renders the readable error card — never a frozen window. The spinner
-// HTML is a static literal; the campus/program echoed into #picked are run
-// through escapeHtml() because they are user-entered, untrusted strings.
+// markup is a static HTML literal; the user-entered campus/program are echoed
+// into #picked via .textContent (the browser escapes it, so no escapeHtml()
+// is needed here). The live-panel fields ARE escaped in renderLivePanel().
 async function fetchLive(){
   const btn=document.getElementById('liveBtn');
   const campus=document.getElementById('liveCampus').value.trim();
