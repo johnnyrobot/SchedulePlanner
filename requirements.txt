@@ -2,5 +2,9 @@ pandas>=2.0
 openpyxl>=3.1
 ortools>=9.8
 pywebview>=5.0
+httpx>=0.27
 # AI layer is optional and talks to Ollama over HTTP; no Python dep required.
 # Install Ollama separately from https://ollama.com/download
+
+# --- dev/test ---
+pytest>=8.0
