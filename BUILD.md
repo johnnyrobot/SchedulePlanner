@@ -1,337 +1,296 @@
-# EdgeSched Desktop Build Specification
+# SchedulePlanner Desktop Build (macOS first)
 
-This document defines the target build for EdgeSched as a native, standalone
-desktop application for macOS and Windows.
+This document defines how to build the v1 desktop app as a single launchable
+macOS `.app` bundle that runs the bundled demo with **no Python install** on the
+target machine.
 
-## Target Product
+The v1 desktop app **is** the pywebview shell: entry `app.py` + UI `ui.html`,
+with the bundled synthetic demo workbook at `files/lamc_data.xlsx`. The
+deterministic OR-Tools engine (`engine.py`) and the optional Ollama AI layer
+(`llm_assist.py`) sit behind it.
 
-EdgeSched should ship as a single-user native desktop app. The app opens local
-LAMC scheduling data, optionally builds a workbook from live public sources,
-runs the deterministic scheduling engine, and renders results without requiring
-an IT-hosted server.
+> The exact PyInstaller command below has been **run and verified** on this repo
+> (PyInstaller 6.20.0, Python 3.13, ortools 9.15, pandas 3.0, macOS arm64). It
+> produces `dist/SchedulePlanner.app`. See "Verification" for what was confirmed
+> headlessly and what must be checked manually.
 
-The build must preserve the core engine boundary:
+## Target product
 
-```text
-input workbook or CSV folder -> engine.run(path) -> results dict
-```
+| Item | Value |
+|---|---|
+| Platform | macOS 13+ (built/verified on arm64) |
+| Artifact | `dist/SchedulePlanner.app` (a one-bundle `.app`) |
+| Entry point | `app.py` (pywebview) |
+| UI | `ui.html` (loaded via `resource_path`, `sys._MEIPASS`-aware) |
+| Bundled demo | `files/lamc_data.xlsx` |
+| Python on target | **not required** — bundled by PyInstaller |
+| Ollama | optional, external; the app runs fully without it |
 
-Network calls for live sources and optional AI setup stay outside the solver.
-The engine remains deterministic and offline.
+PyInstaller is not a cross-compiler: build the macOS artifact on macOS. Windows
+is a later target (see "Windows (later)").
 
-## Framework Decision (v1): keep pywebview; PySide6 is a non-goal for now
+## Prerequisites
 
-**Decision (m2):** v1 ships on the existing **pywebview** shell (`app.py` +
-`ui.html`). A PySide6 / Qt rewrite is an explicit **non-goal** for v1 and is
-**deferred**.
-
-Rationale:
-
-- The pywebview shell already satisfies the v1 goal: a non-technical user
-  launches the app and, with one click ("Load demo data"), sees the full
-  analysis on the bundled synthetic dataset — no file hunting, no CLI.
-- The engine boundary (`engine.run(path) -> results dict`) is unchanged and
-  remains the single source of truth, so the UI layer is replaceable later at
-  low cost.
-- Rewriting to PySide6 now is effort that does not move the v1 demo forward and
-  risks regressions in a shell that already works.
-
-When to revisit: **only if m5 packaging proves pywebview unviable** (for
-example, if PyInstaller cannot reliably bundle the webview runtime / WebKit on
-a target platform, or signing/notarization of the bundled browser runtime
-blocks distribution). If that happens, the PySide6 layout and packaging guidance
-later in this document become the migration target. Until then, treat the
-PySide6 sections below as **future / deferred reference**, not the v1 build.
-
-For freezing to work in both dev and frozen modes, bundled resources (`ui.html`
-and `files/lamc_data.xlsx`) are resolved through a `sys._MEIPASS`-aware helper
-in `app.py` (`resource_path`), falling back to the source directory in dev.
-
-## Platform Targets
-
-| Platform | Artifact | Build host |
-|---|---|---|
-| macOS 13+ | `EdgeSched.app` | macOS |
-| Windows 10/11 x64 | `EdgeSched.exe` or app folder | Windows |
-
-PyInstaller is not a cross-compiler. Build macOS artifacts on macOS and Windows
-artifacts on Windows.
-
-## Recommended Stack
-
-| Layer | Choice | Reason |
-|---|---|---|
-| Runtime | Python 3.12 | Conservative compatibility target for the Python stack |
-| Desktop UI (v1) | pywebview (`app.py` + `ui.html`) | Already meets the v1 demo goal; engine boundary keeps it swappable |
-| Desktop UI (deferred) | PySide6 / Qt for Python | Native widgets with no JS bridge — revisit only if m5 packaging proves pywebview unviable |
-| Packaging | PyInstaller | Mature Python desktop bundling for macOS and Windows |
-| Solver | OR-Tools CP-SAT | Existing deterministic scheduling engine |
-| Data IO | pandas + openpyxl | Existing workbook/CSV ingestion |
-| Live sources | httpx sync clients | Simple desktop/CLI fetch path |
-| Optional AI | Ollama on `localhost:11434` | Keeps model use local and opt-in |
-
-Do not make the final desktop build depend on Electron, Tauri, a local FastAPI
-server, or a browser runtime. Those add extra process and packaging boundaries
-around a Python-native engine.
-
-## Source Layout
-
-Target layout:
-
-```text
-edgesched/
-  engine.py                  # deterministic planner; no UI/network coupling
-  llm_assist.py              # optional Ollama integration
-  sources/                   # live source clients and mapping
-    __init__.py
-    http.py
-    schedule.py
-    program_mapper.py
-    mapping.py
-  desktop/                   # PySide6 app layer
-    __init__.py
-    main.py                  # app entry point for packaging
-    main_window.py           # primary window and actions
-    workers.py               # QThread/QRunnable wrappers for engine/source work
-    result_models.py         # Qt models/adapters for result display
-  build_live_workbook.py     # CLI smoke path: fetch -> workbook -> engine.run()
-  files/                     # committed synthetic demo data only
-  data/                      # ignored local/live generated outputs
-```
-
-For v1, the desktop app **is** the `app.py` / `ui.html` pywebview shell (see
-"Framework Decision (v1)" above). The `desktop/` PySide6 layout is the deferred
-migration target and is only adopted if m5 packaging proves pywebview unviable.
-
-## Python Dependencies
-
-Runtime dependencies:
-
-```text
-pandas>=2.0
-openpyxl>=3.1
-ortools>=9.8
-PySide6>=6.7
-httpx>=0.27
-```
-
-Build/test dependencies:
-
-```text
-pyinstaller>=6.0
-pytest>=8.0
-```
-
-Optional external tools:
-
-```text
-ollama                 # optional local AI runtime, installed separately
-neo4j                  # optional graph/debug workflow, not part of desktop app
-```
-
-Keep Ollama outside the packaged app for v1. The desktop app may detect it and
-offer setup guidance, but the binary should run fully without it.
-
-## Environment Setup
-
-Use a clean virtual environment per platform:
+A clean virtual environment with the runtime deps plus PyInstaller:
 
 ```bash
-python3.12 -m venv .venv
-source .venv/bin/activate        # macOS
-# .venv\Scripts\activate         # Windows PowerShell
-
+python3 -m venv .venv
+source .venv/bin/activate
 python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
-python -m pip install pyinstaller pytest
+python -m pip install pyinstaller
 ```
 
-Once the PySide migration is implemented, `requirements.txt` should include
-`PySide6` and `httpx`.
+`requirements.txt` already pins the runtime stack (pandas, openpyxl, ortools,
+pywebview, httpx) plus `pytest` for the test suite. PyInstaller is the only
+build tool intentionally excluded from `requirements.txt` (install it
+separately, as above).
 
-## Development Run
+## The build command (tested)
 
-v1 desktop app (pywebview shell):
-
-```bash
-python app.py
-```
-
-This opens the window with **Choose data file** and **Load demo data** buttons.
-Clicking **Load demo data** runs the analysis on the bundled synthetic workbook
-(`files/lamc_data.xlsx`) with no file picking.
-
-Deferred PySide6 app (only if m5 packaging proves pywebview unviable):
-
-```bash
-python -m desktop.main
-```
-
-Live-source workbook smoke path:
-
-```bash
-python build_live_workbook.py \
-  --campus LAMC \
-  --terms 2264,2266,2268 \
-  --program "Computer Science" \
-  --out data/live_LAMC.xlsx
-```
-
-The smoke path should write an engine-compatible workbook, call
-`engine.run("data/live_LAMC.xlsx")`, and print the known limitations:
-
-- fill/waitlist detectors are inert when live APIs cannot provide enrollment
-  counts
-- prerequisite ordering is incomplete until eLumen/source prereqs are added
-- live terms are fewer than the ideal eight-term historical window
-
-## Packaging Commands
-
-### macOS
+Run from the repo root:
 
 ```bash
 python -m PyInstaller \
   --noconfirm \
+  --clean \
   --windowed \
-  --name EdgeSched \
+  --name SchedulePlanner \
+  --add-data 'ui.html:.' \
+  --add-data 'files/lamc_data.xlsx:files' \
   --collect-all ortools \
-  --collect-all PySide6 \
-  desktop/main.py
+  app.py
 ```
 
-Expected output:
+`--clean` forces a fresh, reproducible rebuild by dropping PyInstaller's cache
+(costs ~a minute); this matches what `scripts/build_macos.sh` does.
+
+Output:
 
 ```text
-dist/EdgeSched.app
+dist/SchedulePlanner.app          <- the launchable bundle (open this)
+dist/SchedulePlanner/             <- the equivalent one-dir tree (same binary)
+build/                            <- intermediate build cache (gitignored)
 ```
 
-For internal testing, an unsigned `.app` is enough. For distribution outside the
-developer machine, add Apple Developer ID signing and notarization.
+`build/`, `dist/`, and any generated `*.spec` are gitignored — they are
+artifacts, not source. Do **not** commit them. This file (and
+`scripts/build_macos.sh`) are the source of truth for the build; there is no
+committed `.spec`.
 
-### Windows
+### What each flag does and why it is required
 
-Run from a Windows machine:
+| Flag | Why it is needed |
+|---|---|
+| `--noconfirm` | Suppresses the interactive "output directory already exists, overwrite?" prompt so rebuilds run unattended. |
+| `--clean` | Drops PyInstaller's build cache before building for a fresh, reproducible result. |
+| `--windowed` | No terminal/console window; produces a real `.app` GUI bundle. |
+| `--name SchedulePlanner` | Names the bundle `SchedulePlanner.app`. |
+| `--add-data 'ui.html:.'` | Ships `ui.html` at the bundle root so `resource_path("ui.html")` resolves under `sys._MEIPASS` when frozen. **Without this the window has no UI to load.** |
+| `--add-data 'files/lamc_data.xlsx:files'` | Ships the demo workbook under `files/` so `resource_path("files", "lamc_data.xlsx")` resolves. **Without this "Load demo data" fails with "File not found."** |
+| `--collect-all ortools` | Pulls in OR-Tools' native libraries (`libortools.9.dylib` + the bundled `absl` `.dylib`s under `ortools/.libs/`) plus all submodules and data. **This is the documented high-risk item** — without it the frozen app raises an import/dyld error the moment the solver is touched. |
+
+> `--add-data` separator is **`:`** on macOS/Linux and **`;`** on Windows.
+
+### Hidden imports / extra flags that turned out NOT to be needed
+
+These are commonly required for similar apps; on this toolchain version they were
+**verified unnecessary**, so the command above is intentionally minimal. If a
+future dependency bump breaks the build, these are the first things to add:
+
+- **openpyxl** — *not* needed as an explicit `--hidden-import`. pandas reads
+  `.xlsx` through openpyxl, which pandas imports lazily (so static analysis can
+  miss it), **but** the bundled PyInstaller pandas hook
+  (`pyinstaller-hooks-contrib`) already collects the full `openpyxl` package into
+  the archive. Verified: the frozen build reads the demo workbook successfully.
+  If a future pandas/openpyxl combo regresses, add:
+  `--hidden-import openpyxl --collect-submodules openpyxl`.
+- **pandas / numpy** — handled by their PyInstaller hooks; no extra flags. (The
+  build log shows ~1200 benign "missing module named numpy._core.*" warnings —
+  those are numpy lazy-attribute false positives, not real gaps.)
+- **pywebview (macOS)** — the Cocoa backend (`webview/platforms/cocoa.py`) and
+  its `pyobjc` / `WebKit` bridge are collected automatically. macOS uses the
+  **system WKWebView**, so no separate browser runtime is bundled. (This is why
+  the m2 framework decision to keep pywebview is viable for packaging — there is
+  no third-party WebKit blob to sign.)
+- **llm_assist** — stdlib-only (`json`, `shutil`, `subprocess`,
+  `urllib.request`); nothing to collect. Ollama stays external.
+
+## Optional helper script
+
+`scripts/build_macos.sh` wraps the exact command above (clean rebuild). Run:
+
+```bash
+./scripts/build_macos.sh
+```
+
+## Verification
+
+### Verified headlessly (automated, reproducible)
+
+1. The PyInstaller build **completes with exit 0** and prints
+   `Build complete! ... dist`. No missing-ortools error.
+2. `dist/SchedulePlanner.app` exists and is a proper bundle; its executable
+   `Contents/MacOS/SchedulePlanner` is a valid `Mach-O arm64` binary.
+3. Bundled resources are present somewhere inside `dist/SchedulePlanner.app`
+   (locate them with `find` — the exact sub-path is a PyInstaller `--windowed`
+   layout detail and may differ between versions, so do not assert it):
+   - `ui.html`
+   - `files/lamc_data.xlsx`
+   - `libortools.*.dylib` (plus the bundled `ortools/.libs/*.dylib`)
+   - the pywebview Cocoa backend + `WebKit`/`objc` bridge
+4. **Frozen native-stack smoke test.** A console PyInstaller build using the
+   *same* `--collect-all ortools` + `--add-data files` flags was run and
+   executed end to end inside the frozen bundle:
+   `from ortools.sat.python import cp_model` imported, `pandas.read_excel` read
+   the bundled workbook via openpyxl (620 rows), and `engine.run(<bundled
+   xlsx>)` returned the expected result keys. This confirms the OR-Tools native
+   libraries load and the Excel path works when frozen — independent of the GUI.
+
+To re-run checks 1–3 after a build:
+
+```bash
+test -d dist/SchedulePlanner.app && echo "bundle OK"
+find dist/SchedulePlanner.app -name ui.html
+find dist/SchedulePlanner.app -name lamc_data.xlsx
+find dist/SchedulePlanner.app -name 'libortools*.dylib'
+file dist/SchedulePlanner.app/Contents/MacOS/SchedulePlanner
+```
+
+### Manual GUI checklist (cannot be automated headlessly)
+
+Launching the windowed app to click buttons requires an interactive macOS
+session. On a Mac with a desktop session:
+
+```bash
+open dist/SchedulePlanner.app
+# or, to see logs/errors in a terminal:
+./dist/SchedulePlanner.app/Contents/MacOS/SchedulePlanner
+```
+
+Then confirm:
+
+- [ ] The app launches with **no terminal window** and shows the native window.
+- [ ] `ui.html` renders (buttons **Choose data file** and **Load demo data**).
+- [ ] **Load demo data** runs analysis on the bundled workbook and renders
+      results for full-time and part-time cohorts — with **no file picking**.
+- [ ] **Choose data file** opens the macOS file picker and accepts an `.xlsx`.
+- [ ] Missing Ollama does **not** block analysis (AI is optional; results still
+      render, just without the AI explanation).
+- [ ] The app exits cleanly.
+
+## macOS Gatekeeper bypass (internal testers)
+
+The bundle is **unsigned and un-notarized**. macOS Gatekeeper will block it on
+first open ("...can't be opened because Apple cannot check it for malicious
+software" / "is damaged"). For **internal testers only**, bypass it one of these
+ways:
+
+- **Finder:** right-click (or Control-click) the app -> **Open** -> confirm
+  **Open** in the dialog. This whitelists that specific copy.
+- **System Settings:** after a blocked launch, go to **System Settings ->
+  Privacy & Security**, scroll to the message about SchedulePlanner, click
+  **Open Anyway**.
+- **Terminal (clears the quarantine attribute):**
+
+  ```bash
+  xattr -dr com.apple.quarantine /path/to/SchedulePlanner.app
+  ```
+
+For real distribution outside the dev machine, the proper fix is an Apple
+Developer ID signature + notarization (`codesign` + `notarytool`); that is out
+of scope for internal v1 testing.
+
+## Where live-fetch outputs go (guidance for the live-in-UI feature)
+
+A **frozen `.app` has no writable working directory** you can rely on:
+
+- `sys._MEIPASS` is a temporary, read-only extraction dir — never write there.
+- The app's CWD when launched from Finder is `/` (not the app folder), and the
+  bundle itself should be treated as read-only (it may live in `/Applications`,
+  and writing into it breaks the code signature).
+
+So any feature that **fetches live data and writes a workbook** (the live-in-UI
+feature) must write to a **per-user, writable application-support directory**,
+not the CWD and not next to the `.app`. Recommended location on macOS:
+
+```text
+~/Library/Application Support/SchedulePlanner/
+```
+
+Suggested helper (for whoever implements live-in-UI — illustrative, not yet in
+`app.py`):
+
+```python
+import os, sys
+
+def user_data_dir(app_name="SchedulePlanner"):
+    """Writable per-user dir for generated workbooks/outputs.
+
+    Works the same in dev and when frozen; never writes into the bundle or
+    the read-only _MEIPASS extraction dir.
+    """
+    if sys.platform == "darwin":
+        base = os.path.expanduser("~/Library/Application Support")
+    elif os.name == "nt":
+        base = os.environ.get("APPDATA", os.path.expanduser("~"))
+    else:  # linux / other
+        base = os.environ.get(
+            "XDG_DATA_HOME", os.path.expanduser("~/.local/share"))
+    path = os.path.join(base, app_name)
+    os.makedirs(path, exist_ok=True)
+    return path
+```
+
+Live-fetched/generated workbooks should be written under `user_data_dir()` (e.g.
+`user_data_dir()/live_LAMC.xlsx`) and then handed to `engine.run(<that path>)`.
+This keeps the bundled read-only demo (`files/lamc_data.xlsx`, resolved via
+`resource_path`) separate from user-generated writable outputs.
+
+## Privacy / network rules (unchanged)
+
+The engine stays deterministic and offline: no live HTTP, no external AI calls,
+no persistence side effects inside `engine.run`. The only allowed network paths
+are optional public-source fetches (the live-in-UI / `sources/*` path) and
+optional local Ollama calls to `http://localhost:11434`. No telemetry.
+
+## Known build risks / notes
+
+- **OR-Tools native libs** — the high-risk item. Resolved by
+  `--collect-all ortools`; verified loading inside the frozen bundle. If a future
+  ortools release relocates its `.dylib`s, re-check `--collect-all ortools` still
+  bundles `libortools.*.dylib` and `ortools/.libs/`.
+- **Bundle size** — the `.app` is large (~800 MB) because OR-Tools + pandas +
+  numpy + WebKit bridge are all included. Expected; not a correctness issue.
+- **One-file builds** — prefer the default one-bundle `.app` (above). Only try
+  `--onefile` after this is stable; one-file apps start slower and make
+  native-library debugging harder.
+- **Gatekeeper** — see the bypass section; unsigned builds are for internal
+  testers only.
+
+## Windows (later)
+
+Not built/verified here. The same structure applies, with the `--add-data`
+separator changed to `;`:
 
 ```powershell
 python -m PyInstaller `
   --noconfirm `
   --windowed `
-  --name EdgeSched `
+  --name SchedulePlanner `
+  --add-data "ui.html;." `
+  --add-data "files/lamc_data.xlsx;files" `
   --collect-all ortools `
-  --collect-all PySide6 `
-  desktop/main.py
+  app.py
 ```
 
-Expected output:
+Windows uses a different pywebview backend (EdgeChromium/WebView2). Validate the
+demo path and re-derive any extra hidden imports on a Windows host before
+relying on it.
 
-```text
-dist\EdgeSched\EdgeSched.exe
-```
+## Reference
 
-Prefer one-folder builds first. Use `--onefile` only after the one-folder build
-is stable; one-file apps start slower and make native-library debugging harder.
-
-## Bundled vs. External Assets
-
-Bundled:
-
-- application code
-- PySide6 UI layer
-- deterministic engine
-- pandas/openpyxl/OR-Tools runtime dependencies
-- synthetic demo data if intentionally committed
-
-Not bundled:
-
-- student-level data
-- local generated workbooks under `data/`
-- raw live-source responses under `data/raw/`
-- Ollama model weights
-- Neo4j database/runtime
-
-## Privacy and Network Rules
-
-The desktop app must run offline once the user has a local workbook. It should
-not send telemetry, analytics, crash reports, or scheduling data to external
-services.
-
-Allowed network paths:
-
-- optional public API fetches in `build_live_workbook.py` / `sources/*`
-- optional local Ollama calls to `http://localhost:11434`
-
-Disallowed in the engine:
-
-- live HTTP calls
-- external AI calls
-- persistence side effects
-- student-level data processing
-
-## Verification Before Release
-
-Run these checks on each platform before publishing an artifact:
-
-```bash
-python -m pytest
-python engine.py files/lamc_data.xlsx
-python build_live_workbook.py --help
-python -m PyInstaller --clean --noconfirm --windowed \
-  --name EdgeSched \
-  --collect-all ortools \
-  --collect-all PySide6 \
-  desktop/main.py
-```
-
-Manual smoke checklist:
-
-- app launches without a terminal window
-- file picker accepts `.xlsx` workbook input
-- synthetic workbook analysis completes
-- results render for full-time and part-time cohorts
-- missing Ollama does not block analysis
-- live-source workbook generation clearly labels known data gaps
-- app exits cleanly
-
-## Release Artifacts
-
-Recommended release structure:
-
-```text
-release/
-  macos/
-    EdgeSched.app
-    EdgeSched-macOS-readme.txt
-  windows/
-    EdgeSched/
-      EdgeSched.exe
-      ...
-    EdgeSched-Windows-readme.txt
-```
-
-Each release note should state:
-
-- platform and architecture
-- Python version used for build
-- whether the app is signed/notarized
-- whether Ollama is optional
-- which demo data, if any, is bundled
-- known limitations for live-source data
-
-## Known Build Risks
-
-- OR-Tools native libraries may require `--collect-all ortools`.
-- PySide6 plugins may require `--collect-all PySide6` or a maintained
-  `.spec` file if PyInstaller misses platform plugins.
-- macOS distribution outside the developer machine requires signing and
-  notarization.
-- Windows unsigned executables may trigger SmartScreen warnings.
-- For v1 the pywebview shell is the desktop target; PyInstaller must bundle the
-  webview runtime and the `files/`/`ui.html` data resources. If that proves
-  unviable, fall back to the deferred PySide6 target (see "Framework Decision").
-
-## Reference Documentation
-
-- Qt for Python / PySide6: https://doc.qt.io/qtforpython-6/
-- Qt for Python deployment: https://doc.qt.io/qtforpython-6/deployment/
 - PyInstaller manual: https://pyinstaller.org/en/stable/
+- PyInstaller `--add-data` / data files: https://pyinstaller.org/en/stable/spec-files.html#adding-data-files
 - OR-Tools install docs: https://developers.google.com/optimization/install
+- pywebview: https://pywebview.flowrl.com/
