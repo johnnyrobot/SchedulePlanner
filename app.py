@@ -66,17 +66,43 @@ class Api:
 
     # ---- AI status / setup -------------------------------------------
     def ai_status(self):
-        return {
-            "installed": llm_assist.ollama_installed(),
-            "running": llm_assist.ollama_running(),
-            "model": llm_assist.model_present(),
-            "model_name": llm_assist.MODEL,
-        }
+        """Report Ollama/model availability for the UI.
+
+        A broken or absent Ollama (probe raising, a stale daemon, a bad URL)
+        must NEVER raise into the JS bridge — that would freeze the status line.
+        Each probe is independent and any failure degrades to a safe "absent"
+        reading, with an ``error`` note so the UI can show why if it wants.
+        """
+        try:
+            return {
+                "installed": llm_assist.ollama_installed(),
+                "running": llm_assist.ollama_running(),
+                "model": llm_assist.model_present(),
+                "model_name": llm_assist.MODEL,
+            }
+        except Exception as e:
+            # Treat any unexpected probe failure as "AI unavailable" rather than
+            # surfacing a traceback; the templated fallback still works without it.
+            return {
+                "installed": False,
+                "running": False,
+                "model": False,
+                "model_name": getattr(llm_assist, "MODEL", ""),
+                "error": f"{type(e).__name__}: {e}",
+            }
 
     def setup_ai(self):
-        """Pull the Gemma 4 model. Long-running; UI shows a spinner."""
-        ok = llm_assist.ensure_model(progress=lambda s: None)
-        return {"ok": bool(ok)}
+        """Pull the Gemma 4 model. Long-running; UI shows a spinner.
+
+        Wrapped so a failed pull (no Ollama, network/daemon error) returns a
+        readable {ok: False, error: ...} dict instead of raising into the JS
+        bridge — the analysis still runs via the templated fallback.
+        """
+        try:
+            ok = llm_assist.ensure_model(progress=lambda s: None)
+            return {"ok": bool(ok)}
+        except Exception as e:
+            return {"ok": False, "error": f"{type(e).__name__}: {e}"}
 
     # ---- core ---------------------------------------------------------
     def analyze(self, path):
@@ -151,9 +177,23 @@ class Api:
         return out
 
     def explain(self):
+        """Return a plain-language briefing for the last analysis.
+
+        Guards two failure modes so the UI always gets readable text, never a
+        traceback marshalled across the JS bridge:
+          - no analysis has run yet (``_last_results`` is None/empty); and
+          - a partial/None-cohort results dict (missing ``programs``, a program
+            missing ``cohorts``, a cohort missing ``terms_used``, etc.), which
+            would otherwise raise inside the templated summary.
+        """
         if not self._last_results:
             return {"text": "Run an analysis first."}
-        return {"text": llm_assist.explain(self._last_results)}
+        try:
+            return {"text": llm_assist.explain(self._last_results)}
+        except Exception as e:
+            return {"text": ("Could not summarize the analysis "
+                             f"({type(e).__name__}: {e}). The full results are "
+                             "still shown above.")}
 
 
 def main():

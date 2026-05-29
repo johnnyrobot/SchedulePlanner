@@ -19,6 +19,9 @@ import json
 import os
 
 import app
+# json_response is a module-level helper in conftest (builds a FakeResponse with
+# a chosen body), not a fixture — import it directly to forge a non-JSON body.
+from conftest import json_response
 
 # The `lamc_routes` fixture (the shared live-fixture route map replaying the
 # committed tests/fixtures/) lives in tests/conftest.py, shared with the
@@ -149,3 +152,136 @@ def test_fetch_live_blank_or_nonpositive_terms_returns_error():
         assert isinstance(res, dict)
         assert "error" in res, f"{bad!r} should be rejected"
         assert isinstance(res["error"], str) and res["error"]
+
+
+# ---- m8-C t7: app.py error hardening --------------------------------------
+
+def test_analyze_corrupt_xlsx_returns_error_not_exception(tmp_path):
+    """A file that LOOKS like a workbook (.xlsx) but is corrupt/zero-byte must
+    surface a readable error dict, not a traceback into the JS bridge."""
+    bad = tmp_path / "corrupt.xlsx"
+    bad.write_bytes(b"")  # zero-byte: not a valid zip/xlsx container
+    res = app.Api().analyze(str(bad))
+    assert isinstance(res, dict)
+    assert "error" in res
+    assert isinstance(res["error"], str) and res["error"]
+
+
+def test_analyze_garbage_bytes_xlsx_returns_error(tmp_path):
+    """A .xlsx with garbage (non-zip) bytes is corrupt the same way a truncated
+    download would be: readable error, never an exception."""
+    bad = tmp_path / "garbage.xlsx"
+    bad.write_bytes(b"PK\x03\x04 not really a real zip central directory at all")
+    res = app.Api().analyze(str(bad))
+    assert isinstance(res, dict)
+    assert "error" in res
+    assert isinstance(res["error"], str) and res["error"]
+
+
+def test_fetch_live_http_500_returns_error_not_exception(
+        lamc_routes, make_client, error_resp):
+    """A 5xx from a live endpoint (here the schedule listing, first call in the
+    chain) drives get_json -> SourceHTTPError -> analyze_live -> fetch_live's
+    except path and renders as a readable {error} dict, not an exception."""
+    lamc_routes["/listing/LAMC/2268"] = error_resp(500)
+    client = make_client(lamc_routes)
+    res = app.Api().fetch_live("LAMC", "2268", "Biology", client=client)
+    assert isinstance(res, dict)
+    assert "error" in res
+    assert isinstance(res["error"], str) and res["error"]
+    assert "live" in res["error"].lower()
+
+
+def test_fetch_live_non_json_body_returns_error_not_exception(
+        lamc_routes, make_client):
+    """A 200-OK endpoint that returns a non-JSON body (an HTML error page /
+    truncated response) drives get_json -> SourceDataError and must render as a
+    readable {error} dict through fetch_live's except path, not an exception."""
+    lamc_routes["/listing/LAMC/2268"] = json_response(
+        None, text="<html><body>502 Bad Gateway</body></html>")
+    client = make_client(lamc_routes)
+    res = app.Api().fetch_live("LAMC", "2268", "Biology", client=client)
+    assert isinstance(res, dict)
+    assert "error" in res
+    assert isinstance(res["error"], str) and res["error"]
+    assert "live" in res["error"].lower()
+
+
+def test_explain_before_any_analyze_returns_readable_message():
+    res = app.Api().explain()
+    assert res == {"text": "Run an analysis first."}
+
+
+def test_explain_partial_results_returns_readable_message_not_traceback():
+    """A partial / None-cohort results dict (a program missing 'cohorts', a
+    cohort missing 'terms_used', etc.) must yield readable text, not a
+    traceback marshalled across the JS bridge."""
+    api = app.Api()
+    # Program present but cohorts is None and the keys the summary reads are
+    # absent — exercises the AttributeError/KeyError path inside the templated
+    # summary that the explain() guard must absorb.
+    api._last_results = {
+        "programs": {
+            "AS-T-BROKEN": {
+                "title": "Broken Program",
+                "cohorts": None,                 # None-cohort
+                "official_map_issues": [],
+            },
+            "AS-T-PARTIAL": {
+                # 'title' missing entirely, cohort missing 'terms_used'
+                "cohorts": {"full_time": {"needs_fix": True}},
+                "official_map_issues": [],
+            },
+        }
+    }
+    res = api.explain()
+    assert isinstance(res, dict)
+    assert isinstance(res.get("text"), str) and res["text"]
+
+
+def test_explain_empty_results_dict_returns_message():
+    """An empty (but truthy-after-analyze) results dict must not raise; the
+    templated summary just produces an empty body, which is fine."""
+    api = app.Api()
+    api._last_results = {"terms_in_data": 0}  # no 'programs' key
+    res = api.explain()
+    assert isinstance(res, dict)
+    assert isinstance(res.get("text"), str)
+
+
+def test_ai_status_error_path_returns_safe_dict(monkeypatch):
+    """If a probe blows up (broken/absent Ollama), ai_status returns a safe
+    'AI unavailable' dict with an error note, never an exception."""
+    def boom():
+        raise RuntimeError("ollama probe exploded")
+    monkeypatch.setattr(app.llm_assist, "ollama_installed", boom)
+    res = app.Api().ai_status()
+    assert isinstance(res, dict)
+    assert res["installed"] is False
+    assert res["running"] is False
+    assert res["model"] is False
+    assert "error" in res and "ollama probe exploded" in res["error"]
+
+
+def test_setup_ai_error_path_returns_ok_false_dict(monkeypatch):
+    """A failed model pull (Ollama raising) returns {ok: False, error: ...},
+    not an exception."""
+    def boom(*a, **k):
+        raise RuntimeError("pull exploded")
+    monkeypatch.setattr(app.llm_assist, "ensure_model", boom)
+    res = app.Api().setup_ai()
+    assert isinstance(res, dict)
+    assert res["ok"] is False
+    assert "error" in res and "pull exploded" in res["error"]
+
+
+def test_ai_status_happy_path_still_a_dict(monkeypatch):
+    """The non-error path is unchanged: a plain status dict with no error key."""
+    monkeypatch.setattr(app.llm_assist, "ollama_installed", lambda: False)
+    monkeypatch.setattr(app.llm_assist, "ollama_running", lambda: False)
+    monkeypatch.setattr(app.llm_assist, "model_present", lambda: False)
+    res = app.Api().ai_status()
+    assert res == {
+        "installed": False, "running": False, "model": False,
+        "model_name": app.llm_assist.MODEL,
+    }
