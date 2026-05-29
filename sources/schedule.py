@@ -65,7 +65,7 @@ def fetch_sections(campus, terms=None, *, client=None):
                 f"{type(listing['subjects']).__name__}, expected a list. "
                 "The schedule API schema may have changed."
             )
-        for subject in listing.get("subjects", []):
+        for subject in listing["subjects"]:
             for course in subject.get("courses", []):
                 subj = (course.get("subject") or "").strip()
                 catalog = (course.get("catalogNbr") or "").strip()

@@ -27,7 +27,7 @@ import pytest
 
 import app
 from sources import mapping, program_mapper as pm, schedule
-from sources.http import SourceDataError, SourceError
+from sources.http import SourceDataError
 
 
 # ---- schedule.fetch_sections: 200-OK but wrong shape ----------------------
@@ -36,7 +36,7 @@ def test_fetch_sections_subjects_not_a_list_raises_named_source_error(make_clien
     """'subjects' present but the wrong type (a dict, not a list). Iterating it
     must fail by endpoint name, not as an opaque AttributeError/TypeError."""
     client = make_client({"/listing/LAMC/2268": {"subjects": {"oops": "dict"}}})
-    with pytest.raises(SourceError) as ei:
+    with pytest.raises(SourceDataError) as ei:
         schedule.fetch_sections("LAMC", [2268], client=client)
     msg = str(ei.value)
     assert "listing endpoint" in msg
