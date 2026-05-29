@@ -71,10 +71,11 @@ prerequisite text and write plain-English schedule briefings. The engine
 falls back gracefully to a rule-based template if Ollama is absent — no
 setup required for core functionality.
 
-Install Ollama and pull the model if you want the AI layer:
+Install Ollama and pull the model named in `llm_assist.MODEL` if you want
+the AI layer (currently `gemma4:e2b`; exact tag pending verification):
 
 ```bash
-ollama pull gemma3:4b
+ollama pull gemma4:e2b
 ```
 
 ### Neo4j graph layer (reference prototype, not wired in)
@@ -115,7 +116,7 @@ The bundled demo (`files/lamc_data.xlsx`) has deliberately planted problems:
   finds a corrected 4-term path.
 - **Engineering AS-T** — genuinely impossible: a 3-deep prerequisite chain
   locked to Fall can't fit in two years. The solver reports the single change
-  that unblocks it: add one ENGR 103 section in Spring.
+  that unblocks it: add one ENGR 102 section in Spring.
 
 ## Notes
 
