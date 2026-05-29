@@ -193,7 +193,11 @@ def run(path: str, llm=None) -> dict:
     return results
 
 
+def _default_data_path() -> str:
+    return os.path.join(os.path.dirname(os.path.abspath(__file__)), "files", "lamc_data.xlsx")
+
+
 if __name__ == "__main__":
     import json, sys
-    path = sys.argv[1] if len(sys.argv) > 1 else "/home/claude/lamc_data.xlsx"
+    path = sys.argv[1] if len(sys.argv) > 1 else _default_data_path()
     print(json.dumps(run(path), indent=2))
