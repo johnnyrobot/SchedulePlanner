@@ -19,6 +19,34 @@ input workbook or CSV folder -> engine.run(path) -> results dict
 Network calls for live sources and optional AI setup stay outside the solver.
 The engine remains deterministic and offline.
 
+## Framework Decision (v1): keep pywebview; PySide6 is a non-goal for now
+
+**Decision (m2):** v1 ships on the existing **pywebview** shell (`app.py` +
+`ui.html`). A PySide6 / Qt rewrite is an explicit **non-goal** for v1 and is
+**deferred**.
+
+Rationale:
+
+- The pywebview shell already satisfies the v1 goal: a non-technical user
+  launches the app and, with one click ("Load demo data"), sees the full
+  analysis on the bundled synthetic dataset — no file hunting, no CLI.
+- The engine boundary (`engine.run(path) -> results dict`) is unchanged and
+  remains the single source of truth, so the UI layer is replaceable later at
+  low cost.
+- Rewriting to PySide6 now is effort that does not move the v1 demo forward and
+  risks regressions in a shell that already works.
+
+When to revisit: **only if m5 packaging proves pywebview unviable** (for
+example, if PyInstaller cannot reliably bundle the webview runtime / WebKit on
+a target platform, or signing/notarization of the bundled browser runtime
+blocks distribution). If that happens, the PySide6 layout and packaging guidance
+later in this document become the migration target. Until then, treat the
+PySide6 sections below as **future / deferred reference**, not the v1 build.
+
+For freezing to work in both dev and frozen modes, bundled resources (`ui.html`
+and `files/lamc_data.xlsx`) are resolved through a `sys._MEIPASS`-aware helper
+in `app.py` (`resource_path`), falling back to the source directory in dev.
+
 ## Platform Targets
 
 | Platform | Artifact | Build host |
@@ -34,7 +62,8 @@ artifacts on Windows.
 | Layer | Choice | Reason |
 |---|---|---|
 | Runtime | Python 3.12 | Conservative compatibility target for the Python stack |
-| Desktop UI | PySide6 / Qt for Python | Native cross-platform widgets with no JS bridge |
+| Desktop UI (v1) | pywebview (`app.py` + `ui.html`) | Already meets the v1 demo goal; engine boundary keeps it swappable |
+| Desktop UI (deferred) | PySide6 / Qt for Python | Native widgets with no JS bridge — revisit only if m5 packaging proves pywebview unviable |
 | Packaging | PyInstaller | Mature Python desktop bundling for macOS and Windows |
 | Solver | OR-Tools CP-SAT | Existing deterministic scheduling engine |
 | Data IO | pandas + openpyxl | Existing workbook/CSV ingestion |
@@ -70,8 +99,9 @@ edgesched/
   data/                      # ignored local/live generated outputs
 ```
 
-The current `app.py` / `ui.html` pywebview shell is acceptable as a prototype
-only. The production desktop target should move to `desktop/main.py`.
+For v1, the desktop app **is** the `app.py` / `ui.html` pywebview shell (see
+"Framework Decision (v1)" above). The `desktop/` PySide6 layout is the deferred
+migration target and is only adopted if m5 packaging proves pywebview unviable.
 
 ## Python Dependencies
 
@@ -121,13 +151,17 @@ Once the PySide migration is implemented, `requirements.txt` should include
 
 ## Development Run
 
-Current prototype:
+v1 desktop app (pywebview shell):
 
 ```bash
 python app.py
 ```
 
-Target PySide6 app:
+This opens the window with **Choose data file** and **Load demo data** buttons.
+Clicking **Load demo data** runs the analysis on the bundled synthetic workbook
+(`files/lamc_data.xlsx`) with no file picking.
+
+Deferred PySide6 app (only if m5 packaging proves pywebview unviable):
 
 ```bash
 python -m desktop.main
@@ -291,7 +325,9 @@ Each release note should state:
 - macOS distribution outside the developer machine requires signing and
   notarization.
 - Windows unsigned executables may trigger SmartScreen warnings.
-- The current pywebview prototype is not the final native desktop target.
+- For v1 the pywebview shell is the desktop target; PyInstaller must bundle the
+  webview runtime and the `files/`/`ui.html` data resources. If that proves
+  unviable, fall back to the deferred PySide6 target (see "Framework Decision").
 
 ## Reference Documentation
 
