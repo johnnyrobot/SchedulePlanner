@@ -114,6 +114,7 @@ def test_f5_single_section_fires():
     """PRD F5: single-section flag fires when a course runs with only one section per term."""
     r = engine.run(DEMO)
     assert len(r["analysis"]["single_section"]) > 0
+    assert any(x["course"] == "ENGR 101" for x in r["analysis"]["single_section"])
 
 
 # F6: modality mismatch detection
@@ -185,6 +186,9 @@ def test_f12_prereq_ordering():
     for t, courses in plan.items():
         for c in courses:
             course_term[c] = int(t)
+    # Guard: all checked courses must be present (clear failure, not KeyError)
+    assert {"MATH 245", "MATH 246", "MATH 247",
+            "CS 101", "CS 102", "CS 103"} <= set(course_term)
     # MATH 245 -> MATH 246 -> MATH 247
     assert course_term["MATH 245"] < course_term["MATH 246"], (
         "MATH 246 scheduled before its prereq MATH 245"
@@ -220,9 +224,9 @@ def test_f13_unit_caps_respected():
                 )
 
 
-# F14: season availability respected in fixed plans
-def test_f14_season_availability_respected():
-    """PRD F14: every scheduled course appears in a term whose season it is offered (no-fix plans)."""
+# F14: season constraints respected in a no-fix plan
+def test_f14_season_constraints_respected():
+    """PRD F14: in a no-fix plan, every scheduled course sits in a term whose season it is offered."""
     sec, cat, prog = engine.load_data(DEMO)
     _, course_seasons, _, _ = engine.build_model(sec, cat, prog)
     r = engine.run(DEMO)
@@ -242,13 +246,13 @@ def test_f14_season_availability_respected():
             )
 
 
-# F18: corrected plan exists for CSCI despite map violation
+# F18: official-map violations reported ALONGSIDE a corrected plan
 def test_f18_corrected_plan_solves():
-    """PRD F18: AS-T-CSCI full_time produces a feasible corrected plan despite official map error."""
-    r = engine.run(DEMO)
-    csci_ft = r["programs"]["AS-T-CSCI"]["cohorts"]["full_time"]
-    assert csci_ft is not None, "AS-T-CSCI full_time cohort returned None"
-    assert len(csci_ft["plan"]) > 0, "AS-T-CSCI full_time plan is empty"
+    """PRD F18: official-map violations are reported AND a corrected plan still solves."""
+    prog = engine.run(DEMO)["programs"]["AS-T-CSCI"]
+    assert prog["official_map_issues"]            # violation(s) detected
+    ft = prog["cohorts"]["full_time"]
+    assert ft is not None and ft["plan"]          # corrected plan still generated
 
 
 # parse_prereq forms
