@@ -33,7 +33,21 @@ and minimum fixes.
 python3 app.py
 ```
 
-Opens a native window (pywebview) with the full interactive UI.
+Opens a native window (pywebview) with the full interactive UI. Three ways to
+get data in, all routed through the same `engine.run`:
+
+- **Choose data file** — pick a `.xlsx` workbook (or a folder of the three
+  CSVs) with the OS-native file dialog.
+- **Load demo data** — one click; analyzes the bundled
+  `files/lamc_data.xlsx` with no file picking.
+- **Build from live LACCD** — fetches the public schedule + Program Mapper
+  APIs in-app (campus / terms / program), writes a throwaway workbook to a temp
+  dir, analyzes it, and renders the engine results plus the live-only
+  reconciliation and inert-detector panels. Nothing is persisted to disk.
+
+Data-derived strings are HTML-escaped before render (`escapeHtml` in
+`ui.html`), and the optional AI status is probed without ever blocking
+analysis.
 
 ### Build a workbook from live LACCD data
 
@@ -88,12 +102,38 @@ python3 generate_synthetic.py --out files/lamc_data.xlsx
 Recreates the three-sheet demo workbook with planted bottlenecks so the
 engine has something interesting to find.
 
+### The committed enrollment sample (`files/lamc_sample_enrollment.xlsx`)
+
+A second committed workbook, `files/lamc_sample_enrollment.xlsx`, is a
+**synthetic stand-in that mirrors the column shape of the real IR PeopleSoft
+enrollment export** (populated `Cap Enrl` / `Tot Enrl` / `Wait Tot`). It exists
+because the **live** public LACCD schedule API returns those counts as `0`, so
+the `modality_mismatch` and `under_supply` detectors are **inert on live data**
+until the real IR export arrives (PRD M4). This sample lets those two detectors
+actually fire — proving they work end to end — without waiting on the IR
+delivery and without any student-level data (it carries no PII). It is
+regression-tested in `tests/test_sample_enrollment_fixture.py` (IR shape,
+planted-bottleneck snapshot, the detectors firing, byte-identical regeneration)
+and feeds the e2e determinism check. Run it through the engine like any
+workbook:
+
+```bash
+python3 engine.py files/lamc_sample_enrollment.xlsx
+```
+
 ### Run the test suite
 
 ```bash
-python3 -m pytest -q                 # fast, no network
-python3 -m pytest -m live            # network-gated integration tests
+python3 -m pytest -q                 # 148 passed, 3 deselected — fast, no network
+python3 -m pytest -m live            # the 3 network-gated integration tests
+./scripts/run_qa.sh                  # green-suite gate (asserts the 3 live tests stay deselected)
 ```
+
+`scripts/run_qa.sh` is the single QA gate: it runs the offline suite and only
+exits 0 when pytest passes *and* exactly the three `live`-marked tests were
+deselected. The headless coverage (perf N5/N6, privacy N1–N4, determinism N11,
+dead-path sweep, live-source error paths) is catalogued in
+`docs/M8_QA_REPORT.md`.
 
 ## Optional integrations
 
@@ -159,6 +199,31 @@ live LACCD data ──► build_live_workbook.py
 The schedule is always produced by the deterministic solver. The LLM layer
 only parses messy text and writes explanations — it never decides the
 schedule.
+
+## Packaging (desktop binary)
+
+The app ships as a single PyInstaller bundle (no Python install on the target
+machine). **macOS is built and verified**; Windows and Linux are *prepared* but
+not produced on the macOS dev host.
+
+```bash
+./scripts/build_macos.sh                          # -> dist/SchedulePlanner.app
+./scripts/verify_macos_build.sh                   # headless resource/Mach-O checks
+```
+
+`--collect-all ortools` is the load-bearing flag (it bundles the OR-Tools
+native libs). Full flag-by-flag rationale, the frozen native-stack smoke test,
+and the macOS Gatekeeper bypass are in `BUILD.md`; Windows/Linux recipes and
+per-OS pywebview backends are in `docs/CROSS_PLATFORM_BUILD.md`.
+
+## Docs index
+
+- `PRD.md` — product requirements; §12 milestone table reconciled to shipped reality.
+- `TECH_SPEC.md` — technical design.
+- `BUILD.md` — verified macOS PyInstaller build.
+- `docs/CROSS_PLATFORM_BUILD.md` — Windows/Linux build recipes (prepared, unverified here).
+- `docs/M8_QA_REPORT.md` — what is verified headlessly vs. manual-only + the PRD F/N coverage matrix.
+- `docs/live_smoke_2026.md` — captured live LACCD network smoke transcript.
 
 ## Demo data
 

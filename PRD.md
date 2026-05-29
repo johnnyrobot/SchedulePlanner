@@ -1,7 +1,7 @@
 # Product Requirements Document
 ## 2-Year Completion Schedule Planner — LAMC
 
-**Status:** Draft v1
+**Status:** Draft v1 (milestone table reconciled to shipped reality, §12)
 **Owner:** [To be filled]
 **Last updated:** Spring 2026
 
@@ -178,13 +178,20 @@ The college lacks tools to:
 
 ## 12. Milestones
 
+These are **product / adoption** milestones. They are tracked separately from
+the **engineering** milestones in the git history (`m1`–`m8`, see the commit
+log and `docs/M8_QA_REPORT.md`). The engineering milestones built and hardened
+the *capability*; the product milestones below are reached when that capability
+is *used on real data and acted on by the college* — several of those steps
+depend on inputs or people outside the codebase, and stay open until then.
+
 | Milestone | Deliverable | Status |
 |---|---|---|
-| M0 | Synthetic data MVP with planted bottlenecks | ✓ Complete |
-| M1 | Solver with cohort profiles + minfix | ✓ Complete |
-| M2 | Desktop app shell with file upload + render | ✓ Complete |
-| M3 | Gemma 4 integration with graceful fallback | ✓ Complete |
-| M4 | First real data ingestion | ☐ Pending IR data delivery |
-| M5 | First published bottleneck report | ☐ |
-| M6 | First schedule change traceable to tool | ☐ |
-| M7 | Cross-department adoption | ☐ |
+| M0 | Synthetic data MVP with planted bottlenecks | ✓ Complete — `generate_synthetic.py` + bundled `files/lamc_data.xlsx`; deterministic regeneration is regression-tested (eng. `m8`). |
+| M1 | Solver with cohort profiles + minfix | ✓ Complete — deterministic OR-Tools CP-SAT engine, full-time/part-time cohorts, minimum-fix path (eng. `m1`). Per-FR backbone in `tests/test_engine_features.py`. |
+| M2 | Desktop app shell with file upload + render | ✓ Complete — pywebview app (`app.py` + `ui.html`) with Choose-file, Load-demo, and Build-from-live-LACCD (eng. `m2`/`m4`); packaged macOS `.app` shipped & verified (eng. `m5`, see `BUILD.md`). |
+| M3 | Gemma 4 integration with graceful fallback | ✓ Complete — optional Gemma via Ollama (default tag `gemma4:e2b`), tag-exact presence check, templated fallback when absent (eng. `m3`/`m6`, `llm_assist.py`). |
+| M4 | First real data ingestion | ◐ Partial — the **live public-LACCD ingestion path shipped** (`build_live_workbook.py` + `sources/`, eng. `m3`/`m4`) and produces real workbooks from the schedule + Program Mapper APIs. **Still externally pending:** the **IR PeopleSoft enrollment export**. The live schedule API returns Cap/Tot/Wait = 0, so the `modality_mismatch` and `under_supply` detectors are **inert on live data**, and prerequisites are blank (eLumen not yet wired). A committed IR-shaped sample (`files/lamc_sample_enrollment.xlsx`) exercises those detectors offline; the real IR export is the gating input. |
+| M5 | First published bottleneck report | ☐ Open — this is a **human deliverable**, not code. The engine produces the analysis; a report still has to be authored and delivered to Academic Affairs (success metric §8). |
+| M6 | First schedule change traceable to tool | ☐ Open — depends on the college adding a section because the tool surfaced a bottleneck. Outside the codebase. |
+| M7 | Cross-department adoption | ☐ Open — adoption metric (§8); the student-facing rollout in §4/§10 is explicitly **future (v2)**. |
