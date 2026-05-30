@@ -27,3 +27,6 @@ data/raw/
 data/live_*.xlsx
 *.local.xlsx
 *.local.csv
+
+# Claude Code local settings / session state (never commit)
+.claude/

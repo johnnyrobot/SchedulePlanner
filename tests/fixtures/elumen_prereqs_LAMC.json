@@ -1,0 +1,12 @@
+{
+  "source": "elumen (FIXTURE-ONLY: self-defined shape, NOT captured from a real eLumen endpoint or auth; the DNF/raw shape here is ASSUMED and not validated against real data)",
+  "campus": "LAMC",
+  "courses": [
+    {"course_id": "ENGL 102", "raw": "Prerequisite: ENGL 101", "dnf": [["ENGL 101"]]},
+    {"course_id": "MATH 246", "raw": "MATH 245", "dnf": [["MATH 245"]]},
+    {"course_id": "PHYS 102", "raw": "(MATH 245 and MATH 246) or PHYS 185", "dnf": [["MATH 245", "MATH 246"], ["PHYS 185"]]},
+    {"course_id": "CHEM 102", "raw": "CHEM 101 or CHEM 105", "dnf": [["CHEM 101"], ["CHEM 105"]]},
+    {"course_id": "BIO 200", "raw": "(BIO 101 and CHEM 101) or (BIO 102 and CHEM 101)", "dnf": [["BIO 101", "CHEM 101"], ["BIO 102", "CHEM 101"]]},
+    {"course_id": "STAT 101", "raw": "No prerequisite", "dnf": []}
+  ]
+}

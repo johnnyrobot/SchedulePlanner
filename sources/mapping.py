@@ -1,8 +1,17 @@
 """Map live-source records into the engine's workbook schema.
 
-Emits exactly the columns engine.py reads. Enrollment columns are 0 (the
-schedule API has no counts) and prerequisites are blank (needs eLumen) — both
-are expected gaps documented in the design doc, not failures.
+Emits exactly the columns engine.py reads. By default enrollment columns are 0
+(the schedule API has no counts) and prerequisites are blank (needs eLumen) —
+both are expected gaps documented in the design doc, not failures.
+
+The m7 builders accept OPTIONAL enrichment, additively (defaults preserve the
+all-zero / all-blank behavior byte-identically):
+  - build_sections_df reads per-record ``Cap Enrl``/``Tot Enrl``/``Wait Tot``
+    when present (records enriched from the IR export);
+  - build_catalog_df / write_workbook accept a ``prereqs`` course-id -> CNF
+    string map for the structured-prereq column.
+No column or schema change: the three column-constant lists stay equal to
+engine.REQUIRED_COLUMNS.
 """
 from __future__ import annotations
 
@@ -60,14 +69,17 @@ def build_sections_df(section_records):
             # absent); its status field is enrollment availability (Open/Closed/
             # Waitlist), not lifecycle. So every fetched section is an active offering.
             "Class Status": "Active",
-            "Cap Enrl": 0,
-            "Tot Enrl": 0,
-            "Wait Tot": 0,
+            # Additive enrollment seam (m7): records enriched from the IR export
+            # carry Cap/Tot/Wait Enrl; absent them (the schedule API alone) the
+            # defaults stay 0, byte-identical to the pre-m7 behavior.
+            "Cap Enrl": r.get("Cap Enrl", 0),
+            "Tot Enrl": r.get("Tot Enrl", 0),
+            "Wait Tot": r.get("Wait Tot", 0),
         })
     return pd.DataFrame(rows, columns=SECTION_COLUMNS)
 
 
-def build_catalog_df(section_records, program):
+def build_catalog_df(section_records, program, prereqs=None):
     units = {}
     for i, r in enumerate(section_records):
         if "course" not in r:
@@ -83,7 +95,12 @@ def build_catalog_df(section_records, program):
                 f"{sorted(c)[:8]}. The Program Mapper shape may have changed."
             )
         units.setdefault(_norm(c["course_id"]), _to_units(c.get("units")))
-    rows = [{"Course ID": cid, "Units": u, "Prerequisites (structured)": ""}
+    # Additive prereq seam (m7): an optional course-id -> CNF-string map
+    # populates the structured-prereq column. prereqs=None (default) keeps the
+    # column all-blank, byte-identical to the pre-m7 behavior.
+    prereqs = prereqs or {}
+    rows = [{"Course ID": cid, "Units": u,
+             "Prerequisites (structured)": prereqs.get(cid, "")}
             for cid, u in sorted(units.items())]
     return pd.DataFrame(rows, columns=CATALOG_COLUMNS)
 
@@ -120,9 +137,14 @@ def reconcile_courses(section_records, program):
     return matched, unmatched
 
 
-def write_workbook(section_records, program, path):
+def write_workbook(section_records, program, path, *, prereqs=None):
+    # `prereqs` is the optional course-id -> CNF-string map threaded into the
+    # catalog sheet (m7). It is keyword-only and defaults to None so existing
+    # positional callers stay byte-identical. Ownership note: write_workbook is
+    # modified HERE (mapping.py owner); the build_live_workbook pipeline only
+    # PASSES this kwarg, it does not touch mapping.py.
     sections = build_sections_df(section_records)
-    catalog = build_catalog_df(section_records, program)
+    catalog = build_catalog_df(section_records, program, prereqs)
     programs = build_programs_df(program)
     with pd.ExcelWriter(path, engine="openpyxl") as xl:
         sections.to_excel(xl, sheet_name="sections", index=False)
