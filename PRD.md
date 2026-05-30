@@ -117,7 +117,9 @@ The college lacks tools to:
 
 ### 7.1 Privacy
 - N1. No student-level data processed
-- N2. No PII fields loaded; instructor identifiers stripped at ingestion
+- N2. No PII persisted. The live schedule source may return an instructor
+  field; it is dropped during mapping, before the workbook, engine results, or
+  the AI layer — it is never written to any output.
 - N3. No network calls except optional localhost Ollama
 - N4. No telemetry, analytics, or external logging
 

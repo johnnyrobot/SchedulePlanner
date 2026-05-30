@@ -63,13 +63,13 @@
                   "days": "M",
                   "times": "8:50 AM - 10:15 AM",
                   "room": "Mission-CMS 004",
-                  "instr": "Jeffrey Morse"
+                  "instr": "STAFF"
                 },
                 {
                   "days": "W",
                   "times": "8:50 AM - 10:15 AM",
                   "room": "Mission-Online Live",
-                  "instr": "Jeffrey Morse"
+                  "instr": "STAFF"
                 }
               ],
               "relsections": [
@@ -84,7 +84,7 @@
                       "days": "M",
                       "times": "10:30 AM - 1:40 PM",
                       "room": "Mission-CMS 110",
-                      "instr": "Jeffrey Morse"
+                      "instr": "STAFF"
                     }
                   ],
                   "relsections": [],
@@ -110,7 +110,7 @@
                   "days": "",
                   "times": "",
                   "room": "Mission-Online",
-                  "instr": "Elizabeth Jordan"
+                  "instr": "STAFF"
                 }
               ],
               "relsections": [
@@ -125,7 +125,7 @@
                       "days": "T",
                       "times": "8:50 AM - 12:00 PM",
                       "room": "Mission-CMS 110",
-                      "instr": "Elizabeth Jordan"
+                      "instr": "STAFF"
                     }
                   ],
                   "relsections": [],
@@ -151,13 +151,13 @@
                   "days": "W",
                   "times": "6:50 PM - 8:50 PM",
                   "room": "Mission-Online Live",
-                  "instr": "LAMC STAFF"
+                  "instr": "STAFF"
                 },
                 {
                   "days": "S",
                   "times": "8:30 AM - 9:40 AM",
                   "room": "Mission-CMS 105",
-                  "instr": "LAMC STAFF"
+                  "instr": "STAFF"
                 }
               ],
               "relsections": [
@@ -172,7 +172,7 @@
                       "days": "S",
                       "times": "9:50 AM - 1:00 PM",
                       "room": "Mission-CMS 110",
-                      "instr": "LAMC STAFF"
+                      "instr": "STAFF"
                     }
                   ],
                   "relsections": [],
@@ -206,7 +206,7 @@
                   "days": "M W",
                   "times": "8:30 AM - 9:55 AM",
                   "room": "Mission-CMS 105",
-                  "instr": "Brian Gadd"
+                  "instr": "STAFF"
                 }
               ],
               "relsections": [
@@ -221,7 +221,7 @@
                       "days": "M",
                       "times": "10:10 AM - 1:20 PM",
                       "room": "Mission-CMS 102",
-                      "instr": "Brian Gadd"
+                      "instr": "STAFF"
                     }
                   ],
                   "relsections": [],
@@ -247,7 +247,7 @@
                   "days": "T Th",
                   "times": "8:50 AM - 10:15 AM",
                   "room": "Mission-CMS 105",
-                  "instr": "Diane Livio"
+                  "instr": "STAFF"
                 }
               ],
               "relsections": [
@@ -262,7 +262,7 @@
                       "days": "T",
                       "times": "10:30 AM - 1:40 PM",
                       "room": "Mission-CMS 104",
-                      "instr": "Diane Livio"
+                      "instr": "STAFF"
                     }
                   ],
                   "relsections": [],
@@ -288,13 +288,13 @@
                   "days": "M",
                   "times": "12:15 PM - 1:40 PM",
                   "room": "Mission-CMS 104",
-                  "instr": "Diane Livio"
+                  "instr": "STAFF"
                 },
                 {
                   "days": "W",
                   "times": "12:15 PM - 1:40 PM",
                   "room": "Mission-Online Live",
-                  "instr": "Diane Livio"
+                  "instr": "STAFF"
                 }
               ],
               "relsections": [
@@ -309,7 +309,7 @@
                       "days": "M",
                       "times": "1:50 PM - 5:00 PM",
                       "room": "Mission-CMS 104",
-                      "instr": "Diane Livio"
+                      "instr": "STAFF"
                     }
                   ],
                   "relsections": [],
@@ -343,7 +343,7 @@
                   "days": "T Th",
                   "times": "8:50 AM - 10:15 AM",
                   "room": "Mission-CMS 002",
-                  "instr": "Brian Gadd"
+                  "instr": "STAFF"
                 }
               ],
               "relsections": [
@@ -358,7 +358,7 @@
                       "days": "T Th",
                       "times": "10:30 AM - 1:40 PM",
                       "room": "Mission-CMS 002",
-                      "instr": "Brian Gadd"
+                      "instr": "STAFF"
                     }
                   ],
                   "relsections": [],
@@ -382,7 +382,7 @@
                   "days": "T Th",
                   "times": "1:55 PM - 3:20 PM",
                   "room": "Mission-CMS 002",
-                  "instr": "LAMC STAFF"
+                  "instr": "STAFF"
                 }
               ],
               "relsections": [
@@ -397,7 +397,7 @@
                       "days": "T Th",
                       "times": "3:30 PM - 6:40 PM",
                       "room": "Mission-CMS 002",
-                      "instr": "LAMC STAFF"
+                      "instr": "STAFF"
                     }
                   ],
                   "relsections": [],
@@ -421,7 +421,7 @@
                   "days": "M W",
                   "times": "1:55 PM - 3:20 PM",
                   "room": "Mission-CMS 002",
-                  "instr": "Allea Cauilan"
+                  "instr": "STAFF"
                 }
               ],
               "relsections": [
@@ -436,7 +436,7 @@
                       "days": "M W",
                       "times": "3:30 PM - 6:40 PM",
                       "room": "Mission-CMS 002",
-                      "instr": "Allea Cauilan"
+                      "instr": "STAFF"
                     }
                   ],
                   "relsections": [],
@@ -468,7 +468,7 @@
                   "days": "M W",
                   "times": "8:50 AM - 10:15 AM",
                   "room": "Mission-CMS 106",
-                  "instr": "Elizabeth Jordan"
+                  "instr": "STAFF"
                 }
               ],
               "relsections": [
@@ -483,7 +483,7 @@
                       "days": "M W",
                       "times": "10:30 AM - 1:40 PM",
                       "room": "Mission-CMS 106",
-                      "instr": "Elizabeth Jordan"
+                      "instr": "STAFF"
                     }
                   ],
                   "relsections": [],
@@ -507,7 +507,7 @@
                   "days": "M W",
                   "times": "1:55 PM - 3:20 PM",
                   "room": "Mission-CMS 106",
-                  "instr": "LAMC STAFF"
+                  "instr": "STAFF"
                 }
               ],
               "relsections": [
@@ -522,7 +522,7 @@
                       "days": "M W",
                       "times": "3:30 PM - 6:40 PM",
                       "room": "Mission-CMS 106",
-                      "instr": "LAMC STAFF"
+                      "instr": "STAFF"
                     }
                   ],
                   "relsections": [],
@@ -560,7 +560,7 @@
                   "days": "T Th",
                   "times": "10:15 AM - 12:20 PM",
                   "room": "Mission-CMS 236",
-                  "instr": "Anjum Qureshi"
+                  "instr": "STAFF"
                 }
               ],
               "relsections": [
@@ -575,7 +575,7 @@
                       "days": "Th",
                       "times": "12:30 PM - 3:40 PM",
                       "room": "Mission-CMS 201",
-                      "instr": "Anjum Qureshi"
+                      "instr": "STAFF"
                     }
                   ],
                   "relsections": [],
@@ -599,7 +599,7 @@
                   "days": "T Th",
                   "times": "4:00 PM - 6:05 PM",
                   "room": "Mission-CMS 236",
-                  "instr": "LAMC STAFF"
+                  "instr": "STAFF"
                 }
               ],
               "relsections": [
@@ -614,7 +614,7 @@
                       "days": "Th",
                       "times": "6:15 PM - 9:25 PM",
                       "room": "Mission-CMS 201",
-                      "instr": "LAMC STAFF"
+                      "instr": "STAFF"
                     }
                   ],
                   "relsections": [],
@@ -638,7 +638,7 @@
                   "days": "M W",
                   "times": "7:45 AM - 9:50 AM",
                   "room": "Mission-CMS 028",
-                  "instr": "David Watts"
+                  "instr": "STAFF"
                 }
               ],
               "relsections": [
@@ -653,7 +653,7 @@
                       "days": "M",
                       "times": "10:00 AM - 1:10 PM",
                       "room": "Mission-CMS 201",
-                      "instr": "David Watts"
+                      "instr": "STAFF"
                     }
                   ],
                   "relsections": [],
@@ -685,7 +685,7 @@
                   "days": "T",
                   "times": "8:50 AM - 12:00 PM",
                   "room": "Mission-CMS 204",
-                  "instr": "Gayane Godjoian"
+                  "instr": "STAFF"
                 }
               ],
               "relsections": [
@@ -700,7 +700,7 @@
                       "days": "Th",
                       "times": "8:50 AM - 12:00 PM",
                       "room": "Mission-CMS 201",
-                      "instr": "Gayane Godjoian"
+                      "instr": "STAFF"
                     }
                   ],
                   "relsections": [],
@@ -724,7 +724,7 @@
                   "days": "T Th",
                   "times": "10:35 AM - 12:00 PM",
                   "room": "Mission-CMS 246",
-                  "instr": "LAMC STAFF"
+                  "instr": "STAFF"
                 }
               ],
               "relsections": [
@@ -739,7 +739,7 @@
                       "days": "T",
                       "times": "12:10 PM - 3:20 PM",
                       "room": "Mission-CMS 201",
-                      "instr": "LAMC STAFF"
+                      "instr": "STAFF"
                     }
                   ],
                   "relsections": [],
@@ -763,7 +763,7 @@
                   "days": "",
                   "times": "",
                   "room": "Mission-Online",
-                  "instr": "Robert Gellert"
+                  "instr": "STAFF"
                 }
               ],
               "relsections": [
@@ -778,7 +778,7 @@
                       "days": "W",
                       "times": "6:50 PM - 10:00 PM",
                       "room": "Mission-CMS 203",
-                      "instr": "Robert Gellert"
+                      "instr": "STAFF"
                     }
                   ],
                   "relsections": [],
@@ -810,7 +810,7 @@
                   "days": "",
                   "times": "",
                   "room": "Mission-Online",
-                  "instr": "Marcos Alvarez"
+                  "instr": "STAFF"
                 }
               ],
               "relsections": [
@@ -825,7 +825,7 @@
                       "days": "T Th",
                       "times": "6:50 PM - 10:00 PM",
                       "room": "Mission-CMS 210",
-                      "instr": "Marcos Alvarez"
+                      "instr": "STAFF"
                     }
                   ],
                   "relsections": [],
@@ -849,7 +849,7 @@
                   "days": "T Th",
                   "times": "8:55 AM - 10:20 AM",
                   "room": "Mission-CMS 028",
-                  "instr": "Michael Fenton"
+                  "instr": "STAFF"
                 }
               ],
               "relsections": [
@@ -864,7 +864,7 @@
                       "days": "T Th",
                       "times": "10:30 AM - 1:40 PM",
                       "room": "Mission-CMS 203",
-                      "instr": "Michael Fenton"
+                      "instr": "STAFF"
                     }
                   ],
                   "relsections": [],
@@ -896,7 +896,7 @@
                   "days": "M W",
                   "times": "8:55 AM - 10:20 AM",
                   "room": "Mission-CMS 236",
-                  "instr": "Michael Fenton"
+                  "instr": "STAFF"
                 }
               ],
               "relsections": [
@@ -911,7 +911,7 @@
                       "days": "M W",
                       "times": "10:30 AM - 1:40 PM",
                       "room": "Mission-CMS 206",
-                      "instr": "Michael Fenton"
+                      "instr": "STAFF"
                     }
                   ],
                   "relsections": [],
@@ -935,7 +935,7 @@
                   "days": "M W",
                   "times": "5:15 PM - 6:40 PM",
                   "room": "Mission-CMS 236",
-                  "instr": "LAMC STAFF"
+                  "instr": "STAFF"
                 }
               ],
               "relsections": [
@@ -950,7 +950,7 @@
                       "days": "M W",
                       "times": "6:50 PM - 10:00 PM",
                       "room": "Mission-CMS 210",
-                      "instr": "LAMC STAFF"
+                      "instr": "STAFF"
                     }
                   ],
                   "relsections": [],
@@ -988,7 +988,7 @@
                   "days": "",
                   "times": "",
                   "room": "Mission-Online",
-                  "instr": "Andzhela Keshishyan"
+                  "instr": "STAFF"
                 }
               ],
               "relsections": [
@@ -1003,7 +1003,7 @@
                       "days": "",
                       "times": "",
                       "room": "Mission-Online",
-                      "instr": "Andzhela Keshishyan"
+                      "instr": "STAFF"
                     }
                   ],
                   "relsections": [],
@@ -1037,7 +1037,7 @@
                   "days": "M W",
                   "times": "10:35 AM - 12:00 PM",
                   "room": "Mission-INST 1003",
-                  "instr": "Trevor Westmoreland"
+                  "instr": "STAFF"
                 }
               ],
               "relsections": [],
@@ -1056,7 +1056,7 @@
                   "days": "",
                   "times": "",
                   "room": "Mission-Online",
-                  "instr": "Carolyn Daly"
+                  "instr": "STAFF"
                 }
               ],
               "relsections": [],
@@ -1076,7 +1076,7 @@
                   "days": "M",
                   "times": "6:50 PM - 10:00 PM",
                   "room": "Mission-INST 1010",
-                  "instr": "John Orozco"
+                  "instr": "STAFF"
                 }
               ],
               "relsections": [],
@@ -1103,7 +1103,7 @@
                   "days": "",
                   "times": "",
                   "room": "Mission-Online",
-                  "instr": "Karen Crozer"
+                  "instr": "STAFF"
                 }
               ],
               "relsections": [],
@@ -1130,7 +1130,7 @@
                   "days": "",
                   "times": "",
                   "room": "Mission-Online",
-                  "instr": "Andzhela Keshishyan"
+                  "instr": "STAFF"
                 }
               ],
               "relsections": [],
@@ -1163,13 +1163,13 @@
                   "days": "T",
                   "times": "8:50 AM - 11:00 AM",
                   "room": "Mission-CMS 128",
-                  "instr": "Emil Sargsyan"
+                  "instr": "STAFF"
                 },
                 {
                   "days": "Th",
                   "times": "8:50 AM - 9:40 AM",
                   "room": "Mission-CMS 128",
-                  "instr": "Emil Sargsyan"
+                  "instr": "STAFF"
                 }
               ],
               "relsections": [
@@ -1184,7 +1184,7 @@
                       "days": "Th",
                       "times": "9:50 AM - 10:40 AM",
                       "room": "Mission-CMS 128",
-                      "instr": "Emil Sargsyan"
+                      "instr": "STAFF"
                     }
                   ],
                   "relsections": [],
@@ -1218,7 +1218,7 @@
                   "days": "",
                   "times": "",
                   "room": "Mission-Online",
-                  "instr": "Ingrid Barbullushi"
+                  "instr": "STAFF"
                 }
               ],
               "relsections": [
@@ -1233,7 +1233,7 @@
                       "days": "",
                       "times": "",
                       "room": "Mission-Online",
-                      "instr": "Ingrid Barbullushi"
+                      "instr": "STAFF"
                     }
                   ],
                   "relsections": [],
@@ -1259,7 +1259,7 @@
                   "days": "",
                   "times": "",
                   "room": "Mission-Online",
-                  "instr": "Karineh Abed"
+                  "instr": "STAFF"
                 }
               ],
               "relsections": [
@@ -1274,7 +1274,7 @@
                       "days": "",
                       "times": "",
                       "room": "Mission-Online",
-                      "instr": "Karineh Abed"
+                      "instr": "STAFF"
                     }
                   ],
                   "relsections": [],
@@ -1300,7 +1300,7 @@
                   "days": "M W",
                   "times": "9:00 AM - 10:25 AM",
                   "room": "Mission-CMS 020",
-                  "instr": "Melida Garcia"
+                  "instr": "STAFF"
                 }
               ],
               "relsections": [
@@ -1315,7 +1315,7 @@
                       "days": "M",
                       "times": "10:35 AM - 11:25 AM",
                       "room": "Mission-CMS 020",
-                      "instr": "Melida Garcia"
+                      "instr": "STAFF"
                     }
                   ],
                   "relsections": [],
@@ -1349,7 +1349,7 @@
                   "days": "",
                   "times": "",
                   "room": "Mission-Online",
-                  "instr": "Ryan Yamada"
+                  "instr": "STAFF"
                 }
               ],
               "relsections": [
@@ -1364,7 +1364,7 @@
                       "days": "",
                       "times": "",
                       "room": "Mission-Online",
-                      "instr": "Ryan Yamada"
+                      "instr": "STAFF"
                     }
                   ],
                   "relsections": [],
@@ -1388,7 +1388,7 @@
                   "days": "",
                   "times": "",
                   "room": "Mission-Online",
-                  "instr": "Jeffrey Burke"
+                  "instr": "STAFF"
                 }
               ],
               "relsections": [
@@ -1403,7 +1403,7 @@
                       "days": "",
                       "times": "",
                       "room": "Mission-Online",
-                      "instr": "Jeffrey Burke"
+                      "instr": "STAFF"
                     }
                   ],
                   "relsections": [],
@@ -1423,7 +1423,7 @@
                   "days": "",
                   "times": "",
                   "room": "Mission-Online",
-                  "instr": "Ingrid Barbullushi"
+                  "instr": "STAFF"
                 }
               ],
               "relsections": [
@@ -1438,7 +1438,7 @@
                       "days": "",
                       "times": "",
                       "room": "Mission-Online",
-                      "instr": "Ingrid Barbullushi"
+                      "instr": "STAFF"
                     }
                   ],
                   "relsections": [],
@@ -1466,7 +1466,7 @@
                   "days": "S",
                   "times": "8:00 AM - 11:10 AM",
                   "room": "Mission-CMS 021",
-                  "instr": "Jose Avendano"
+                  "instr": "STAFF"
                 }
               ],
               "relsections": [
@@ -1481,7 +1481,7 @@
                       "days": "S",
                       "times": "11:20 AM - 12:10 PM",
                       "room": "Mission-CMS 021",
-                      "instr": "Jose Avendano"
+                      "instr": "STAFF"
                     }
                   ],
                   "relsections": [],
@@ -1507,7 +1507,7 @@
                   "days": "",
                   "times": "",
                   "room": "Mission-Online",
-                  "instr": "Melida Garcia"
+                  "instr": "STAFF"
                 }
               ],
               "relsections": [
@@ -1522,7 +1522,7 @@
                       "days": "",
                       "times": "",
                       "room": "Mission-Online",
-                      "instr": "Melida Garcia"
+                      "instr": "STAFF"
                     }
                   ],
                   "relsections": [],
@@ -1562,7 +1562,7 @@
                   "days": "",
                   "times": "",
                   "room": "Mission-Online",
-                  "instr": "Allea Cauilan"
+                  "instr": "STAFF"
                 }
               ],
               "relsections": [
@@ -1577,7 +1577,7 @@
                       "days": "M",
                       "times": "8:50 AM - 12:00 PM",
                       "room": "Mission-CMS 002",
-                      "instr": "Allea Cauilan"
+                      "instr": "STAFF"
                     }
                   ],
                   "relsections": [],
@@ -1601,13 +1601,13 @@
                   "days": "Th",
                   "times": "5:15 PM - 6:40 PM",
                   "room": "Mission-Online Live",
-                  "instr": "Angela Echeverri"
+                  "instr": "STAFF"
                 },
                 {
                   "days": "T",
                   "times": "5:15 PM - 6:40 PM",
                   "room": "Mission-CMS 004",
-                  "instr": "Angela Echeverri"
+                  "instr": "STAFF"
                 }
               ],
               "relsections": [
@@ -1622,7 +1622,7 @@
                       "days": "T",
                       "times": "6:50 PM - 10:00 PM",
                       "room": "Mission-CMS 002",
-                      "instr": "Angela Echeverri"
+                      "instr": "STAFF"
                     }
                   ],
                   "relsections": [],
@@ -1648,7 +1648,7 @@
                   "days": "",
                   "times": "",
                   "room": "Mission-Online",
-                  "instr": "Patricia Medina"
+                  "instr": "STAFF"
                 }
               ],
               "relsections": [
@@ -1663,7 +1663,7 @@
                       "days": "M",
                       "times": "6:50 PM - 10:00 PM",
                       "room": "Mission-CMS 002",
-                      "instr": "Patricia Medina"
+                      "instr": "STAFF"
                     }
                   ],
                   "relsections": [],
@@ -1701,7 +1701,7 @@
                   "days": "W",
                   "times": "6:50 PM - 10:00 PM",
                   "room": "Mission-CMS 006",
-                  "instr": "Richard Rains"
+                  "instr": "STAFF"
                 }
               ],
               "relsections": [
@@ -1716,7 +1716,7 @@
                       "days": "M",
                       "times": "6:50 PM - 10:00 PM",
                       "room": "Mission-CMS 006",
-                      "instr": "Richard Rains"
+                      "instr": "STAFF"
                     }
                   ],
                   "relsections": [],
@@ -1748,7 +1748,7 @@
                   "days": "M W",
                   "times": "11:30 AM - 1:35 PM",
                   "room": "Mission-CMS 246",
-                  "instr": "Rodolfo Santana"
+                  "instr": "STAFF"
                 }
               ],
               "relsections": [
@@ -1763,7 +1763,7 @@
                       "days": "F",
                       "times": "11:00 AM - 2:10 PM",
                       "room": "Mission-CMS 006",
-                      "instr": "Rodolfo Santana"
+                      "instr": "STAFF"
                     }
                   ],
                   "relsections": [],
@@ -1797,7 +1797,7 @@
                   "days": "M W F",
                   "times": "8:00 AM - 10:50 AM",
                   "room": "Mission-CMS 246",
-                  "instr": "Rodolfo Santana"
+                  "instr": "STAFF"
                 }
               ],
               "relsections": [
@@ -1812,7 +1812,7 @@
                       "days": "T Th",
                       "times": "8:00 AM - 11:10 AM",
                       "room": "Mission-CMS 006",
-                      "instr": "Rodolfo Santana"
+                      "instr": "STAFF"
                     }
                   ],
                   "relsections": [],
@@ -1846,7 +1846,7 @@
                   "days": "M W F",
                   "times": "7:55 AM - 11:00 AM",
                   "room": "Mission-CMS 246",
-                  "instr": "Rodolfo Santana"
+                  "instr": "STAFF"
                 }
               ],
               "relsections": [
@@ -1861,7 +1861,7 @@
                       "days": "T Th",
                       "times": "7:55 AM - 11:15 AM",
                       "room": "Mission-CMS 006",
-                      "instr": "Rodolfo Santana"
+                      "instr": "STAFF"
                     }
                   ],
                   "relsections": [],
