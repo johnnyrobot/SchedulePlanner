@@ -1,4 +1,6 @@
 import pandas as pd
+
+import engine
 from sources import mapping
 
 SECTIONS = [
@@ -63,3 +65,77 @@ def test_write_workbook_has_three_named_sheets(tmp_path):
     mapping.write_workbook(SECTIONS, PROGRAM, str(out))
     xl = pd.ExcelFile(out)
     assert set(xl.sheet_names) == {"sections", "catalog", "programs"}
+
+
+# --- m7-s4: additive enrollment + prereq seams -------------------------------
+
+# Sections carrying IR-derived enrollment counts (the build_sections_df seam).
+SECTIONS_WITH_ENRL = [
+    {"term": 2268, "course": "CS 101", "units": "3.00",
+     "Cap Enrl": 40, "Tot Enrl": 35, "Wait Tot": 12},
+    {"term": 2264, "course": "MATH 245", "units": "5.00",
+     "Cap Enrl": 30, "Tot Enrl": 30, "Wait Tot": 18},
+]
+
+
+def test_build_sections_df_emits_enrollment_when_present():
+    # When records carry Cap/Tot/Wait Enrl, build_sections_df passes them through
+    # (the mapping.py:63-65 r.get seam) instead of hard-coding 0.
+    df = mapping.build_sections_df(SECTIONS_WITH_ENRL)
+    by_class = {row["CLASS"]: row for _, row in df.iterrows()}
+    assert by_class["CS 101"]["Cap Enrl"] == 40
+    assert by_class["CS 101"]["Tot Enrl"] == 35
+    assert by_class["CS 101"]["Wait Tot"] == 12
+    assert by_class["MATH 245"]["Wait Tot"] == 18
+
+
+def test_build_sections_df_defaults_zero_without_enrollment():
+    # Default (no Cap/Tot/Wait keys) stays byte-identical to today's behavior: 0.
+    df = mapping.build_sections_df(SECTIONS)
+    assert (df[["Cap Enrl", "Tot Enrl", "Wait Tot"]] == 0).all().all()
+
+
+def test_build_catalog_df_threads_prereqs_map():
+    # The prereqs map populates the structured-prereq column for matching course
+    # ids; non-listed courses stay blank.
+    df = mapping.build_catalog_df(SECTIONS, PROGRAM,
+                                  prereqs={"CS 101": "(MATH 245)"})
+    by_cid = dict(zip(df["Course ID"], df["Prerequisites (structured)"]))
+    assert by_cid["CS 101"] == "(MATH 245)"
+    assert by_cid["MATH 245"] == ""
+    assert by_cid["PHYS 101"] == ""
+
+
+def test_build_catalog_df_prereqs_none_keeps_all_blank():
+    # Default prereqs=None reproduces today's all-blank column byte-identically.
+    df_none = mapping.build_catalog_df(SECTIONS, PROGRAM)
+    df_explicit_none = mapping.build_catalog_df(SECTIONS, PROGRAM, prereqs=None)
+    assert (df_none["Prerequisites (structured)"] == "").all()
+    assert df_none.equals(df_explicit_none)
+
+
+def test_write_workbook_threads_prereqs_into_catalog(tmp_path):
+    out = tmp_path / "wb_prereq.xlsx"
+    mapping.write_workbook(SECTIONS, PROGRAM, str(out),
+                           prereqs={"CS 101": "(MATH 245)"})
+    catalog = pd.read_excel(out, sheet_name="catalog").fillna("")
+    by_cid = dict(zip(catalog["Course ID"],
+                      catalog["Prerequisites (structured)"]))
+    assert by_cid["CS 101"] == "(MATH 245)"
+    assert by_cid["MATH 245"] == ""
+    # And the threaded prereq round-trips through the engine's CNF parser.
+    assert engine.parse_prereq(by_cid["CS 101"]) == [["MATH 245"]]
+
+
+def test_write_workbook_default_prereqs_keeps_catalog_blank(tmp_path):
+    out = tmp_path / "wb_default.xlsx"
+    mapping.write_workbook(SECTIONS, PROGRAM, str(out))
+    catalog = pd.read_excel(out, sheet_name="catalog").fillna("")
+    assert (catalog["Prerequisites (structured)"] == "").all()
+
+
+def test_column_constants_match_engine_required_columns():
+    # Drift guard: the three column-constant lists must equal engine's contract.
+    assert mapping.SECTION_COLUMNS == engine.REQUIRED_COLUMNS["sections"]
+    assert mapping.CATALOG_COLUMNS == engine.REQUIRED_COLUMNS["catalog"]
+    assert mapping.PROGRAM_COLUMNS == engine.REQUIRED_COLUMNS["programs"]
