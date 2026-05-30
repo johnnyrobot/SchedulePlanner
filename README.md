@@ -146,9 +146,10 @@ setup required for core functionality. The AI layer talks to Ollama over
 HTTP (no extra Python dependency) and the schedule itself is always produced
 by the deterministic solver, never the model.
 
-The model is `llm_assist.MODEL`, set to the lightweight published edge tag
-`gemma4:e2b` (~1-2 GB) — the on-device model this tool is built around.
-Install Ollama and pull it if you want the AI layer:
+The model is `llm_assist.MODEL`, set to the published edge tag `gemma4:e2b` —
+the on-device model this tool is built around. Note that despite the "e2b"
+label the first-run download is **~7 GB**, so the initial pull is sizable and
+slow. Install Ollama and pull it if you want the AI layer:
 
 ```bash
 ollama pull gemma4:e2b

@@ -112,6 +112,9 @@ class Api:
             parser = llm_assist.make_prereq_parser()      # None if no Gemma 4
             results = engine.run(path, llm=parser)
             self._last_results = results
+            # "available", not "definitely used": engine only calls the parser
+            # for UNstructured prereq text, so structured prereqs are regex-
+            # parsed even when this is True. The UI label reflects availability.
             results["ai_used"] = parser is not None
             return results
         except Exception as e:
