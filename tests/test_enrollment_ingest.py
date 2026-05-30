@@ -75,6 +75,44 @@ def test_load_enrollment_missing_column_raises_naming_the_file(tmp_path):
     assert "Wait Tot" in str(exc.value)
 
 
+def test_load_enrollment_non_numeric_cell_raises_naming_the_file(tmp_path):
+    import pandas as pd
+    # A realistic dirty IR export: a 'Total' subtotal FOOTER row whose Class Nbr
+    # is the string "Total" (non-numeric). The per-row int() coercion must NOT
+    # leak a raw "ValueError: invalid literal for int()"; it must raise a
+    # SourceDataError naming the file (mirroring the missing-column contract).
+    bad = tmp_path / "footer_enrollment.xlsx"
+    df = pd.DataFrame([
+        {"Term": 2248, "Class Nbr": 20001, "Cap Enrl": 40, "Tot Enrl": 14, "Wait Tot": 0},
+        # subtotal footer row: non-numeric Class Nbr, blank counts
+        {"Term": 2248, "Class Nbr": "Total", "Cap Enrl": "", "Tot Enrl": "", "Wait Tot": ""},
+    ])
+    with pd.ExcelWriter(bad, engine="openpyxl") as xl:
+        df.to_excel(xl, sheet_name="sections", index=False)
+    with pytest.raises(SourceDataError) as exc:
+        load_enrollment(str(bad))
+    # names the offending file so the operator can find it
+    assert str(bad) in str(exc.value) or "footer_enrollment.xlsx" in str(exc.value)
+    # and does NOT surface as a raw ValueError
+    assert "invalid literal" not in str(exc.value)
+
+
+def test_load_enrollment_blank_class_nbr_footer_raises(tmp_path):
+    import pandas as pd
+    # A blank/TBD Class Nbr (pandas reads the empty cell as NaN -> float; int(nan)
+    # raises ValueError) must also become a SourceDataError, not a raw traceback.
+    bad = tmp_path / "blank_classnbr.xlsx"
+    df = pd.DataFrame([
+        {"Term": 2248, "Class Nbr": 20001, "Cap Enrl": 40, "Tot Enrl": 14, "Wait Tot": 0},
+        {"Term": 2248, "Class Nbr": None, "Cap Enrl": 1, "Tot Enrl": 1, "Wait Tot": 1},
+    ])
+    with pd.ExcelWriter(bad, engine="openpyxl") as xl:
+        df.to_excel(xl, sheet_name="sections", index=False)
+    with pytest.raises(SourceDataError) as exc:
+        load_enrollment(str(bad))
+    assert str(bad) in str(exc.value) or "blank_classnbr.xlsx" in str(exc.value)
+
+
 # --- CRN-suffix-strip join (the load-bearing test) -------------------------
 
 def test_decorated_schedule_crn_joins_after_suffix_strip():
@@ -172,6 +210,14 @@ def test_blank_class_nbr_is_not_falsely_matched():
 def test_duplicate_term_crn_writes_once_per_matching_record():
     # Two live records sharing the same (term, CRN) each get the counts written
     # exactly once per record (enrich_sections does not aggregate).
+    #
+    # DISTINCT-CRN CAVEAT: this models two records sharing ONE bare CRN (17818).
+    # engine.analyze SUMS Cap/Tot/Wait per row, so writing the full counts to
+    # BOTH would DOUBLE-COUNT this course if real linked LEC/LAB sections ever
+    # collapsed onto a single parent class_nbr. The committed fixtures never do
+    # this (each relsection emits a distinct class_nbr; all 81 fixture CRNs are
+    # unique), so this is harmless here — but if that invariant ever breaks,
+    # dedup must happen UPSTREAM of enrich_sections. See enrich_sections docstring.
     enrollment = {(2248, "17818"): {"Cap Enrl": 30, "Tot Enrl": 25, "Wait Tot": 5}}
     records = [
         {"term": 2248, "course": "BIOLOGY 003", "class_nbr": "17818 (LEC)"},

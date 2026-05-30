@@ -1,9 +1,27 @@
 r"""IR PeopleSoft enrollment ingest + CRN-suffix-stripping join (pure, offline).
 
-This module fills the engine's enrollment seam — `sections['Cap Enrl' /
-'Tot Enrl' / 'Wait Tot']`, hard-coded `0` at `mapping.py:63-65` — from an IR
-PeopleSoft enrollment export. It is a PURE file read (no network) plus a pure,
-idempotent, non-aliasing join onto live section records.
+STATUS: UNWIRED SCAFFOLD — NOT a working seam fill (no overclaiming).
+------------------------------------------------------------------------------
+This module reads an IR PeopleSoft enrollment export and joins its counts onto
+live section records. It is a PURE file read (no network) plus a pure,
+idempotent, non-aliasing join. BUT it is NOT wired into any pipeline yet:
+
+  * Neither `load_enrollment` nor `enrich_sections` is called by
+    `build_live_workbook.py` or `app.py` (grep confirms: only defined here and
+    exercised by `tests/test_enrollment_ingest.py`). There is NO `--enrollment`
+    CLI flag.
+  * The only sections-DataFrame builder, `mapping.build_sections_df`, currently
+    HARD-CODES `Cap Enrl` / `Tot Enrl` / `Wait Tot` = 0 (mapping.py:63-65) and
+    does NOT read the enrichment keys this module writes. So even if a caller
+    ran `enrich_sections`, `build_sections_df` would DROP the enriched counts
+    and the engine would still see 0.
+
+In other words: the engine's enrollment seam is NOT filled by this module today.
+To actually fill it, a future slice must (a) add a `--enrollment` flag that runs
+`enrich_sections` over the fetched sections, AND (b) teach
+`build_sections_df` to read `r.get('Cap Enrl', 0)` / `'Tot Enrl'` / `'Wait Tot'`
+instead of writing 0 — only then do these counts reach `engine.analyze`. Until
+both land, treat this file as a validated-but-inert scaffold, not a seam fill.
 
 Expected real IR PeopleSoft export schema (the `sections` sheet of an `.xlsx`)
 ------------------------------------------------------------------------------
@@ -61,11 +79,14 @@ validated end-to-end against the real schedule source. No committed schedule +
 enrollment fixture pair shares a `(term, CRN)`: the committed schedule fixture is
 term 2268, the committed enrollment fixture is terms {2248, 2252} — ZERO term
 overlap — and the CRN sets do not intersect even after stripping the suffix.
-A real `--enrollment` run against today's live/2268 schedule therefore matches
-ZERO sections and the enrollment detectors stay INERT (Cap/Tot/Wait = 0). The
-join is exercised only WITHIN one self-consistent set of records (the enrollment
+Even if a future `--enrollment` flag existed (it does NOT yet — see STATUS
+above), running it against today's live/2268 schedule would match ZERO sections,
+so the enrollment detectors would stay INERT (Cap/Tot/Wait = 0). The join is
+exercised only WITHIN one self-consistent set of records (the enrollment
 fixture's own terms, or a hand-keyed inline map) — never across the live
-schedule↔IR boundary. This caveat is repeated in build_live_workbook's report.
+schedule↔IR boundary. NOTE: `build_live_workbook`'s report does NOT yet mention
+this join; its INERT_DETECTORS notes still point at "PRD M4" generically and are
+not aware of this scaffold (consistent with the unwired status above).
 """
 from __future__ import annotations
 
@@ -115,15 +136,32 @@ def load_enrollment(path):
     enrollment = {}
     # to_dict('records') preserves the original column names (unlike itertuples,
     # which mangles names containing spaces like 'Class Nbr').
-    for rd in df.to_dict("records"):
+    for i, rd in enumerate(df.to_dict("records")):
         # Term is stored as a string in the fixture but pandas coerces it to an
         # int64; int() handles both. Class Nbr is a bare int -> canonical CRN.
-        key = (int(rd["Term"]), str(int(rd["Class Nbr"])))
-        enrollment[key] = {
-            "Cap Enrl": int(rd["Cap Enrl"]),
-            "Tot Enrl": int(rd["Tot Enrl"]),
-            "Wait Tot": int(rd["Wait Tot"]),
-        }
+        # A dirty real export (a 'Total'/subtotal footer row, a blank/TBD
+        # Class Nbr, or any non-numeric cell) makes int() raise a raw ValueError;
+        # catch it and re-raise SourceDataError naming the file, row, and the
+        # offending column/value (matching mapping.build_sections_df's pattern)
+        # so a raw traceback never escapes — per the sources/http.py contract.
+        try:
+            key = (int(rd["Term"]), str(int(rd["Class Nbr"])))
+            counts = {
+                "Cap Enrl": int(rd["Cap Enrl"]),
+                "Tot Enrl": int(rd["Tot Enrl"]),
+                "Wait Tot": int(rd["Wait Tot"]),
+            }
+        except (ValueError, TypeError) as exc:
+            # Surface which column/value tripped the coercion so the operator can
+            # find the bad row (e.g. a subtotal footer) in the real export.
+            bad = {c: rd.get(c) for c in REQUIRED_COLUMNS}
+            raise SourceDataError(
+                f"{SOURCE}: enrollment workbook {path!r} row #{i} has a "
+                f"non-numeric value in a required column ({bad}); expected "
+                "integers for Term/Class Nbr/Cap Enrl/Tot Enrl/Wait Tot. "
+                "Is there a subtotal/footer row or a blank/TBD cell?"
+            ) from exc
+        enrollment[key] = counts
     return enrollment
 
 
@@ -140,6 +178,17 @@ def enrich_sections(section_records, enrollment):
     SKIPPED (never keyed on '') so blank-CRN relsections are not falsely matched.
     The counts are written once per matching record (no aggregation), matching
     engine.analyze's per-row sum.
+
+    DISTINCT-CRN ASSUMPTION (latent double-count caveat): this per-record write
+    assumes each live record carries a DISTINCT CRN. engine.analyze SUMS Cap/Tot/
+    Wait per row (engine.py:138-143), so if two live records ever shared a single
+    parent CRN (e.g. linked LEC/LAB sections collapsed onto one class_nbr), each
+    would receive the FULL counts and analyze would DOUBLE-COUNT that course's
+    capacity/enrollment. The committed fixtures are safe (schedule.fetch_sections
+    emits a distinct class_nbr per relsection — '17818 (LEC)' vs '17818 (LAB)'
+    strip to the same CRN only in the hand-keyed test, not in real fixture data,
+    where all 81 CRNs are unique). If linked sections ever share a parent CRN,
+    dedup must happen UPSTREAM before this join.
     """
     out = []
     for record in section_records:
