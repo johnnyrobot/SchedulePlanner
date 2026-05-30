@@ -18,10 +18,12 @@ import subprocess
 import urllib.request
 
 OLLAMA_URL = "http://localhost:11434"
-# Lightweight edge default (real published tag, ollama.com/library/gemma4):
-# gemma4:e2b is the ~1-2 GB model the PRD intends for on-device use. Heavier
-# swaps gemma4:e4b / gemma4:31b are valid where more RAM is available — set
-# MODEL accordingly and pull the matching tag. Matching is tag-exact, so an
+# Default model (real published tag, ollama.com/library/gemma4): gemma4:e2b.
+# NOTE: despite the "e2b" (effective-2B) label, the first-run pull is ~7 GB on
+# disk — a large, slow download, NOT the couple-hundred-MB grab the name
+# implies. Budget for that on the one-click first-run download (PRD F20).
+# Heavier swaps gemma4:e4b / gemma4:31b are valid where more RAM is available —
+# set MODEL accordingly and pull the matching tag. Matching is tag-exact, so an
 # un-pulled tag reports absent and the engine uses the templated fallback.
 MODEL = "gemma4:e2b"
 
