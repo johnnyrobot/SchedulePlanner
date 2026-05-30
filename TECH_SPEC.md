@@ -315,8 +315,9 @@ MODEL = "gemma4:e2b"   # or gemma4:e4b for more capable parsing
 
 ## 10. Security and Privacy
 
-- **No PII processed.** Instructor fields are excluded at ingestion. Student
-  data is out of scope by design.
+- **No PII persisted.** The live schedule source may return an instructor
+  field; it is dropped during mapping and never written to the workbook,
+  results, or AI layer. Student data is out of scope by design.
 - **No external network.** The only network call is to `localhost:11434` for
   Ollama (optional).
 - **No telemetry.** No analytics, no error reporting.

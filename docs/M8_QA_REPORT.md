@@ -320,7 +320,7 @@ real external dependency is manual.
 | NFR | Requirement | Status | Where |
 |---|---|---|---|
 | N1 | No student-level data | H | `tests/test_privacy_invariants.py` (A4) |
-| N2 | No PII; instructor IDs stripped | H | `tests/test_privacy_invariants.py` (A4) |
+| N2 | No PII persisted; instructor fields dropped at mapping | H | `tests/test_privacy_invariants.py` (A4) |
 | N3 | No network except optional localhost Ollama | H | network-sabotage test (A4) + engine import guards |
 | N4 | No telemetry/analytics/external logging | H | network-sabotage + no-network-libs guards (A4) |
 | N5 | Full analysis < 30 s (~1,000 sections × 8 terms) | H | `test_n5_full_analysis_under_budget` (~0.19 s observed) |

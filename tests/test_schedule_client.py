@@ -13,12 +13,12 @@ LISTING_2268 = {
                 "classNbr": "13955 (LEC)", "seats": "35", "woi": "16",
                 "dates": "08/31/26 - 12/20/26", "status": "Open",
                 "meetings": [{"days": "T", "times": "8:50 AM", "room": "CMS 128",
-                              "instr": "E. Sargsyan"}],
+                              "instr": "STAFF"}],
                 "relsections": [{
                     "classNbr": "13956 (LAB)", "seats": "35", "woi": "16",
                     "status": "Open",
                     "meetings": [{"days": "Th", "times": "9:50 AM", "room": "CMS 128",
-                                  "instr": "E. Sargsyan"}],
+                                  "instr": "STAFF"}],
                     "relsections": [], "classType": ["HYFLEX", "OER"]}],
                 "classType": ["HYFLEX", "OER"]}]}]}],
 }
