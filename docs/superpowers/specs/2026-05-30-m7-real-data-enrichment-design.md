@@ -4,6 +4,7 @@
 **Status:** Approved (design); pending implementation plan
 **Branch:** `feat/m7-real-data`
 **Related:** PRD.md (M4 enrollment, eLumen), engine.py, `docs/superpowers/specs/2026-05-28-live-sources-to-workbook-design.md`
+**Follow-up tracking:** [#17 — real eLumen + IR PeopleSoft schema capture for live-data enrichment](https://github.com/johnnyrobot/edgesched/issues/17) — the remaining real-data slice (validate these seams against real source shapes). This design ships **fixture-only** until those inputs land.
 
 ---
 
