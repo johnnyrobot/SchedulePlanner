@@ -2,7 +2,8 @@
 
 PRD §7.1:
   * N1 — No student-level data processed.
-  * N2 — No PII fields loaded; instructor identifiers stripped at ingestion.
+  * N2 — No PII persisted; an instructor field may be loaded transiently by the
+        live schedule source but is dropped at mapping (before workbook/results/AI).
   * N3 — No network calls except optional localhost Ollama.
   * N4 — No telemetry, analytics, or external logging.
 
@@ -33,6 +34,7 @@ import pytest
 
 import build_live_workbook
 import engine
+from sources import mapping, schedule
 
 # Column names that must NEVER be loaded/emitted (instructor + student PII).
 PII_COLUMNS = ["Instructor", "ID", "Name", "Email"]
@@ -126,6 +128,51 @@ def test_bundled_demo_results_carry_no_pii_tokens():
     blob = json.dumps(results)
     for col in PII_COLUMNS:
         assert col not in blob, f"{col!r} present in bundled demo results (PRD N2)"
+
+
+# --------------------------------------------------------------------------- #
+# N2 — instructor in the LIVE-SOURCE key shape is dropped at mapping.          #
+# --------------------------------------------------------------------------- #
+def test_live_source_instructor_dropped_through_mapping(make_client, tmp_path):
+    """Real-key regression (N2): an instructor name arriving in the actual
+    live-source shape (raw API ``instr`` -> schedule record ``instructor``) is
+    loaded transiently by the schedule client, then DROPPED at the mapping stage.
+    It must never reach the sections/catalog frames, the written workbook, or the
+    engine results. Complements the tests above, which plant the capitalized
+    ``Instructor`` workbook column rather than the live-source key shape."""
+    SENTINEL = "Zzyzx, Q. PRIVACY-SENTINEL"
+    listing = {
+        "campuscode": "LAMC", "termcode": "2268",
+        "subjects": [{"code": "CS", "courses": [{
+            "subject": "CS", "catalogNbr": "101", "descr": "Intro", "units": "3.00",
+            "sections": [{"classNbr": "10001 (LEC)", "status": "Open",
+                "meetings": [{"days": "M", "times": "9 AM", "room": "X",
+                              "instr": SENTINEL}],
+                "relsections": [], "classType": ["INPER"]}]}]}],
+    }
+    records = schedule.fetch_sections(
+        "LAMC", [2268], client=make_client({"/listing/LAMC/2268": listing}))
+
+    # Honest about N2: the schedule record DOES carry the instructor under the
+    # lowercase live-source key (this is why N2 says "dropped at mapping", not
+    # "never loaded").
+    assert any(r.get("instructor") == SENTINEL for r in records)
+
+    # Mapping drops it: absent from both frames; the live keys are not columns.
+    program = {"code": "P", "title": "P",
+               "courses": [{"course_id": "CS 101", "recommended_semester": 1}]}
+    sections = mapping.build_sections_df(records)
+    catalog = mapping.build_catalog_df(records, program)
+    for df in (sections, catalog):
+        assert SENTINEL not in df.to_csv(index=False)
+        assert "instructor" not in df.columns and "instr" not in df.columns
+
+    # The persisted workbook and the engine results carry no trace of it.
+    wb = tmp_path / "live.xlsx"
+    mapping.write_workbook(records, program, str(wb))
+    sheets = pd.read_excel(wb, sheet_name=None)
+    assert SENTINEL not in "".join(df.to_csv(index=False) for df in sheets.values())
+    assert SENTINEL not in json.dumps(engine.run(str(wb)))
 
 
 # --------------------------------------------------------------------------- #
