@@ -14,7 +14,12 @@ import pytest
 
 import engine
 from sources.http import SourceDataError
-from sources.prereq_cnf import dnf_to_cnf, to_catalog_string, DEFAULT_MAX_CLAUSES
+from sources.prereq_cnf import (
+    dnf_to_cnf,
+    to_catalog_string,
+    DEFAULT_MAX_CLAUSES,
+    BRANCH_CAP,
+)
 
 
 def _groups(s):  # parse with the REAL engine parser
@@ -169,6 +174,60 @@ def test_just_under_budget_stays_exact():
     # 2x2 predicts 4 clauses; budget 4 -> exact (boundary)
     r = dnf_to_cnf([["A", "B"], ["C", "D"]], max_clauses=4)
     assert r.exact is True
+
+
+def test_branch_cap_trigger_names_branch_cap_not_product():
+    # The SECONDARY guard (len(branches) > BRANCH_CAP) must fire INDEPENDENTLY of
+    # the product and report the ACCURATE trigger. Build 13 branches (> cap 12)
+    # whose product is small (2 <= default budget 64): 12 single-literal branches
+    # plus one 2-literal branch. The old code reported "product 2 > budget 64"
+    # (factually false); the reason must now name the branch-cap trigger and the
+    # product clause-budget message must NOT appear.
+    dnf = [[f"S{i}"] for i in range(BRANCH_CAP)] + [["X", "Y"]]
+    assert len(dnf) == BRANCH_CAP + 1
+    r = dnf_to_cnf(dnf)                       # default budget 64; product is only 2
+    assert r.exact is False
+    assert "branch_cap_exceeded" in r.fallback_reason
+    assert "clause_budget_exceeded" not in r.fallback_reason
+    assert "product 2 > budget" not in r.fallback_reason   # no false product claim
+    assert f"{BRANCH_CAP + 1} branches > cap {BRANCH_CAP}" in r.fallback_reason
+
+
+def test_pure_or_wider_than_branch_cap_stays_exact_single_clause():
+    # A pure-OR DNF (every branch a single literal) has product 1 and IS the
+    # union exactly, so even when it is wider than BRANCH_CAP it must be emitted
+    # as ONE EXACT clause — never routed through the flagged fallback (that was an
+    # avoidable over-conservative exact=False loss on a representable input).
+    dnf = [[f"C{i}"] for i in range(BRANCH_CAP + 1)]   # 13 single-literal OR-branches
+    r = dnf_to_cnf(dnf)
+    assert r.exact is True
+    assert r.fallback_reason is None
+    assert r.clause_count == 1
+    parsed = _groups(r.cnf_string)
+    assert parsed == [sorted(f"C{i}" for i in range(BRANCH_CAP + 1))]   # one OR-clause, all literals
+
+
+def test_blank_only_branch_is_tautology_not_dropped():
+    # A branch whose only literal normalizes to blank (['  ']) is the empty
+    # conjunction == TRUE => the whole disjunction is a tautology => no
+    # constraint, MATCHING the truly-empty [[]] case and the _clean_dnf
+    # docstring. (Previously it was silently DROPPED via had_only_self_ref.)
+    r = dnf_to_cnf([["  "]])
+    assert r.cnf_string == ""
+    assert r.exact is True
+    assert r.fallback_reason is None
+    assert _groups(r.cnf_string) == []
+
+
+def test_blank_branch_makes_whole_dnf_no_constraint_even_with_gated_course():
+    # [['  '], ['X','A']] gated on X: the blank branch is TRUE, so the whole DNF
+    # is a no-constraint '' (NOT '(A)'). Pins the documented all-blank-AND==TRUE
+    # semantics over the prior conservative-tightening divergence.
+    r = dnf_to_cnf([["  "], ["X", "A"]], gated_course="X")
+    assert r.cnf_string == ""
+    assert r.exact is True
+    assert r.fallback_reason is None
+    assert _groups(r.cnf_string) == []
 
 
 def test_guard_is_pre_minimization_conservative():

@@ -8,10 +8,15 @@ pathway a set of co-required courses AND'd):
 The engine consumes **CNF** (AND of OR-groups): ``parse_prereq("(A OR B) AND (C)")
 -> [["A","B"],["C"]]``. This module converts DNF->CNF by *exact distribution*
 with a configurable clause-count expansion guard; when the predicted product
-exceeds the guard it emits a FLAGGED, never-silent conservative **under-
-approximation** (a single OR-clause union over the cleaned literals). The flag
-travels out-of-band in ConversionResult.exact / .fallback_reason, never embedded
-in the emitted catalog string (which always stays valid CNF grammar).
+exceeds the guard (or the branch count exceeds BRANCH_CAP) it emits a FLAGGED,
+never-silent conservative **under-approximation** (a single OR-clause union over
+the cleaned literals). The fallback_reason names the ACTUAL trigger —
+``clause_budget_exceeded`` vs ``branch_cap_exceeded`` — so a consumer never sees
+a product-exceeded message when only the branch cap fired. The flag travels
+out-of-band in ConversionResult.exact / .fallback_reason, never embedded in the
+emitted catalog string (which always stays valid CNF grammar). A pure-OR DNF
+(every branch a single literal, product == 1) is the union exactly, so it is
+emitted as that one EXACT clause even when it is wider than BRANCH_CAP.
 
 PURITY NOTE — this module must NOT do ``from .mapping import _norm``: importing
 ``sources.mapping`` transitively pulls ``pandas`` (and inertly ``httpx``) into
@@ -125,6 +130,12 @@ def _clean_dnf(dnf, gated_norm):
     branches = []
     for and_term in dnf:
         lits = []
+        # ``had_only_self_ref`` tracks whether EVERY literal we removed was a
+        # self-reference drop. It must flip to False the moment we see any
+        # literal that is NOT a self-ref — INCLUDING a blank-normalized one — so
+        # a blank-only branch (e.g. ['  ']) takes the tautology path (empty
+        # AND == TRUE) like a truly-empty AND-term, instead of being silently
+        # DROPPED as if it were self-ref-emptied. (Matches the docstring below.)
         had_only_self_ref = len(and_term) > 0
         for lit in and_term:
             nlit = _norm(lit)
@@ -133,10 +144,11 @@ def _clean_dnf(dnf, gated_norm):
                 return None, nlit
             if gated_norm is not None and nlit == gated_norm:
                 continue  # self-reference drop (a course can't be its own prereq)
-            if nlit:
-                had_only_self_ref = False
-                if nlit not in lits:
-                    lits.append(nlit)
+            # Any non-self-ref literal (blank-normalized included) means this
+            # branch was NOT emptied solely by the self-ref drop.
+            had_only_self_ref = False
+            if nlit and nlit not in lits:
+                lits.append(nlit)
         if not lits:
             if had_only_self_ref:
                 # Branch emptied SOLELY by the self-ref drop: drop the branch,
@@ -291,12 +303,44 @@ def dnf_to_cnf(dnf, *, gated_course=None, max_clauses=DEFAULT_MAX_CLAUSES) -> Co
     predicted = 1
     for b in branches:
         predicted *= len(b)
-    if predicted > max_clauses or len(branches) > BRANCH_CAP:
-        reason = (
-            f"clause_budget_exceeded: product {predicted} > budget {max_clauses}; "
-            f"emitted conservative single-OR union over the cleaned literals "
-            f"(UNDER-approximate: ordering relaxed, all courses retained via closure)."
-        )
+    product_exceeded = predicted > max_clauses
+    branch_cap_exceeded = len(branches) > BRANCH_CAP
+    if product_exceeded or branch_cap_exceeded:
+        # Short-circuit the pure-OR case: when EVERY branch is a single literal
+        # the product is 1, so distribution yields exactly one clause — the union
+        # — which is identical to (and exact for) the fallback union. Emit it as
+        # the EXACT single clause instead of routing through the flagged fallback
+        # (avoids an over-conservative exact=False loss on a representable input).
+        # This also means a pure-OR DNF wider than BRANCH_CAP is reported EXACT,
+        # never tripping the branch-cap arm with a misleading reason.
+        if all(len(b) == 1 for b in branches):
+            cnf_groups = _minimize_clauses(
+                [frozenset(combo) for combo in itertools.product(*branches)]
+            )
+            return ConversionResult(
+                cnf_string=to_catalog_string(cnf_groups),
+                cnf_groups=cnf_groups,
+                exact=True,
+                fallback_reason=None,
+                clause_count=len(cnf_groups),
+                clause_budget=max_clauses,
+            )
+        # Word the reason by the ACTUAL trigger. Prefer the product message when
+        # the product exceeded; otherwise name the branch-cap trigger distinctly
+        # (the old code always claimed "product N > budget M" even when N <= M,
+        # an inaccurate out-of-band signal the never-silent contract forbids).
+        if product_exceeded:
+            reason = (
+                f"clause_budget_exceeded: product {predicted} > budget {max_clauses}; "
+                f"emitted conservative single-OR union over the cleaned literals "
+                f"(UNDER-approximate: ordering relaxed, all courses retained via closure)."
+            )
+        else:
+            reason = (
+                f"branch_cap_exceeded: {len(branches)} branches > cap {BRANCH_CAP}; "
+                f"emitted conservative single-OR union over the cleaned literals "
+                f"(UNDER-approximate: ordering relaxed, all courses retained via closure)."
+            )
         return _fallback_union(branches, max_clauses, reason)
 
     # --- exact distribution: one clause per product tuple --------------------
