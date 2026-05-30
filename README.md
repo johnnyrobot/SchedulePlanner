@@ -240,7 +240,9 @@ The bundled demo (`files/lamc_data.xlsx`) has deliberately planted problems:
 
 ## Notes
 
-- No student-level data anywhere. Instructor fields are never loaded.
+- No student-level data anywhere. Instructor fields returned by the live
+  schedule API are dropped during mapping — they never reach the workbook,
+  results, or AI layer.
 - Term season is derived from the term code (ends in 8 = Fall, 2 = Spring,
   matching Fall 2024 = 2248). Adjust in `engine.py` if your coding differs.
 - `legacy/` contains early prototype scripts (`analyze_bottlenecks.py`,
