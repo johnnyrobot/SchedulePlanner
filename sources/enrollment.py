@@ -1,27 +1,28 @@
 r"""IR PeopleSoft enrollment ingest + CRN-suffix-stripping join (pure, offline).
 
-STATUS: UNWIRED SCAFFOLD — NOT a working seam fill (no overclaiming).
+STATUS: WIRED seam — FIXTURE-ONLY join (no overclaiming on real data).
 ------------------------------------------------------------------------------
 This module reads an IR PeopleSoft enrollment export and joins its counts onto
 live section records. It is a PURE file read (no network) plus a pure,
-idempotent, non-aliasing join. BUT it is NOT wired into any pipeline yet:
+idempotent, non-aliasing join. As of m7-s4/s5 it IS wired into the pipeline:
 
-  * Neither `load_enrollment` nor `enrich_sections` is called by
-    `build_live_workbook.py` or `app.py` (grep confirms: only defined here and
-    exercised by `tests/test_enrollment_ingest.py`). There is NO `--enrollment`
-    CLI flag.
-  * The only sections-DataFrame builder, `mapping.build_sections_df`, currently
-    HARD-CODES `Cap Enrl` / `Tot Enrl` / `Wait Tot` = 0 (mapping.py:63-65) and
-    does NOT read the enrichment keys this module writes. So even if a caller
-    ran `enrich_sections`, `build_sections_df` would DROP the enriched counts
-    and the engine would still see 0.
+  * `build_live_workbook.analyze_live` calls `enrich_sections` (via the
+    `--enrollment` CLI flag / `enrollment_path`, or a hand-keyed
+    `enrollment_map` in offline tests) on the fetched sections BEFORE the
+    workbook write — outside `engine.run`.
+  * `mapping.build_sections_df` now reads the enrichment keys
+    (`r.get('Cap Enrl', 0)` / `'Tot Enrl'` / `'Wait Tot'`), so matched counts
+    reach `engine.analyze`; unmatched records default to 0.
 
-In other words: the engine's enrollment seam is NOT filled by this module today.
-To actually fill it, a future slice must (a) add a `--enrollment` flag that runs
-`enrich_sections` over the fetched sections, AND (b) teach
-`build_sections_df` to read `r.get('Cap Enrl', 0)` / `'Tot Enrl'` / `'Wait Tot'`
-instead of writing 0 — only then do these counts reach `engine.analyze`. Until
-both land, treat this file as a validated-but-inert scaffold, not a seam fill.
+The remaining honest limitation is the JOIN itself, not the wiring: the
+live-schedule <-> IR (term, CRN) join is NOT validated against real data. No
+committed schedule + enrollment fixture pair shares a `(term, CRN)` (schedule is
+term 2268; the enrollment fixture is terms {2248, 2252}), so a real
+`--enrollment` run against today's fixtures matches ZERO sections and the
+enrollment detectors stay INERT (Cap/Tot/Wait = 0). Activation is exercised only
+WITHIN one self-consistent record set (a hand-keyed inline map keyed to the
+schedule's own term/CRNs). Treat this file as a wired-but-fixture-only seam: the
+mechanics are live, the cross-source join is not yet validated.
 
 Expected real IR PeopleSoft export schema (the `sections` sheet of an `.xlsx`)
 ------------------------------------------------------------------------------
@@ -79,14 +80,15 @@ validated end-to-end against the real schedule source. No committed schedule +
 enrollment fixture pair shares a `(term, CRN)`: the committed schedule fixture is
 term 2268, the committed enrollment fixture is terms {2248, 2252} — ZERO term
 overlap — and the CRN sets do not intersect even after stripping the suffix.
-Even if a future `--enrollment` flag existed (it does NOT yet — see STATUS
-above), running it against today's live/2268 schedule would match ZERO sections,
-so the enrollment detectors would stay INERT (Cap/Tot/Wait = 0). The join is
-exercised only WITHIN one self-consistent set of records (the enrollment
-fixture's own terms, or a hand-keyed inline map) — never across the live
-schedule↔IR boundary. NOTE: `build_live_workbook`'s report does NOT yet mention
-this join; its INERT_DETECTORS notes still point at "PRD M4" generically and are
-not aware of this scaffold (consistent with the unwired status above).
+Running the wired `--enrollment` flag against today's live/2268 schedule matches
+ZERO sections, so the enrollment detectors stay INERT (Cap/Tot/Wait = 0). The
+join is exercised end-to-end only WITHIN one self-consistent set of records (the
+enrollment fixture's own terms, or a hand-keyed inline map) — never across the
+live schedule↔IR boundary. NOTE: `build_live_workbook.analyze_live` now applies
+this join (when given an enrollment input) and its detector report flips the
+enrollment entries to "active" ONLY on a >=1-section match, labeling that
+activation fixture-scoped; on a zero-match real `--enrollment` run the entries
+stay INERT with the honest zero-match reason.
 """
 from __future__ import annotations
 

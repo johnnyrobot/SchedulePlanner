@@ -162,8 +162,11 @@ def test_budget_fallback_course_labeled_conservative_permissive(lamc_routes,
                                                                make_client, tmp_path):
     """A course whose DNF->CNF exceeds the (tightened) clause budget is reported
     as a conservative-permissive (not exact) approximation, never silently. We
-    force this by passing a tiny max_clauses through the wiring so PHYS 102's
-    2x2 distribution exceeds the budget and falls back to the union clause."""
+    force this by passing max_clauses=1 through the wiring so any multi-product
+    course exceeds the budget and falls back to the union clause: PHYS 102's DNF
+    [[MATH 245, MATH 246], [PHYS 185]] distributes to a 2x1=2 product, and
+    BIO 200's [[BIO 101, CHEM 101], [BIO 102, CHEM 101]] to a 2x2=4 product —
+    both > max_clauses=1, so both fall back (assertions only require >=1)."""
     client = make_client(lamc_routes)
     out = tmp_path / "live_fallback.xlsx"
     report = build_live_workbook.analyze_live(
@@ -183,6 +186,51 @@ def test_budget_fallback_course_labeled_conservative_permissive(lamc_routes,
     assert summary["exact_count"] >= 1
     # eLumen path labeled fixture-only on the whole prereq slice.
     assert "fixture-only" in json.dumps(pre).lower()
+
+
+# ---------------------------------------------------------------------------
+# Human-readable banner must mirror the structured report (no overclaim-in-reverse).
+# ---------------------------------------------------------------------------
+def test_banner_reflects_active_prereq_ordering_under_elumen_fixture(
+        lamc_routes, make_client, tmp_path, capsys):
+    """Under --elumen-fixture the prerequisite_ordering detector is ACTIVE, so the
+    human banner must NOT assert the solver runs 'without ordering constraints'
+    (that would contradict the JSON report printed below it). It must instead name
+    prerequisite_ordering as ACTIVE."""
+    client = make_client(lamc_routes)
+    out = tmp_path / "live_banner.xlsx"
+    report = build_live_workbook.analyze_live(
+        "LAMC", [2268], "Biology", str(out), client=client,
+        elumen_fixture=ELUMEN_FIXTURE,
+    )
+    # Sanity: this run really does activate prerequisite_ordering.
+    assert _detector(report, "prerequisite_ordering")["status"] == "active"
+
+    build_live_workbook._print_banner(report)
+    banner = capsys.readouterr().out
+    assert "without ordering constraints" not in banner, (
+        f"banner must not claim no ordering constraints when prereq is active:\n{banner}")
+    assert "prerequisite_ordering ACTIVE" in banner
+    # The enrollment detectors ARE still inert this run (no --enrollment input),
+    # so the banner should still say so honestly.
+    assert "modality_mismatch INERT" in banner
+    assert "under_supply INERT" in banner
+
+
+def test_banner_all_inert_on_bare_fetch(lamc_routes, make_client, tmp_path, capsys):
+    """With no enrichment inputs every detector is inert, so the banner prints the
+    INERT line for all three (mirroring the report) and never an ACTIVE line."""
+    client = make_client(lamc_routes)
+    out = tmp_path / "live_banner_bare.xlsx"
+    report = build_live_workbook.analyze_live(
+        "LAMC", [2268], "Biology", str(out), client=client)
+
+    build_live_workbook._print_banner(report)
+    banner = capsys.readouterr().out
+    assert "modality_mismatch INERT" in banner
+    assert "under_supply INERT" in banner
+    assert "without ordering constraints" in banner
+    assert "ACTIVE" not in banner
 
 
 # ---------------------------------------------------------------------------

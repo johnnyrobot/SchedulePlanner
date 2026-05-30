@@ -13,9 +13,18 @@ LIVE REALITY (what one run actually produces):
     (schedule.DEFAULT_TERMS = 2264, 2266, 2268). Each term is a separate
     schedule API call; pass a comma list to widen or narrow the window.
   - The schedule API has NO enrollment/capacity/waitlist counts and NO
-    prerequisites, so the modality_mismatch and under_supply detectors are
-    INERT and the solver runs without prerequisite ordering. These gaps are
-    surfaced as structured fields in the report below (not hidden).
+    prerequisites, so on a BARE fetch the modality_mismatch and under_supply
+    detectors are INERT and the solver runs without prerequisite ordering.
+    These gaps are surfaced as structured fields in the report below (not
+    hidden). The optional m7 enrichment flags --enrollment (an IR PeopleSoft
+    export joined onto the fetched sections) and --elumen-fixture (a DNF->CNF
+    prereq map threaded into the catalog) can FLIP these detectors to active;
+    that enrichment runs OUTSIDE engine.run, before the workbook write. Both
+    paths carry honest caveats: the enrollment join is fixture-scoped (the
+    live-schedule <-> IR (term, CRN) join is not validated on real data, and
+    today's committed fixtures match zero sections so a real --enrollment run
+    stays inert), and the eLumen prereq slice is fixture-only (not validated
+    on real eLumen data).
 
 To produce a representative MULTI-TERM sample for the Biology AS-T at Mission
 College across a full year window, run exactly:
@@ -94,6 +103,11 @@ def _enrollment_detector_entries(*, source, matched, total):
     honest inert reason. The activation is LABELED fixture-scoped — the
     live-schedule <-> IR (term, CRN) join is NOT validated on real data (no
     committed schedule (2268) + enrollment ({2248,2252}) fixture pair overlaps).
+
+    ``total`` is the fetched-section count; it is surfaced alongside ``matched``
+    as a matched/total ratio for honest match accounting (so the report shows how
+    much of the fetched schedule the join actually covered, not just the raw hit
+    count).
     """
     if source is None:
         # No enrollment input at all: keep the honest baseline inert entries.
@@ -110,6 +124,8 @@ def _enrollment_detector_entries(*, source, matched, total):
                 "status": "active",
                 "source": source,
                 "matched_sections": matched,
+                "total_sections": total,
+                "match_ratio": round(matched / total, 4) if total else None,
                 "label": active_note,
                 "metric": "fill ratio < 0.55 (Tot Enrl / Cap Enrl)",
             },
@@ -118,6 +134,8 @@ def _enrollment_detector_entries(*, source, matched, total):
                 "status": "active",
                 "source": source,
                 "matched_sections": matched,
+                "total_sections": total,
+                "match_ratio": round(matched / total, 4) if total else None,
                 "label": active_note,
                 "metric": "Wait Tot sum > 15",
             },
@@ -135,6 +153,8 @@ def _enrollment_detector_entries(*, source, matched, total):
             "status": "inert",
             "source": source,
             "matched_sections": 0,
+            "total_sections": total,
+            "match_ratio": 0.0 if total else None,
             "matched_sections_note": "join matched 0 sections",
             "reason": zero_reason,
             "remedy": ("supply an enrollment export whose (term, CRN) keys overlap "
@@ -146,6 +166,8 @@ def _enrollment_detector_entries(*, source, matched, total):
             "status": "inert",
             "source": source,
             "matched_sections": 0,
+            "total_sections": total,
+            "match_ratio": 0.0 if total else None,
             "matched_sections_note": "join matched 0 sections",
             "reason": zero_reason,
             "remedy": ("supply an enrollment export whose (term, CRN) keys overlap "
@@ -306,10 +328,36 @@ def _print_banner(report):
     print(f"Course reconciliation: {rec['matched_count']} matched, "
           f"{rec['unmatched_count']} unmatched (not offered in fetched terms): "
           f"{rec['unmatched']}")
-    print("NOTE: Cap/Tot/Wait = 0 -> modality_mismatch and under_supply detectors "
-          "are INERT (need the IR PeopleSoft enrollment export, PRD M4). "
-          "Prerequisites are blank (need eLumen) -> solver runs without ordering "
-          "constraints.")
+    # The NOTE must mirror the per-detector status in the structured report
+    # printed immediately below: claim INERT only for detectors that are still
+    # inert this run, and ACTIVE (fixture-scoped/fixture-only) for ones the m7
+    # enrichment flipped on — never a hardcoded "all inert" line, which would
+    # contradict the JSON report on any --enrollment / --elumen-fixture run.
+    _BANNER_LINES = {
+        ("modality_mismatch", "inert"): (
+            "Cap/Tot = 0 -> modality_mismatch INERT (need the IR PeopleSoft "
+            "enrollment export, PRD M4)."),
+        ("modality_mismatch", "active"): (
+            "modality_mismatch ACTIVE (fixture-scoped: live-schedule <-> IR join "
+            "not validated on real data)."),
+        ("under_supply", "inert"): (
+            "Wait Tot = 0 -> under_supply INERT (need the IR PeopleSoft "
+            "enrollment export, PRD M4)."),
+        ("under_supply", "active"): (
+            "under_supply ACTIVE (fixture-scoped: live-schedule <-> IR join "
+            "not validated on real data)."),
+        ("prerequisite_ordering", "inert"): (
+            "Prerequisites blank (need eLumen) -> solver runs without ordering "
+            "constraints."),
+        ("prerequisite_ordering", "active"): (
+            "prerequisite_ordering ACTIVE (fixture-only: eLumen prereq CNF "
+            "threaded; not validated on real eLumen data) -> solver enforces "
+            "ordering constraints."),
+    }
+    for d in report["inert_detectors"]:
+        line = _BANNER_LINES.get((d["detector"], d["status"]))
+        if line is not None:
+            print(f"NOTE: {line}")
 
 
 def main():
