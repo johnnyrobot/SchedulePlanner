@@ -232,7 +232,10 @@ async function fetchLive(){
 // Shared rendering for both a picked file and the bundled demo. Data-derived
 // fields are HTML-escaped because they can come from uploaded workbooks / APIs.
 function showResult(res){
-  document.getElementById('status').textContent = res.ai_used ? 'parsed with Gemma 4' : 'regex parse (offline)';
+  // ai_used = a Gemma 4 parser was AVAILABLE this run (used for messy prereq
+  // text + the briefing). Structured prereqs are still regex-parsed, so this
+  // signals the AI layer is ON — not that every prerequisite was LLM-parsed.
+  document.getElementById('status').textContent = res.ai_used ? 'Gemma 4 enabled' : 'regex parse (offline)';
   document.getElementById('live').innerHTML='';
   if(res.error){
     document.getElementById('out').innerHTML='<div class="card" style="color:var(--red)">'+escapeHtml(res.error)+'</div>';
