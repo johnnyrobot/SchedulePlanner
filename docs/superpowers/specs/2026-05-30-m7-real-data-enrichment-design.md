@@ -532,3 +532,40 @@ No eLumen REST endpoint, auth, or captured response is known. Therefore:
   fallback is **plan-only and unimplemented**: across the two real sources it matches almost
   nothing (subject-abbreviation + catalog-padding mismatch — verified only `CHEM 101/102`
   coincide, and those fail the term check).
+
+## 14. Validation status — synthetic IR path (addendum, 2026-05-31)
+
+The synthetic IR-shaped enrollment path was re-validated for **production-candidate
+readiness** against `files/lamc_sample_enrollment.xlsx`. **That fixture is a synthetic
+IR-shaped stand-in, NOT a real PeopleSoft export** — no claim is made that real IR data
+was exercised. Gate results:
+
+| Gate | Result | Evidence |
+|---|---|---|
+| Required IR columns (`Term`, `Class Nbr`, `Cap Enrl`, `Tot Enrl`, `Wait Tot`) | PASS | all five present in the `sections` sheet; independently enforced by `enrollment.REQUIRED_COLUMNS` and `engine.REQUIRED_COLUMNS['sections']` |
+| No student-level data / no instructor PII | PASS | 33 section-level columns, none PII-named (broad scan incl. ssn/dob/phone/email); no `@`/email values, no 9-digit IDs; rows are sections, not students |
+| Enrollment-driven detectors activate | PASS | `engine.py files/lamc_sample_enrollment.xlsx` → `modality_mismatch=[ACCTG 2 @ 35%]`, `under_supply=[ENGL 101, waitlisted 60]`; *count-driven* (zeroing `Cap/Tot/Wait` collapses both) |
+| `tests/test_sample_enrollment_fixture.py` green without deselection | PASS | 7/7 pass; the byte-identical assertion is environment-robust via #23 (below) |
+| Determinism (PRD N11) | PASS | two fresh generations are byte-identical; committed fixture is content-matched to a fresh generation |
+
+**Byte-test brittleness — fixed upstream by PR #23 (`1c5c558`, now on `main`).** The
+byte-identical brittleness was independently resolved by #23 ("compare enrollment fixture by
+logical contents, not raw bytes"); **this docs-only PR does not modify that test.**
+`test_sample_generation_is_byte_identical` (`tests/test_sample_enrollment_fixture.py`) keeps
+the same-toolchain determinism guarantee (two fresh generations are byte-for-byte identical)
+but compares the committed fixture to a fresh generation by **logical per-sheet contents**
+(`pd.read_excel(sheet_name=None)` + `pd.testing.assert_frame_equal(check_dtype=False)`)
+rather than raw `.xlsx` bytes. Raw `.xlsx` bytes shift across otherwise-valid
+dependency/platform stacks (e.g. 24580 B on this macOS host vs 24575 B on Linux/CI) with no
+data change, so a byte compare of the committed file is brittle; the content compare still
+catches a genuinely stale fixture (a generator change not re-committed). The committed
+fixture is unchanged.
+
+**Real-IR blocker (unchanged — still documented, not closed).** The live-schedule ↔ real-IR
+`(term, CRN)` join is **not validated against real data and is not required for this pilot.**
+No committed schedule + enrollment fixture pair shares a `(term, CRN)` (schedule is term
+`2268`; enrollment is terms `{2248, 2252}`), so a real `--enrollment` run matches zero
+sections and the enrollment detectors stay INERT — asserted by
+`tests/test_detector_activation.py::test_real_enrollment_fixture_against_live_schedule_matches_zero`.
+Closing this gap requires a real IR export whose terms/CRNs overlap a live schedule fetch;
+tracked in [#17](https://github.com/johnnyrobot/edgesched/issues/17).
