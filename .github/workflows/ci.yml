@@ -1,0 +1,62 @@
+name: CI
+
+# Offline, reproducible CI for EdgeSched.
+#
+# The gating `test` job installs the pinned, hash-checked dependency set from
+# requirements.lock, so every run resolves the SAME package versions (and
+# verifies their hashes). Live/network tests are deselected by default via
+# pytest.ini (`addopts = -m "not live"`), so pull requests are never gated on
+# network access.
+#
+# This workflow does NOT build, sign, or notarize any binary.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: tests (locked deps, py${{ matrix.python-version }})
+    # The app is a pywebview desktop app; app.py imports `webview` at module
+    # load and the suite imports app. macOS ships the Cocoa/WebKit backend the
+    # lock targets (pyobjc, darwin-only markers), so the suite imports cleanly.
+    # A Linux/Windows runner would need a GTK/Qt backend (out of scope).
+    runs-on: macos-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: requirements.lock
+      - name: Install pinned, hash-checked dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install --require-hashes -r requirements.lock
+      - name: Offline test suite (live deselected by default via pytest.ini)
+        run: python -m pytest -m "not live"
+
+  build-verify:
+    name: build-resource verifier self-test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Resource-checker negative control (portable; no bundle needed)
+        # Proves the build resource checker actually fails on a bundle missing
+        # the OR-Tools native lib. The --self-test path uses only mktemp + find,
+        # so it runs on any OS without producing a real bundle.
+        run: bash scripts/verify_macos_build.sh --self-test
