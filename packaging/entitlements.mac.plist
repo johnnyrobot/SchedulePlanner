@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  entitlements.mac.plist — hardened-runtime entitlements TEMPLATE for the
+  SchedulePlanner macOS .app. scripts/sign_notarize_macos.sh passes this file to
+  codesign as the hardened-runtime entitlements (its "entitlements" flag), with
+  the runtime option enabled.
+
+  TEMPLATE / NOT VERIFIED HERE: these values are the entitlements PyInstaller +
+  Python + OR-Tools apps commonly require, but they have NOT been validated on a
+  signing-capable Mac in this repo (the build host has no Developer ID identity).
+  Before public release, validate on a Mac that can sign + notarize: grant only
+  the entitlements the app actually needs, then confirm the app launches AND
+  notarization returns Accepted. Each entry below is annotated with WHY it is
+  commonly needed; remove any that prove unnecessary for a tighter signature.
+
+  Apple guidance: keep the entitlement set minimal. Every disabled hardened-
+  runtime protection below weakens an exploit mitigation, so drop it if the
+  notarized build still passes spctl and runs without it.
+-->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+
+  <!-- WHY: PyInstaller-frozen apps load many bundled dylibs (OR-Tools, numpy,
+       the pyobjc/WebKit bridge) that are NOT individually signed by our
+       Developer ID. The hardened runtime's library validation would otherwise
+       refuse to load them and the app would crash on launch. This is the single
+       most commonly required entitlement for PyInstaller/Python apps.
+       Validate: if every nested dylib ends up correctly signed by our identity,
+       this MAY be removable for a stricter signature. -->
+  <key>com.apple.security.cs.disable-library-validation</key>
+  <true/>
+
+  <!-- WHY: CPython and some native extensions allocate executable memory pages
+       at runtime that are not signed (e.g. ctypes trampolines / certain JITs).
+       The hardened runtime blocks unsigned executable memory by default, which
+       can crash the interpreter or extensions. Enable only if launch/runtime
+       crashes point at executable-memory protection; prefer to remove it if the
+       app runs without it. -->
+  <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+  <true/>
+
+  <!-- WHY: companion to the above for code paths that JIT-compile and execute
+       generated code. Many pure-CPython apps do NOT need this; included as a
+       template because some native deps do. Drop it first when tightening. -->
+  <key>com.apple.security.cs.allow-jit</key>
+  <true/>
+
+  <!-- WHY: some interpreters/extensions read DYLD_* environment variables to
+       locate bundled libraries. The hardened runtime ignores those variables
+       unless this entitlement is present. Include only if the frozen app relies
+       on DYLD_* to find its bundled .dylibs; otherwise remove it. -->
+  <key>com.apple.security.cs.allow-dyld-environment-variables</key>
+  <true/>
+
+  <!-- WHY: SchedulePlanner makes OPTIONAL outbound connections — public LACCD
+       source fetches and optional local Ollama at http://localhost:11434. Under
+       the hardened runtime an app that initiates network connections needs the
+       client network entitlement. (The app runs fully offline without these,
+       so if the released build never performs outbound requests this can be
+       removed.) -->
+  <key>com.apple.security.network.client</key>
+  <true/>
+
+  <!-- WHY: the "Choose data file" picker lets the user select an .xlsx anywhere
+       on disk. With the hardened runtime (and especially if the app is later
+       sandboxed) reading a user-selected file requires user-selected read
+       access. Harmless to keep for a non-sandboxed Developer ID build; required
+       if App Sandbox is ever enabled. -->
+  <key>com.apple.security.files.user-selected.read-only</key>
+  <true/>
+
+</dict>
+</plist>
