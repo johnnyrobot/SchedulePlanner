@@ -1,3 +1,9 @@
+# Loose lower bounds for convenient local development:
+#     pip install -r requirements.txt
+# For a reproducible / CI install, use the pinned, hash-checked lockfile (a
+# resolution of exactly this set) instead:
+#     pip install --require-hashes -r requirements.lock
+# See docs/CI.md for the lock + regeneration workflow.
 pandas>=2.0
 openpyxl>=3.1
 ortools>=9.8
