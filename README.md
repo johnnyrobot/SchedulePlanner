@@ -113,13 +113,27 @@ until the real IR export arrives (PRD M4). This sample lets those two detectors
 actually fire — proving they work end to end — without waiting on the IR
 delivery and without any student-level data (it carries no PII). It is
 regression-tested in `tests/test_sample_enrollment_fixture.py` (IR shape,
-planted-bottleneck snapshot, the detectors firing, byte-identical regeneration)
-and feeds the e2e determinism check. Run it through the engine like any
-workbook:
+planted-bottleneck snapshot, the detectors firing, deterministic regeneration
+with a content-matched committed fixture) and feeds the e2e determinism check.
+Run it through the engine like any workbook:
 
 ```bash
 python3 engine.py files/lamc_sample_enrollment.xlsx
 ```
+
+**Production-candidate status (synthetic path).** This synthetic IR-shaped path
+is validated end to end: the five required IR columns are present, there is no
+student-level data and no instructor PII, both enrollment-driven detectors
+(`modality_mismatch`, `under_supply`) fire and are *count-driven*, and the
+fixture regenerates deterministically. It remains a **synthetic stand-in, not a
+real PeopleSoft export.** Validating the live-schedule ↔ real-IR `(term, CRN)`
+join needs a real export with overlapping terms/CRNs, which is **unavailable and
+not required for this pilot** (tracked in
+[#17](https://github.com/johnnyrobot/edgesched/issues/17)). Today's committed
+schedule (term `2268`) and enrollment (terms `{2248, 2252}`) fixtures share no
+`(term, CRN)`, so a real `--enrollment` run matches zero sections and the two
+detectors stay inert — by design, asserted by the zero-match guard in
+`tests/test_detector_activation.py`.
 
 ### Run the test suite
 
