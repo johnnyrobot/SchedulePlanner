@@ -79,11 +79,15 @@ MOCKED_LIVE_APP_NODE = (
 )
 AI_FALLBACK_NODE = "tests/test_llm_assist.py::test_explain_falls_back_when_unavailable"
 
-# Known live nodes that the gate must keep DESELECTING (the "exactly 3" live set).
+# Known live nodes that the gate must keep DESELECTING (the live set). The
+# eLumen-client live test (test_live_lamc_endpoint_schema) was added with the
+# real eLumen prereq client; it hits the public endpoint and is deselected by
+# default. EXPECTED_DESELECTED in scripts/run_qa.sh is kept in lock-step.
 KNOWN_LIVE_NODES = {
     "tests/test_live_roundtrip.py::test_live_lamc_end_to_end",
     "tests/test_llm_assist.py::test_live_explain_against_real_ollama",
     "tests/test_engine_features.py::test_llm_assist_cli_no_args_runs",
+    "tests/test_elumen_client.py::test_live_lamc_endpoint_schema",
 }
 
 
