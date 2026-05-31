@@ -302,10 +302,12 @@ def test_cli_args_parse_enrollment_and_elumen_fixture(monkeypatch, tmp_path,
 
     def fake_analyze(campus, terms, program, out, *, client=None,
                      enrollment_path=None, elumen_fixture=None,
-                     enrollment_map=None, prereq_max_clauses=None):
+                     elumen_live=False, enrollment_map=None,
+                     prereq_max_clauses=None):
         captured.update(
             campus=campus, terms=terms, program=program, out=out,
             enrollment_path=enrollment_path, elumen_fixture=elumen_fixture,
+            elumen_live=elumen_live,
         )
         return {"error": None, "program": {"title": "T", "course_count": 0},
                 "reconciliation": {"matched_count": 0, "unmatched_count": 0,
@@ -323,3 +325,5 @@ def test_cli_args_parse_enrollment_and_elumen_fixture(monkeypatch, tmp_path,
     build_live_workbook.main()
     assert captured["enrollment_path"] == "files/lamc_sample_enrollment.xlsx"
     assert captured["elumen_fixture"] == ELUMEN_FIXTURE
+    # --elumen-live not passed here -> the flag defaults to False (opt-in only).
+    assert captured["elumen_live"] is False
