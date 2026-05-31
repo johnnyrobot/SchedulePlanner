@@ -369,14 +369,18 @@ def analyze_live(campus, terms, program_query, out_path, *, client=None,
         requested_course_ids = {c["course_id"] for c in program["courses"]}
 
         # Network IO stays OUTSIDE engine.run: reuse an injected client, else
-        # open + own one (mirrors build()'s pattern).
+        # open + own one (mirrors build()'s pattern). A per-build cache dedupes
+        # repeated subjects; the client's throttle + bounded backoff retry apply
+        # automatically (see sources.elumen_client guardrails). This fetch is
+        # BOUNDED to the program's own subjects — never a broad background crawl.
+        elumen_cache = {}
         if client is not None:
             records, _fetched = elumen_client.fetch_prereq_records(
-                campus, subjects, client=client)
+                campus, subjects, client=client, cache=elumen_cache)
         else:
             with httpx.Client(timeout=30.0) as owned:
                 records, _fetched = elumen_client.fetch_prereq_records(
-                    campus, subjects, client=owned)
+                    campus, subjects, client=owned, cache=elumen_cache)
 
         kwargs = {}
         if prereq_max_clauses is not None:

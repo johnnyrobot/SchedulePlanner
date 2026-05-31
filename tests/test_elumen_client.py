@@ -443,6 +443,197 @@ def test_fetch_courses_non_dict_response_raises(make_client, fake_response):
         ec.fetch_courses("LAMC", "ZZZ", client=client)
 
 
+# ============================================================ GUARDRAILS
+# Production-use guardrails: throttle, bounded backoff retry, session cache, and
+# bounded (no broad crawl) fetch. These are the safety rails that make
+# --elumen-live a polite, opt-in admin/testing path. All offline.
+import httpx as _httpx  # noqa: E402  (local to the guardrail tests)
+
+from sources.http import SourceError, SourceHTTPError  # noqa: E402
+
+
+def _status_response(status_code):
+    """A FakeResponse that raise_for_status()es with the given HTTP status."""
+    from tests.conftest import FakeResponse
+    return FakeResponse(None, status_code=status_code, text="", url="https://x/")
+
+
+class _CountingClient:
+    """Returns a queued sequence of responses/exceptions per get(), counting calls.
+
+    Each queue item is either a FakeResponse (returned) or an Exception INSTANCE
+    (raised), letting a test script transient failures then a success.
+    """
+
+    def __init__(self, script):
+        self._script = list(script)
+        self.calls = 0
+
+    def get(self, url, params=None, headers=None):
+        self.calls += 1
+        item = self._script.pop(0)
+        if isinstance(item, BaseException):
+            raise item
+        return item
+
+    def close(self):
+        return None
+
+
+def _one_page_response():
+    # A FakeResponse (not a bare dict): _CountingClient returns it straight to
+    # get_json, which calls .raise_for_status()/.json() on it.
+    from tests.conftest import FakeResponse
+    return FakeResponse(
+        {"_embedded": {"courses": []}, "pagination": {"page": 1, "pageSize": 25}})
+
+
+def test_throttle_spaces_successive_requests(monkeypatch):
+    # The shared _RateLimiter must sleep between successive requests (never before
+    # the first). We capture sleeps instead of actually waiting.
+    slept = []
+    monkeypatch.setattr(ec.time, "sleep", lambda s: slept.append(s))
+    # Force monotonic to advance by 0 so the full interval is "remaining".
+    monkeypatch.setattr(ec.time, "monotonic", lambda: 0.0)
+    limiter = ec._RateLimiter(1.0)
+    limiter.wait()  # first: no sleep
+    assert slept == []
+    limiter.wait()  # second: sleep ~1.0
+    limiter.wait()  # third: sleep ~1.0
+    assert len(slept) == 2
+    assert all(abs(s - 1.0) < 1e-9 for s in slept)
+
+
+def test_throttle_disabled_when_delay_zero(monkeypatch):
+    slept = []
+    monkeypatch.setattr(ec.time, "sleep", lambda s: slept.append(s))
+    limiter = ec._RateLimiter(0)
+    limiter.wait(); limiter.wait(); limiter.wait()
+    assert slept == []  # request_delay=0 -> no throttling (injected-client case)
+
+
+def test_fetch_prereq_records_uses_one_shared_limiter(monkeypatch, make_client,
+                                                      fixture_payload):
+    # Across MULTIPLE subjects the throttle must span queries (a shared limiter),
+    # not reset per subject. Two subjects, single page each -> exactly one sleep.
+    slept = []
+    monkeypatch.setattr(ec.time, "sleep", lambda s: slept.append(s))
+    monkeypatch.setattr(ec.time, "monotonic", lambda: 0.0)
+    client = make_client({"/public/courses": fixture_payload})
+    ec.fetch_prereq_records("LAMC", ["BIOTECH", "BIOLOGY"], client=client,
+                            request_delay=1.0)
+    # 2 subjects: 1st request no sleep, 2nd request one sleep -> exactly 1 sleep.
+    assert len(slept) == 1
+
+
+def test_retry_then_succeed_on_transient_500(monkeypatch):
+    # A 500 (transient) is retried with bounded backoff, then succeeds.
+    sleeps = []
+    monkeypatch.setattr(ec.time, "sleep", lambda s: sleeps.append(s))
+    client = _CountingClient([
+        _status_response(503),
+        _status_response(500),
+        _one_page_response(),  # 3rd attempt succeeds
+    ])
+    wrappers = ec.fetch_courses("LAMC", "ZZZ", client=client, request_delay=0)
+    assert wrappers == []           # empty page, but the call SUCCEEDED
+    assert client.calls == 3        # two failures + one success
+    assert sleeps == [1.0, 2.0]     # exponential backoff: 1, 2 (BACKOFF_BASE*2**n)
+
+
+def test_retry_exhausts_then_raises_clean_error(monkeypatch):
+    # Persistent 429s exhaust MAX_RETRIES and then propagate a clean
+    # SourceHTTPError (never a raw httpx traceback).
+    monkeypatch.setattr(ec.time, "sleep", lambda s: None)
+    client = _CountingClient([_status_response(429)] * (ec.MAX_RETRIES + 1))
+    with pytest.raises(SourceHTTPError):
+        ec.fetch_courses("LAMC", "ZZZ", client=client, request_delay=0)
+    # Initial try + MAX_RETRIES retries.
+    assert client.calls == ec.MAX_RETRIES + 1
+
+
+def test_non_retryable_404_fails_immediately(monkeypatch):
+    # A 404 is a hard client error: fail on the FIRST try, no retry/backoff.
+    sleeps = []
+    monkeypatch.setattr(ec.time, "sleep", lambda s: sleeps.append(s))
+    client = _CountingClient([_status_response(404)])
+    with pytest.raises(SourceHTTPError):
+        ec.fetch_courses("LAMC", "ZZZ", client=client, request_delay=0)
+    assert client.calls == 1
+    assert sleeps == []  # no backoff on a non-transient error
+
+
+def test_shape_drift_does_not_retry(monkeypatch):
+    # SourceDataError (JSON/shape drift) must NOT be retried — retrying can't fix
+    # bad data. A non-dict body raises immediately on the first call.
+    sleeps = []
+    monkeypatch.setattr(ec.time, "sleep", lambda s: sleeps.append(s))
+    from tests.conftest import FakeResponse
+    client = _CountingClient([FakeResponse(["not", "an", "object"])])
+    with pytest.raises(SourceDataError):
+        ec.fetch_courses("LAMC", "ZZZ", client=client, request_delay=0)
+    assert client.calls == 1
+    assert sleeps == []
+
+
+def test_timeout_is_retryable(monkeypatch):
+    # A transport timeout (bare SourceError, not a status error) is transient.
+    monkeypatch.setattr(ec.time, "sleep", lambda s: None)
+    client = _CountingClient([
+        SourceError("eLumen: request timed out"),
+        _one_page_response(),
+    ])
+    wrappers = ec.fetch_courses("LAMC", "ZZZ", client=client, request_delay=0)
+    assert wrappers == []
+    assert client.calls == 2
+
+
+def test_session_cache_dedupes_repeated_subject(make_client, fixture_payload):
+    # A session cache memoizes (tenant, query, pageSize): the SAME subject twice
+    # hits the network once.
+    client = make_client({"/public/courses": fixture_payload})
+    cache = {}
+    ec.fetch_courses("LAMC", "BIOTECH", client=client, request_delay=0, cache=cache)
+    first = len(client.calls)
+    ec.fetch_courses("LAMC", "BIOTECH", client=client, request_delay=0, cache=cache)
+    assert len(client.calls) == first  # second call served from cache, no request
+    assert (("lamission.elumenapp.com", "BIOTECH", 25)) in cache
+
+
+def test_cache_returns_independent_copies(make_client, fixture_payload):
+    # A caller mutating the returned list must not corrupt the cached entry.
+    client = make_client({"/public/courses": fixture_payload})
+    cache = {}
+    a = ec.fetch_courses("LAMC", "BIOTECH", client=client, request_delay=0, cache=cache)
+    a.clear()
+    b = ec.fetch_courses("LAMC", "BIOTECH", client=client, request_delay=0, cache=cache)
+    assert len(b) == 7  # cached entry intact despite mutation of the first result
+
+
+def test_fetch_prereq_records_dedupes_repeated_subject(make_client, fixture_payload):
+    # fetch_prereq_records shares one cache across queries, so a duplicate subject
+    # in the query list is fetched once.
+    client = make_client({"/public/courses": fixture_payload})
+    ec.fetch_prereq_records("LAMC", ["BIOTECH", "BIOTECH"], client=client,
+                            request_delay=0)
+    assert len(client.calls) == 1  # second BIOTECH served from the shared cache
+
+
+def test_is_retryable_classification():
+    # Direct unit coverage of the transient/permanent classifier.
+    req = _httpx.Request("GET", "https://x/")
+    resp429 = _httpx.Response(429, request=req)
+    resp404 = _httpx.Response(404, request=req)
+    e429 = SourceHTTPError("429"); e429.__cause__ = _httpx.HTTPStatusError(
+        "429", request=req, response=resp429)
+    e404 = SourceHTTPError("404"); e404.__cause__ = _httpx.HTTPStatusError(
+        "404", request=req, response=resp404)
+    assert ec._is_retryable(e429) is True
+    assert ec._is_retryable(e404) is False
+    assert ec._is_retryable(SourceError("timeout")) is True   # transport error
+    assert ec._is_retryable(SourceDataError("drift")) is False  # never retry data
+
+
 # ============================================================ LIVE (deselected)
 @pytest.mark.live
 def test_live_lamc_endpoint_schema():

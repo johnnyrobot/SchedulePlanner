@@ -16,10 +16,24 @@ the parsed object exposes a recursive boolean ``requisites`` tree.
 
 NO OVERCLAIMING / ToU CAVEAT: this client implements ONLY the verified request
 + response shape above. Terms-of-Use review, rate-limit policy, and human
-approval for hitting the live endpoint at scale are STILL PENDING and OUT OF
-SCOPE here. Do NOT treat this module as production-cleared to crawl eLumen; the
-single networked path is exercised only by the ``@pytest.mark.live`` test, which
-is deselected by default. Be a polite client (small pageSize, bounded pages).
+approval for hitting the live endpoint at scale are STILL PENDING. Do NOT treat
+this module as production-cleared to crawl eLumen — live use is APPROVAL-GATED
+(see docs/eLUMEN_LIVE_USAGE.md). The single networked path is exercised only by
+the ``@pytest.mark.live`` test, which is deselected by default.
+
+PRODUCTION-USE GUARDRAILS (a polite, BOUNDED client — never a broad crawl):
+  - OPT-IN: nothing here runs unless a caller explicitly invokes a fetch_*; the
+    build_live_workbook integration gates it behind --elumen-live (default off).
+  - BOUNDED: callers query ONLY the selected campus + the subjects the chosen
+    program/sections actually cover; pageSize is capped at 25 and pages at
+    DEFAULT_MAX_PAGES. There is no background or all-subjects crawl.
+  - THROTTLE: successive requests are spaced >= REQUEST_DELAY_SECONDS apart
+    (a shared _RateLimiter spans every query + page in a batch).
+  - RETRY/BACKOFF: transient failures (HTTP 429/5xx + transport timeouts) get a
+    bounded exponential backoff (MAX_RETRIES); every other 4xx and any JSON /
+    shape drift fails immediately and cleanly as a SourceError subclass.
+  - CACHE: an optional per-session ``cache`` dict memoizes (tenant, query,
+    pageSize) so a repeated subject is fetched once.
 ==============================================================================
 
 ARCHITECTURE (mirrors sources/schedule.py + sources/program_mapper.py):
@@ -59,8 +73,9 @@ from __future__ import annotations
 
 import json
 import re
+import time
 
-from .http import SourceDataError, get_json
+from .http import SourceDataError, SourceError, SourceHTTPError, get_json
 
 # ---- verified endpoint + tenants ------------------------------------------
 API_BASE = "https://portalapi-laccd.elumenapp.com/public/courses"
@@ -83,6 +98,21 @@ DEFAULT_TENANT = CAMPUS_TENANTS["LAMC"]
 # eLumen caps a query at 25 results per page.
 MAX_PAGE_SIZE = 25
 DEFAULT_MAX_PAGES = 20
+
+# ---- production-use guardrails (polite client; all overridable per call) ----
+# Minimum spacing between successive live eLumen requests (throttle). The FIRST
+# request of a batch is not delayed; each subsequent one waits this long. Set to
+# 0 to disable (callers that inject their own client manage their own pacing).
+REQUEST_DELAY_SECONDS = 1.0
+# Bounded retry on TRANSIENT failures (HTTP 429/5xx + transport timeouts). After
+# this many retries the last error propagates (a clean SourceError subclass).
+MAX_RETRIES = 3
+# Exponential backoff: sleep = min(BACKOFF_BASE * 2**attempt, BACKOFF_MAX).
+BACKOFF_BASE_SECONDS = 1.0
+BACKOFF_MAX_SECONDS = 30.0
+# Statuses treated as transient (worth a backoff retry). Every other 4xx is a
+# hard client error and fails immediately; data-shape drift never retries.
+RETRYABLE_STATUS = frozenset({429, 500, 502, 503, 504})
 
 # The leaf itemType values that count as a hard prerequisite ordering
 # constraint (after collapsing case + hyphens/spaces). Co-Requisite ("corequisite")
@@ -370,9 +400,77 @@ def course_record(wrapper):
     return {"course_id": course_id, "raw": raw, "dnf": dnf}
 
 
+# ---- production-use guardrails: throttle + bounded backoff retry ----------
+class _RateLimiter:
+    """Spaces successive live requests at least ``min_interval`` seconds apart.
+
+    Monotonic-clock based. The FIRST ``wait()`` never sleeps; each later one
+    sleeps only the time still remaining since the previous request, so a slow
+    request "pays" toward the interval. ``min_interval <= 0`` disables it (a
+    no-op), which is what an injected-client caller — managing its own pacing —
+    gets by passing ``request_delay=0``.
+    """
+
+    def __init__(self, min_interval):
+        self.min_interval = max(0.0, float(min_interval))
+        self._last = None
+
+    def wait(self):
+        if self.min_interval <= 0:
+            return
+        if self._last is not None:
+            remaining = self.min_interval - (time.monotonic() - self._last)
+            if remaining > 0:
+                time.sleep(remaining)
+        self._last = time.monotonic()
+
+
+def _is_retryable(exc):
+    """True iff ``exc`` is a TRANSIENT failure worth a bounded backoff retry.
+
+    Retryable: HTTP 429/5xx (a SourceHTTPError whose underlying httpx status is
+    in RETRYABLE_STATUS) and transport/timeout failures (a bare SourceError that
+    is NOT one of its more specific subclasses). NOT retryable: SourceDataError
+    (JSON / schema drift — retrying cannot fix bad data) and any other 4xx
+    (a hard client error: bad campus/query/params).
+    """
+    if isinstance(exc, SourceHTTPError):
+        status = getattr(getattr(exc.__cause__, "response", None),
+                         "status_code", None)
+        return status in RETRYABLE_STATUS
+    if isinstance(exc, SourceDataError):
+        return False
+    return isinstance(exc, SourceError)
+
+
+def _backoff_seconds(attempt):
+    return min(BACKOFF_BASE_SECONDS * (2 ** attempt), BACKOFF_MAX_SECONDS)
+
+
+def _get_json_retrying(url, *, params, client, source, max_retries=MAX_RETRIES):
+    """``get_json`` with bounded exponential backoff on transient failures.
+
+    Retries ONLY transient errors (429/5xx + timeouts), at most ``max_retries``
+    times, sleeping ``_backoff_seconds(attempt)`` between tries. A non-retryable
+    error (other 4xx, JSON/shape drift) propagates immediately. After the final
+    retry the LAST error propagates unchanged — always a clean SourceError
+    subclass, never a raw httpx traceback.
+    """
+    attempt = 0
+    while True:
+        try:
+            return get_json(url, params=params, client=client, source=source)
+        except SourceError as exc:
+            if attempt >= max_retries or not _is_retryable(exc):
+                raise
+            time.sleep(_backoff_seconds(attempt))
+            attempt += 1
+
+
 # ---- networked fetch (thin shell around get_json) -------------------------
 def fetch_courses(campus, query, *, client=None, page_size=MAX_PAGE_SIZE,
-                  max_pages=DEFAULT_MAX_PAGES):
+                  max_pages=DEFAULT_MAX_PAGES, request_delay=REQUEST_DELAY_SECONDS,
+                  max_retries=MAX_RETRIES, cache=None, _rate_limiter=None):
     """Fetch raw course wrappers for one query, following pagination.
 
     Hits the verified eLumen endpoint via ``sources.http.get_json`` (browser UA,
@@ -380,11 +478,31 @@ def fetch_courses(campus, query, *, client=None, page_size=MAX_PAGE_SIZE,
     returns fewer than ``page_size`` courses (or ``_embedded``/``courses`` is
     absent/empty), and never exceeds ``max_pages`` (politeness bound).
 
+    Production-use guardrails (a polite, BOUNDED client — never a broad crawl):
+      - THROTTLE: successive requests are spaced >= ``request_delay`` seconds
+        apart (``_RateLimiter``). The first request is not delayed. Pass
+        ``request_delay=0`` to disable (e.g. when you inject your own client and
+        manage pacing yourself).
+      - RETRY: transient failures (HTTP 429/5xx + timeouts) are retried with
+        bounded exponential backoff (``max_retries``); other 4xx and JSON/shape
+        drift fail immediately and cleanly.
+      - CACHE: pass a ``cache`` dict to memoize per ``(tenant, query, page_size)``
+        within a session, so a repeated subject is fetched ONCE (no redundant
+        load on the endpoint). A cache hit performs no request and no throttle.
+
     Raises ``SourceDataError`` (naming the source) if a page is not a dict or its
     ``_embedded`` is present but the wrong type — so schema drift surfaces by name.
     """
     page_size = min(int(page_size), MAX_PAGE_SIZE)
     tenant = tenant_for(campus)
+
+    cache_key = (tenant, query, page_size)
+    if cache is not None and cache_key in cache:
+        # Session cache hit: no network, no throttle. Return a copy so a caller
+        # mutating the list cannot corrupt the cached entry.
+        return list(cache[cache_key])
+
+    limiter = _rate_limiter if _rate_limiter is not None else _RateLimiter(request_delay)
     wrappers = []
     for page in range(1, int(max_pages) + 1):
         params = {
@@ -394,9 +512,11 @@ def fetch_courses(campus, query, *, client=None, page_size=MAX_PAGE_SIZE,
             "pageSize": page_size,
             "page": page,
         }
-        data = get_json(
+        limiter.wait()  # throttle: space successive requests apart (no-op on first)
+        data = _get_json_retrying(
             API_BASE, params=params, client=client,
             source=f"{SOURCE} courses ({campus} q={query!r} p{page})",
+            max_retries=max_retries,
         )
         if not isinstance(data, dict):
             raise SourceDataError(
@@ -426,25 +546,44 @@ def fetch_courses(campus, query, *, client=None, page_size=MAX_PAGE_SIZE,
         wrappers.extend(page_courses)
         if len(page_courses) < page_size:
             break
+    if cache is not None:
+        # Memoize a copy so later mutation of our return value cannot corrupt it.
+        cache[cache_key] = list(wrappers)
     return wrappers
 
 
 def fetch_prereq_records(campus, queries, *, client=None,
-                         page_size=MAX_PAGE_SIZE, max_pages=DEFAULT_MAX_PAGES):
+                         page_size=MAX_PAGE_SIZE, max_pages=DEFAULT_MAX_PAGES,
+                         request_delay=REQUEST_DELAY_SECONDS,
+                         max_retries=MAX_RETRIES, cache=None):
     """Fetch + parse records across many queries (e.g. subject codes).
 
     Returns ``(records, fetched_course_ids)``: ``records`` is the de-duplicated
     list of ``{course_id, raw, dnf}`` (first wrapper wins per course_id),
     ``fetched_course_ids`` is the set of every course_id eLumen returned. A
     string ``queries`` is treated as one query.
+
+    Production-use guardrails: a SINGLE shared ``_RateLimiter`` throttles every
+    request across ALL queries (so N subjects are spaced apart, not just pages
+    within one subject), and a SHARED session ``cache`` dedupes repeated
+    (tenant, query, page_size) lookups. ``request_delay``/``max_retries`` tune
+    the throttle and bounded backoff. Bounded by design: it queries ONLY the
+    given ``queries`` (the selected program's subjects) — never a broad crawl.
     """
     if isinstance(queries, str):
         queries = [queries]
+    # One shared limiter + cache for the whole batch: throttle spans queries, and
+    # a subject seen twice (e.g. cross-listed) is fetched once.
+    limiter = _RateLimiter(request_delay)
+    if cache is None:
+        cache = {}
     records = []
     seen = set()
     for query in queries:
         for wrapper in fetch_courses(campus, query, client=client,
-                                     page_size=page_size, max_pages=max_pages):
+                                     page_size=page_size, max_pages=max_pages,
+                                     max_retries=max_retries, cache=cache,
+                                     _rate_limiter=limiter):
             record = course_record(wrapper)
             if record is None:
                 continue
@@ -495,7 +634,9 @@ def compute_coverage(records, known_course_ids=None, *, requested_course_ids=Non
 # ---- top-level convenience -------------------------------------------------
 def prereq_map_for_campus(campus, queries, *, client=None,
                           known_course_ids=None, requested_course_ids=None,
-                          page_size=MAX_PAGE_SIZE, max_pages=DEFAULT_MAX_PAGES):
+                          page_size=MAX_PAGE_SIZE, max_pages=DEFAULT_MAX_PAGES,
+                          request_delay=REQUEST_DELAY_SECONDS,
+                          max_retries=MAX_RETRIES, cache=None):
     """Fetch eLumen, build the CNF prereq map, and report coverage.
 
     Returns ``(prereq_map, results, coverage)``:
@@ -505,13 +646,18 @@ def prereq_map_for_campus(campus, queries, *, client=None,
         flags) from the same call;
       - ``coverage``: the ``compute_coverage`` summary.
 
+    The production-use guardrails (``request_delay`` throttle, ``max_retries``
+    bounded backoff, session ``cache``) are forwarded to ``fetch_prereq_records``;
+    the fetch is bounded to ``queries`` only — never a broad crawl.
+
     Imports ``sources.elumen`` lazily so the pure parser/normalizer above stay
     importable without pulling its (inert) dependency chain on the hot path.
     """
     from . import elumen as _elumen  # noqa: WPS433 (lazy, keeps hot path pure)
 
     records, _fetched = fetch_prereq_records(
-        campus, queries, client=client, page_size=page_size, max_pages=max_pages
+        campus, queries, client=client, page_size=page_size, max_pages=max_pages,
+        request_delay=request_delay, max_retries=max_retries, cache=cache,
     )
     prereqs, results = _elumen.build_prereq_map(records)
     coverage = compute_coverage(

@@ -241,10 +241,17 @@ prerequisite logic from the public, unauthenticated eLumen Portal API
 (`portalapi-laccd.elumenapp.com`). Only `itemType=Prerequisite` leaves become
 ordering constraints (corequisites and advisories are excluded), and every
 eLumen network call happens during the workbook build — never inside
-`engine.run`. It is **not** production-cleared: eLumen Terms-of-Use / rate-limit
-review and human approval are pending, and the eLumen↔schedule course-id join is
-audited only via the run's printed coverage report. The bundled desktop demo
-does not invoke it.
+`engine.run`. It is **opt-in** (default off) and a **polite, bounded** client:
+selected campus + the chosen program's subjects only (no background crawl),
+request throttling (≥ 1 s spacing), a per-session cache, and bounded
+exponential-backoff retry on 429/5xx/timeouts (other 4xx and shape-drift fail
+fast and cleanly). It reads **catalog/prerequisite data only — no student or
+instructor PII**. It is **not** production-cleared: eLumen Terms-of-Use /
+rate-limit review and human approval are pending (live use is **approval-gated**),
+and the eLumen↔schedule course-id join is audited only via the run's printed
+coverage report. The bundled desktop demo does not invoke it. Full details,
+guardrail defaults, privacy posture, and the approval gate are in
+[`docs/eLUMEN_LIVE_USAGE.md`](docs/eLUMEN_LIVE_USAGE.md).
 
 ## Known build risks / notes
 
