@@ -6,7 +6,7 @@ milestones (m0–m8) on `main` have shipped (see `docs/M8_QA_REPORT.md`); the co
 engine, privacy, performance, and determinism are already covered by automated
 tests (`python3 -m pytest -q`; `./scripts/run_qa.sh`). This document keeps every
 pytest expectation **count-agnostic** — the passed count grows as tests are added,
-so only `failed`/`error` matter (the single frozen figure is the **3** `live`-marked
+so only `failed`/`error` matter (the single frozen figure is the **4** `live`-marked
 tests the gate deselects, which is a locked invariant, not a pass count).
 
 The checks are grouped into clearly-separated QA categories. Run the **automated
