@@ -13,6 +13,15 @@ CP-SAT solver. Works on real LACCD data or a bundled synthetic demo.
 pip install -r requirements.txt
 ```
 
+For a **reproducible** install (CI and release builds use this), install the
+pinned, hash-checked lockfile instead of the loose requirements:
+
+```bash
+pip install --require-hashes -r requirements.lock
+```
+
+See [`docs/CI.md`](docs/CI.md) for the CI layout and the lockfile workflow.
+
 ### Run the headless analysis
 
 ```bash
@@ -222,6 +231,7 @@ per-OS pywebview backends are in `docs/CROSS_PLATFORM_BUILD.md`.
 - `PRD.md` — product requirements; §12 milestone table reconciled to shipped reality.
 - `TECH_SPEC.md` — technical design.
 - `BUILD.md` — verified macOS PyInstaller build.
+- `docs/CI.md` — CI workflows + the reproducible, hash-pinned dependency lockfile.
 - `docs/CROSS_PLATFORM_BUILD.md` — Windows/Linux build recipes (prepared, unverified here).
 - `docs/M8_QA_REPORT.md` — what is verified headlessly vs. manual-only + the PRD F/N coverage matrix.
 - `docs/live_smoke_2026.md` — captured live LACCD network smoke transcript.

@@ -376,3 +376,55 @@ python3 engine.py                                      # A7: zero-arg engine run
 ./scripts/verify_macos_build.sh --self-test            # A8: verifier negative control
 python3 -m pytest -m live -q -rs                        # A9/B3: live (network/Ollama gated)
 ```
+
+---
+
+## Addendum (2026-05-30) — prod-ci-lock: CI gating + reproducible installs
+
+This addendum records the `prod-ci-lock` change (CI + dependency locking). The
+sections above are the point-in-time m8 record and are left unchanged.
+
+### Discovered: clean-install determinism failure (now fixed)
+
+On a **fresh** `pip install -r requirements.txt` (loose bounds), the offline
+suite was **red**, not green: `test_sample_generation_is_byte_identical`
+(`tests/test_sample_enrollment_fixture.py`) failed because the committed
+`files/lamc_sample_enrollment.xlsx` had been serialized by older xlsx writer
+libraries (pandas/openpyxl/numpy) than a current install resolves. Two *fresh*
+generations matched each other (generation is deterministic); only the
+*committed* bytes were stale. Engine output on the fixture was unchanged (the
+snapshot/causation tests passed throughout), i.e. a serialization drift, not a
+logic change.
+
+**Fix:** regenerated the fixture under the pinned lock
+(`generate_synthetic.py --enrollment-sample --out files/lamc_sample_enrollment.xlsx`)
+so it is byte-reproducible against `requirements.lock`. Offline suite is now
+**217 passed, 3 deselected** on both the locked and the (current) loose installs,
+on Python 3.12 and 3.13.
+
+### Now CI-gated (GitHub Actions — see `docs/CI.md`)
+
+| Area | Status | Where |
+|---|---|---|
+| Non-live offline suite (reproducible) | **H — CI** | `ci.yml` `test`: `pip install --require-hashes -r requirements.lock` then `scripts/run_qa.sh`, macOS, Python 3.12 + 3.13 |
+| Live tests deselected by default | **H — CI** | `pytest.ini` `addopts = -m "not live"`; live run only via `live-tests.yml` (manual/weekly), never on PR |
+| Build-resource verification (feasible part) | **H — CI** | `ci.yml` `build-verify`: `verify_macos_build.sh --self-test` (portable negative control) |
+| Reproducible dependency install | **H** | committed `requirements.lock` (universal, hash-pinned); installs via plain `pip --require-hashes` (verified on 3.12 + 3.13) |
+| Lint (syntax/undefined-name) | **H — CI** | `ci.yml` `lint`: `ruff check --select E9,F63,F7,F82` |
+| Upstream drift visibility | **H — CI (advisory)** | `ci.yml` `drift`: scheduled, non-blocking, loose-deps suite |
+
+### Still manual / deferred (unchanged from §B, no overclaim)
+
+- **macOS binary build in CI** — `release-build.yml` exists (manual dispatch,
+  installs from the lock, runs `build_macos.sh` + `verify_macos_build.sh`,
+  uploads the unsigned `.app`) but **has not yet been executed on a hosted
+  runner**; validate on first dispatch before enabling tag triggers.
+- **Code signing / notarization (§B4)** — still **not performed**. The bundle is
+  unsigned and un-notarized; CI does not sign. Needs an Apple Developer ID cert +
+  notarytool.
+- **Windows / Linux builds (§B2)** — still manual; PyInstaller is not a
+  cross-compiler. Test runners are macOS-only because `app.py` imports
+  `webview` (a Linux/Windows runner would need a GTK/Qt backend).
+- **Bit-for-bit reproducible *binaries*** — out of scope; only the *dependency
+  set* is pinned. PyInstaller embeds timestamps/paths.
+- **GUI pixels (§B1) and live Ollama AI (§B3)** — manual, as before.

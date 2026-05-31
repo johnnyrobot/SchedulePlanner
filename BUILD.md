@@ -42,10 +42,23 @@ python -m pip install -r requirements.txt
 python -m pip install pyinstaller
 ```
 
-`requirements.txt` already pins the runtime stack (pandas, openpyxl, ortools,
-pywebview, httpx) plus `pytest` for the test suite. PyInstaller is the only
-build tool intentionally excluded from `requirements.txt` (install it
-separately, as above).
+`requirements.txt` lists the runtime stack (pandas, openpyxl, ortools,
+pywebview, httpx) plus `pytest` for the test suite with loose lower bounds.
+PyInstaller is the only build tool intentionally excluded from
+`requirements.txt` (install it separately, as above).
+
+For a **reproducible** build, install the pinned, hash-checked lockfile instead
+of the loose file — it resolves exactly one version of every (transitive)
+dependency and verifies each artifact's hash:
+
+```bash
+python -m pip install --require-hashes -r requirements.lock
+python -m pip install pyinstaller   # build tool; not in the lock
+```
+
+The release-build CI (`.github/workflows/release-build.yml`) uses this locked
+path. See **[`docs/CI.md`](docs/CI.md)** for the lockfile + regeneration
+workflow and the full CI layout.
 
 ## The build command (tested)
 
@@ -274,8 +287,39 @@ python -m PyInstaller `
   app.py
 ```
 
+## Continuous integration & reproducible installs
+
+CI runs on GitHub Actions (see **[`docs/CI.md`](docs/CI.md)** for the full
+layout):
+
+- **`ci.yml`** (push + PR) — the gating `test` job installs `requirements.lock`
+  with `--require-hashes` on macOS (Python 3.12 + 3.13) and runs
+  `scripts/run_qa.sh` (offline suite with `-m "not live"` plus the
+  live-deselected gate). A `lint` job runs `ruff` critical rules; a
+  `build-verify` job runs `scripts/verify_macos_build.sh --self-test` (the
+  portable resource-checker negative control); a scheduled, non-blocking `drift`
+  job re-runs the suite against the loose `requirements.txt` to surface upstream
+  drift.
+- **`live-tests.yml`** — the `live`-marked network tests, manual/weekly only,
+  never on PR.
+- **`release-build.yml`** — manual macOS PyInstaller build from the lock +
+  `verify_macos_build.sh` + artifact upload.
+
+**What CI deliberately does not do:** no code signing or notarization (the
+bundle is unsigned — see "macOS Gatekeeper bypass" above), no Windows/Linux
+build (manual, per `docs/CROSS_PLATFORM_BUILD.md`), and no claim of bit-for-bit
+identical *binaries* — only the *dependency set* is pinned (via the lock).
+
+`requirements.lock` pins the loose `requirements.txt` set to exact, hashed
+versions; the committed synthetic fixture
+`files/lamc_sample_enrollment.xlsx` is byte-reproducible against that locked set
+(regenerate it when you bump the lock — see `docs/CI.md`). Local development is
+unchanged: `pip install -r requirements.txt` still works with loose bounds.
+
 ## See also
 
+- `docs/CI.md` — CI workflows, the reproducible lockfile, and lock/fixture
+  regeneration.
 - `docs/CROSS_PLATFORM_BUILD.md` — Windows/Linux recipes, per-OS pywebview
   backends, and the shared `verify_build_resources.sh` resource checker.
 - `docs/M8_QA_REPORT.md` — what was verified headlessly vs. what is manual-only
