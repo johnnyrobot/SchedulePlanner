@@ -17,14 +17,37 @@ LIVE REALITY (what one run actually produces):
     detectors are INERT and the solver runs without prerequisite ordering.
     These gaps are surfaced as structured fields in the report below (not
     hidden). The optional m7 enrichment flags --enrollment (an IR PeopleSoft
-    export joined onto the fetched sections) and --elumen-fixture (a DNF->CNF
-    prereq map threaded into the catalog) can FLIP these detectors to active;
-    that enrichment runs OUTSIDE engine.run, before the workbook write. Both
-    paths carry honest caveats: the enrollment join is fixture-scoped (the
+    export joined onto the fetched sections) and --elumen-fixture / --elumen-live
+    (a DNF->CNF prereq map threaded into the catalog) can FLIP these detectors to
+    active; that enrichment runs OUTSIDE engine.run, before the workbook write.
+    These paths carry honest caveats: the enrollment join is fixture-scoped (the
     live-schedule <-> IR (term, CRN) join is not validated on real data, and
     today's committed fixtures match zero sections so a real --enrollment run
-    stays inert), and the eLumen prereq slice is fixture-only (not validated
-    on real eLumen data).
+    stays inert); the --elumen-fixture prereq slice is fixture-only (not
+    validated on real eLumen data); and --elumen-live (below) is best-effort
+    against a real-but-unreviewed endpoint.
+
+eLumen prerequisites (two mutually-exclusive sources):
+  - --elumen-fixture PATH  loads a committed JSON DNF capture (offline,
+    reproducible) and threads a course-id -> CNF-string prereq map into the
+    catalog sheet. Labeled FIXTURE-ONLY.
+  - --elumen-live          fetches prerequisites from the REAL public eLumen
+    catalog endpoint for the campus tenant (sources.elumen_client). Network is
+    required; this is opt-in only and never default-on.
+
+Live eLumen semantics & caveats (NO OVERCLAIMING):
+  - Only leaf requisites whose itemType is "Prerequisite" become hard ordering
+    constraints; corequisites and advisories are deliberately EXCLUDED.
+  - The eLumen catalog joins to the schedule / Program Mapper catalogs on a
+    normalized course id (uppercased, trimmed, leading zeros stripped, e.g.
+    "BIOLOGY 03" -> "BIOLOGY 3"). This join is validated ONLY via the per-build
+    coverage report (report["elumen_coverage"]); inspect it before trusting the
+    result.
+  - The endpoint is public + unauthenticated, but ToU / rate-limit /
+    human-approval review are PENDING. Live fetches are best-effort, not
+    production-ready.
+  - If BOTH --elumen-fixture and --elumen-live are supplied, LIVE wins and a
+    warning is recorded in report["warnings"].
 
 To produce a representative MULTI-TERM sample for the Biology AS-T at Mission
 College across a full year window, run exactly:
@@ -44,7 +67,7 @@ import os
 import httpx
 
 import engine
-from sources import elumen, enrollment, mapping, program_mapper, schedule
+from sources import elumen, elumen_client, enrollment, mapping, program_mapper, schedule
 
 
 def build(campus, terms, program_query, *, client=None):
@@ -177,13 +200,22 @@ def _enrollment_detector_entries(*, source, matched, total):
     ]
 
 
-def _prereq_detector_entry(*, source, results):
+def _prereq_detector_entry(*, source, results, live=False, coverage=None):
     """Build the prerequisite_ordering report entry.
 
     Flips to "active" when a prereq map was threaded in (``results`` is not
     None). Per-course it distinguishes exact-CNF courses from budget/fallback
-    courses (the latter labeled *conservative-permissive, not exact*). The whole
-    eLumen path is labeled *fixture-only* (no real eLumen endpoint/response).
+    courses (the latter labeled *conservative-permissive, not exact*).
+
+    Provenance label depends on ``live``:
+      - live=False -> FIXTURE-ONLY (parsed from a committed self-defined fixture,
+        not validated on real eLumen data).
+      - live=True  -> a REAL eLumen source (itemType=Prerequisite only;
+        coreqs/advisories excluded) with honest caveats: ToU / rate-limit /
+        human-approval pending, and the eLumen<->schedule/Program-Mapper
+        course-id join validated ONLY via the coverage report (normalized course
+        ids, e.g. leading zeros stripped). The ``coverage`` dict is attached so
+        consumers can audit that join.
     """
     if results is None:
         return dict(next(d for d in INERT_DETECTORS
@@ -195,13 +227,25 @@ def _prereq_detector_entry(*, source, results):
             exact.append(cid)
         else:
             fallback.append({"course": cid, "reason": res.fallback_reason})
-    return {
+
+    if live:
+        label = ("REAL eLumen (live public catalog endpoint, "
+                 "itemType=Prerequisite only; coreqs/advisories excluded). "
+                 "NOT production-ready: ToU / rate-limit / human-approval review "
+                 "PENDING. The eLumen<->schedule/Program-Mapper course-id join is "
+                 "validated ONLY via the coverage report (normalized course ids, "
+                 "e.g. leading zeros stripped: 'BIOLOGY 03' -> 'BIOLOGY 3').")
+    else:
+        label = ("FIXTURE-ONLY: the eLumen prereq slice is parsed from a "
+                 "self-defined committed fixture and is NOT validated on real "
+                 "eLumen data.")
+
+    entry = {
         "detector": "prerequisite_ordering",
         "status": "active",
         "source": source,
-        "label": ("FIXTURE-ONLY: the eLumen prereq slice is parsed from a "
-                  "self-defined committed fixture and is NOT validated on real "
-                  "eLumen data."),
+        "live": bool(live),
+        "label": label,
         "prereq_summary": {
             "exact_count": len(exact),
             "fallback_count": len(fallback),
@@ -212,11 +256,14 @@ def _prereq_detector_entry(*, source, results):
                                "ordering for those courses is relaxed but flagged"),
         },
     }
+    if coverage is not None:
+        entry["coverage"] = coverage
+    return entry
 
 
 def analyze_live(campus, terms, program_query, out_path, *, client=None,
-                 enrollment_path=None, elumen_fixture=None, enrollment_map=None,
-                 prereq_max_clauses=None):
+                 enrollment_path=None, elumen_fixture=None, elumen_live=False,
+                 enrollment_map=None, prereq_max_clauses=None):
     """Run the full live pipeline and return a structured, JSON-serializable report.
 
     The report carries the reconciliation (matched/unmatched program courses)
@@ -234,10 +281,32 @@ def analyze_live(campus, terms, program_query, out_path, *, client=None,
         into the catalog sheet. ``prereq_max_clauses`` overrides the DNF->CNF
         clause-budget guard (a budget-exceeded course falls back to a flagged
         conservative-permissive union clause).
+      - ``elumen_live`` fetches the SAME shape of records from the REAL public
+        eLumen catalog endpoint (sources.elumen_client) instead of a fixture, for
+        the subjects the fetched sections cover, then runs the SAME
+        elumen.build_prereq_map. A per-build coverage report is attached to
+        report["elumen_coverage"]. Caveat: ToU / rate-limit / human-approval are
+        PENDING; the eLumen<->catalog join is validated only via that coverage.
+        If both ``elumen_live`` and ``elumen_fixture`` are given, LIVE wins,
+        ``elumen_fixture`` is ignored, and a warning is recorded in
+        report["warnings"].
 
     The enrollment/prereq enrichment runs HERE, never inside engine.run(): the
-    engine still reads a finished workbook only.
+    engine still reads a finished workbook only. When ``elumen_live`` is set and
+    no client is injected, this opens its own httpx.Client (mirroring build()),
+    so all network IO stays OUTSIDE engine.run().
     """
+    # Precedence: LIVE beats FIXTURE. Record a human-readable warning if both
+    # were requested, so the report makes the override explicit (never silent).
+    warnings = []
+    if elumen_live and elumen_fixture is not None:
+        warnings.append(
+            "Both --elumen-live and --elumen-fixture were supplied; using LIVE "
+            "eLumen and ignoring the fixture "
+            f"({elumen_fixture!r})."
+        )
+        elumen_fixture = None
+
     sections, program = build(campus, terms, program_query, client=client)
 
     report = {
@@ -250,6 +319,8 @@ def analyze_live(campus, terms, program_query, out_path, *, client=None,
         "results": None,
         "error": None,
     }
+    if warnings:
+        report["warnings"] = warnings
 
     if program is None:
         report["error"] = (f"No program matched {program_query!r} at {campus}. "
@@ -272,11 +343,51 @@ def analyze_live(campus, terms, program_query, out_path, *, client=None,
         sections = enrollment.enrich_sections(sections, enrollment_data)
         matched_sections = sum(1 for r in sections if "Cap Enrl" in r)
 
-    # --- eLumen prereq map (outside engine.run, fixture-only) ----------------
+    # --- eLumen prereq map (outside engine.run) ------------------------------
+    # Two mutually-exclusive sources feed the SAME elumen.build_prereq_map
+    # (DNF->CNF unchanged). LIVE wins over FIXTURE (precedence enforced above).
     prereq_map = None
     prereq_results = None
     elumen_source = None
-    if elumen_fixture is not None:
+    elumen_live_active = False
+    elumen_coverage = None
+    if elumen_live:
+        # Subjects to query eLumen for = the non-empty subjects the fetched
+        # sections actually cover (sorted, unique) — so we only hit the endpoint
+        # for the catalog we built.
+        subjects = sorted({
+            str(r.get("subject")).strip()
+            for r in sections
+            if str(r.get("subject") or "").strip()
+        })
+        # The course-id universe we can JOIN a prereq onto: every section course
+        # plus every program course, normalized the same way the catalog is.
+        known_course_ids = (
+            {mapping._norm(r.get("course")) for r in sections}
+            | {mapping._norm(c["course_id"]) for c in program["courses"]}
+        )
+        requested_course_ids = {c["course_id"] for c in program["courses"]}
+
+        # Network IO stays OUTSIDE engine.run: reuse an injected client, else
+        # open + own one (mirrors build()'s pattern).
+        if client is not None:
+            records, _fetched = elumen_client.fetch_prereq_records(
+                campus, subjects, client=client)
+        else:
+            with httpx.Client(timeout=30.0) as owned:
+                records, _fetched = elumen_client.fetch_prereq_records(
+                    campus, subjects, client=owned)
+
+        kwargs = {}
+        if prereq_max_clauses is not None:
+            kwargs["max_clauses"] = prereq_max_clauses
+        prereq_map, prereq_results = elumen.build_prereq_map(records, **kwargs)
+        elumen_coverage = elumen_client.compute_coverage(
+            records, known_course_ids, requested_course_ids=requested_course_ids)
+        report["elumen_coverage"] = elumen_coverage
+        elumen_source = f"eLumen live: {elumen_client.tenant_for(campus)}"
+        elumen_live_active = True
+    elif elumen_fixture is not None:
         elumen_source = elumen_fixture
         records = elumen.load_elumen_fixture(elumen_fixture)
         kwargs = {}
@@ -304,7 +415,9 @@ def analyze_live(campus, terms, program_query, out_path, *, client=None,
         _enrollment_detector_entries(source=enrollment_source,
                                      matched=matched_sections,
                                      total=len(sections))
-        + [_prereq_detector_entry(source=elumen_source, results=prereq_results)]
+        + [_prereq_detector_entry(source=elumen_source, results=prereq_results,
+                                  live=elumen_live_active,
+                                  coverage=elumen_coverage)]
     )
 
     os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
@@ -349,13 +462,25 @@ def _print_banner(report):
         ("prerequisite_ordering", "inert"): (
             "Prerequisites blank (need eLumen) -> solver runs without ordering "
             "constraints."),
-        ("prerequisite_ordering", "active"): (
-            "prerequisite_ordering ACTIVE (fixture-only: eLumen prereq CNF "
-            "threaded; not validated on real eLumen data) -> solver enforces "
-            "ordering constraints."),
+        # ("prerequisite_ordering", "active") is handled below by provenance
+        # (live vs fixture): a static "fixture-only" line here would mislabel an
+        # --elumen-live run, so it is intentionally NOT in this dict.
     }
     for d in report["inert_detectors"]:
-        line = _BANNER_LINES.get((d["detector"], d["status"]))
+        if d["detector"] == "prerequisite_ordering" and d["status"] == "active":
+            # The ACTIVE prereq note must reflect the real provenance; a hardcoded
+            # "fixture-only" line would contradict the JSON detector on a live run.
+            if d.get("live"):
+                line = ("prerequisite_ordering ACTIVE (REAL eLumen: live public "
+                        "catalog, itemType=Prerequisite only; ToU/rate-limit/"
+                        "human-approval PENDING, join validated only via coverage "
+                        "report) -> solver enforces ordering constraints.")
+            else:
+                line = ("prerequisite_ordering ACTIVE (fixture-only: eLumen prereq "
+                        "CNF threaded; not validated on real eLumen data) -> solver "
+                        "enforces ordering constraints.")
+        else:
+            line = _BANNER_LINES.get((d["detector"], d["status"]))
         if line is not None:
             print(f"NOTE: {line}")
 
@@ -378,12 +503,22 @@ def main():
         "--elumen-fixture", default=None, dest="elumen_fixture",
         help=("optional FIXTURE-ONLY eLumen DNF prereq fixture (.json) to thread "
               "into the catalog sheet (not validated on real eLumen data)."))
+    ap.add_argument(
+        "--elumen-live", action="store_true", dest="elumen_live",
+        help=("fetch prerequisites from the REAL public eLumen catalog endpoint "
+              "for the campus tenant (network required; itemType=Prerequisite "
+              "only, coreqs/advisories excluded). NO OVERCLAIMING: ToU / "
+              "rate-limit / human-approval review are PENDING, so this is "
+              "best-effort and NOT production-ready; the eLumen<->catalog join "
+              "is validated only via the coverage report. If --elumen-fixture is "
+              "also given, --elumen-live wins."))
     args = ap.parse_args()
     terms = [int(t) for t in args.terms.split(",") if t.strip()]
 
     report = analyze_live(args.campus, terms, args.program, args.out,
                           enrollment_path=args.enrollment,
-                          elumen_fixture=args.elumen_fixture)
+                          elumen_fixture=args.elumen_fixture,
+                          elumen_live=args.elumen_live)
     if report["error"]:
         _print_banner(report)
         raise SystemExit(1)

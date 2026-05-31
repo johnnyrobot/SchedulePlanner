@@ -1,0 +1,67 @@
+{
+  "_comment": "SANITIZED real-shape eLumen Public Portal response. Captured live 2026-05-30 from GET https://portalapi-laccd.elumenapp.com/public/courses (status=approved, tenant=lamission.elumenapp.com). PUBLIC, unauthenticated, no PII. Trimmed to fields the client reads. Leaf 'itemType' is the requisite discriminator (Prerequisite | Advisory | Co-Requisite); there is NO requisiteType field. Leaf codes are CONCATENATED (e.g. BIOTECH002, BIOLOGY005). Node 'type' is AND | OR | SINGLE. Shape is REAL; do not hand-edit the grammar.",
+  "_embedded": {
+    "courses": [
+      {
+        "subject": "ANATOMY",
+        "number": "001",
+        "suffix": "Not Appl",
+        "code": "ANATOMY001",
+        "fullCourseInfo": "{\"courseTitle\": \"Introduction To Human Anatomy\", \"requisites\": {\"type\": \"OR\", \"blockList\": [{\"type\": \"AND\", \"blockList\": [{\"type\": \"SINGLE\", \"item\": {\"isCourse\": true, \"itemType\": \"Prerequisite\", \"code\": \"BIOLOGY005\"}, \"blockList\": []}]}, {\"type\": \"AND\", \"blockList\": [{\"type\": \"SINGLE\", \"item\": {\"isCourse\": true, \"itemType\": \"Prerequisite\", \"code\": \"BIOLOGY003\"}, \"blockList\": []}]}]}}"
+      },
+      {
+        "subject": "BIOTECH",
+        "number": "102",
+        "suffix": "Not Appl",
+        "code": "BIOTECH102",
+        "fullCourseInfo": "{\"courseTitle\": \"Cell Culture\", \"requisites\": {\"type\": \"OR\", \"blockList\": [{\"type\": \"AND\", \"blockList\": [{\"type\": \"SINGLE\", \"item\": {\"isCourse\": true, \"itemType\": \"Prerequisite\", \"code\": \"BIOTECH002\"}, \"blockList\": []}, {\"type\": \"SINGLE\", \"item\": {\"isCourse\": true, \"itemType\": \"Prerequisite\", \"code\": \"BIOTECH003\"}, \"blockList\": []}]}]}}"
+      },
+      {
+        "subject": "MICRO",
+        "number": "020",
+        "suffix": "Not Appl",
+        "code": "MICRO020",
+        "fullCourseInfo": "{\"courseTitle\": \"General Microbiology\", \"requisites\": {\"type\": \"OR\", \"blockList\": [{\"type\": \"AND\", \"blockList\": [{\"type\": \"SINGLE\", \"item\": {\"isCourse\": true, \"itemType\": \"Co-Requisite\", \"code\": \"CHEM051\"}, \"blockList\": []}, {\"type\": \"SINGLE\", \"item\": {\"isCourse\": true, \"itemType\": \"Prerequisite\", \"code\": \"BIOLOGY003\"}, \"blockList\": []}]}, {\"type\": \"AND\", \"blockList\": [{\"type\": \"SINGLE\", \"item\": {\"isCourse\": true, \"itemType\": \"Co-Requisite\", \"code\": \"CHEM051\"}, \"blockList\": []}, {\"type\": \"SINGLE\", \"item\": {\"isCourse\": true, \"itemType\": \"Prerequisite\", \"code\": \"BIOLOGY005\"}, \"blockList\": []}]}, {\"type\": \"AND\", \"blockList\": [{\"type\": \"SINGLE\", \"item\": {\"isCourse\": true, \"itemType\": \"Co-Requisite\", \"code\": \"CHEM065\"}, \"blockList\": []}, {\"type\": \"SINGLE\", \"item\": {\"isCourse\": true, \"itemType\": \"Prerequisite\", \"code\": \"BIOLOGY003\"}, \"blockList\": []}]}, {\"type\": \"AND\", \"blockList\": [{\"type\": \"SINGLE\", \"item\": {\"isCourse\": true, \"itemType\": \"Co-Requisite\", \"code\": \"CHEM065\"}, \"blockList\": []}, {\"type\": \"SINGLE\", \"item\": {\"isCourse\": true, \"itemType\": \"Prerequisite\", \"code\": \"BIOLOGY005\"}, \"blockList\": []}]}, {\"type\": \"AND\", \"blockList\": [{\"type\": \"SINGLE\", \"item\": {\"isCourse\": true, \"itemType\": \"Prerequisite\", \"code\": \"BIOTECH002\"}, \"blockList\": []}, {\"type\": \"SINGLE\", \"item\": {\"isCourse\": true, \"itemType\": \"Co-Requisite\", \"code\": \"CHEM051\"}, \"blockList\": []}]}, {\"type\": \"AND\", \"blockList\": [{\"type\": \"SINGLE\", \"item\": {\"isCourse\": true, \"itemType\": \"Prerequisite\", \"code\": \"BIOTECH002\"}, \"blockList\": []}, {\"type\": \"SINGLE\", \"item\": {\"isCourse\": true, \"itemType\": \"Co-Requisite\", \"code\": \"CHEM065\"}, \"blockList\": []}]}]}}"
+      },
+      {
+        "subject": "BIOTECH",
+        "number": "003",
+        "suffix": "Not Appl",
+        "code": "BIOTECH003",
+        "fullCourseInfo": "{\"courseTitle\": \"Biotechnology II\", \"requisites\": {\"type\": \"OR\", \"blockList\": [{\"type\": \"AND\", \"blockList\": [{\"type\": \"SINGLE\", \"item\": {\"isCourse\": true, \"itemType\": \"Prerequisite\", \"code\": \"BIOTECH002\"}, \"blockList\": []}]}]}}"
+      },
+      {
+        "subject": "BIOTECH",
+        "number": "008",
+        "suffix": "Not Appl",
+        "code": "BIOTECH008",
+        "fullCourseInfo": "{\"courseTitle\": \"Biological Research Internship\", \"requisites\": {\"type\": \"OR\", \"blockList\": [{\"type\": \"AND\", \"blockList\": [{\"type\": \"SINGLE\", \"item\": {\"isCourse\": true, \"itemType\": \"Co-Requisite\", \"code\": \"BIOTECH002\"}, \"blockList\": []}, {\"type\": \"SINGLE\", \"item\": {\"isCourse\": true, \"itemType\": \"Advisory\", \"code\": \"MATH227\"}, \"blockList\": []}]}, {\"type\": \"AND\", \"blockList\": [{\"type\": \"SINGLE\", \"item\": {\"isCourse\": true, \"itemType\": \"Co-Requisite\", \"code\": \"BIOTECH003\"}, \"blockList\": []}, {\"type\": \"SINGLE\", \"item\": {\"isCourse\": true, \"itemType\": \"Advisory\", \"code\": \"MATH227\"}, \"blockList\": []}]}]}}"
+      },
+      {
+        "subject": "BIOLOGY",
+        "number": "003",
+        "suffix": "Not Appl",
+        "code": "BIOLOGY003",
+        "fullCourseInfo": "{\"courseTitle\": \"Introduction to Biology\", \"requisites\": {}}"
+      },
+      {
+        "subject": "KIN MAJ",
+        "number": "102",
+        "suffix": "Not Appl",
+        "code": "KIN MAJ102",
+        "fullCourseInfo": "{\"courseTitle\": \"Introduction to Human Movement Anatomy\", \"requisites\": {}}"
+      }
+    ]
+  },
+  "pagination": {
+    "page": 1,
+    "pageSize": 25,
+    "totalElements": 7,
+    "totalPages": 1
+  },
+  "_links": {
+    "self": {
+      "href": "/public/courses?status=approved&tenant=lamission.elumenapp.com&query=...&page=1&pageSize=25"
+    }
+  }
+}

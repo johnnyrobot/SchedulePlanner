@@ -235,6 +235,17 @@ no persistence side effects inside `engine.run`. The only allowed network paths
 are optional public-source fetches (the live-in-UI / `sources/*` path) and
 optional local Ollama calls to `http://localhost:11434`. No telemetry.
 
+The optional `build_live_workbook.py --elumen-live` flag is one such
+public-source fetch (a sibling of the fixture-only `--elumen-fixture`): it pulls
+prerequisite logic from the public, unauthenticated eLumen Portal API
+(`portalapi-laccd.elumenapp.com`). Only `itemType=Prerequisite` leaves become
+ordering constraints (corequisites and advisories are excluded), and every
+eLumen network call happens during the workbook build — never inside
+`engine.run`. It is **not** production-cleared: eLumen Terms-of-Use / rate-limit
+review and human approval are pending, and the eLumen↔schedule course-id join is
+audited only via the run's printed coverage report. The bundled desktop demo
+does not invoke it.
+
 ## Known build risks / notes
 
 - **OR-Tools native libs** — the high-risk item. Resolved by
