@@ -89,13 +89,14 @@ def test_enrollment_detectors_activate_on_matched_inline_map(lamc_routes,
     assert any(d["course"] == norm_target for d in analysis["under_supply"]), \
         f"under_supply should fire for {norm_target}; got {analysis['under_supply']}"
 
-    # The detectors are reported ACTIVE (join matched >=1 row).
+    # modality_mismatch is reported ACTIVE (join matched >=1 row). under_supply
+    # is no longer in the inert-detector report — it fires live from the
+    # schedule's Waitlist status (sharpened here by the planted IR headcount).
     md = _detector(report, "modality_mismatch")
-    us = _detector(report, "under_supply")
     assert md["status"] == "active"
-    assert us["status"] == "active"
+    assert not [d for d in report["inert_detectors"] if d["detector"] == "under_supply"]
     # Enrollment activation labeled fixture-scoped (live<->IR not validated live).
-    blob = (json.dumps(md) + json.dumps(us)).lower()
+    blob = json.dumps(md).lower()
     assert "fixture-scoped" in blob
     assert "not validated" in blob
     # Honest match accounting surfaced.
@@ -211,15 +212,17 @@ def test_banner_reflects_active_prereq_ordering_under_elumen_fixture(
     assert "without ordering constraints" not in banner, (
         f"banner must not claim no ordering constraints when prereq is active:\n{banner}")
     assert "prerequisite_ordering ACTIVE" in banner
-    # The enrollment detectors ARE still inert this run (no --enrollment input),
-    # so the banner should still say so honestly.
+    # modality_mismatch IS still inert this run (no --enrollment input), so the
+    # banner says so. under_supply is live-active -> not a banner detector.
     assert "modality_mismatch INERT" in banner
-    assert "under_supply INERT" in banner
+    assert "under_supply" not in banner
 
 
-def test_banner_all_inert_on_bare_fetch(lamc_routes, make_client, tmp_path, capsys):
-    """With no enrichment inputs every detector is inert, so the banner prints the
-    INERT line for all three (mirroring the report) and never an ACTIVE line."""
+def test_banner_bare_fetch_inert_modality_and_prereq(lamc_routes, make_client,
+                                                     tmp_path, capsys):
+    """With no enrichment inputs, modality_mismatch and prerequisite_ordering are
+    inert, so the banner prints their INERT lines and never an ACTIVE line.
+    under_supply is live-active (not a banner detector)."""
     client = make_client(lamc_routes)
     out = tmp_path / "live_banner_bare.xlsx"
     report = build_live_workbook.analyze_live(
@@ -228,8 +231,8 @@ def test_banner_all_inert_on_bare_fetch(lamc_routes, make_client, tmp_path, caps
     build_live_workbook._print_banner(report)
     banner = capsys.readouterr().out
     assert "modality_mismatch INERT" in banner
-    assert "under_supply INERT" in banner
     assert "without ordering constraints" in banner
+    assert "under_supply" not in banner          # live-active, not a banner detector
     assert "ACTIVE" not in banner
 
 
@@ -262,36 +265,43 @@ def test_real_enrollment_fixture_against_live_schedule_matches_zero(lamc_routes,
         enrollment_path="files/lamc_sample_enrollment.xlsx",
     )
     analysis = report["results"]["analysis"]
-    assert analysis["modality_mismatch"] == []
-    assert analysis["under_supply"] == []
+    assert analysis["modality_mismatch"] == []   # IR didn't match -> no fill %
+    # under_supply STILL fires — from the live schedule Waitlist status, NOT the
+    # (zero-matched) IR counts: every entry carries breadth with a 0 headcount.
+    us_rows = analysis["under_supply"]
+    assert us_rows, "live waitlist status fires under_supply even on a zero IR match"
+    assert all(r["waitlisted"] == 0 and r.get("sections_waitlisted", 0) >= 1
+               for r in us_rows)
 
     md = _detector(report, "modality_mismatch")
-    us = _detector(report, "under_supply")
     assert md["status"] == "inert"
-    assert us["status"] == "inert"
+    # under_supply is not in the inert report (it is live-active).
+    assert not [d for d in report["inert_detectors"] if d["detector"] == "under_supply"]
     # The inert reason honestly names the zero-match cause.
     assert "0" in (md.get("matched_sections_note", "") + str(md.get("matched_sections", "")))
-    blob = (json.dumps(md) + json.dumps(us)).lower()
+    blob = json.dumps(md).lower()
     assert "0 section" in blob or "matched 0" in blob or "zero" in blob
 
 
-def test_no_enrichment_inputs_keeps_all_detectors_inert(lamc_routes, make_client,
-                                                       tmp_path):
-    """With NO enrollment + NO eLumen inputs the report is byte-compatible with
-    the pre-m7 behavior: all three detectors INERT with honest reasons."""
+def test_no_enrichment_inputs_keeps_modality_and_prereq_inert(lamc_routes,
+                                                             make_client, tmp_path):
+    """With NO enrollment + NO eLumen inputs, modality_mismatch and
+    prerequisite_ordering are INERT with honest reasons. under_supply, by
+    contrast, fires live from the schedule's Waitlist status (no IR needed)."""
     client = make_client(lamc_routes)
     out = tmp_path / "live_bare.xlsx"
     report = build_live_workbook.analyze_live(
         "LAMC", [2268], "Biology", str(out), client=client)
 
-    for name in ("modality_mismatch", "under_supply", "prerequisite_ordering"):
+    for name in ("modality_mismatch", "prerequisite_ordering"):
         d = _detector(report, name)
         assert d["status"] == "inert", f"{name} should be inert without data"
         assert d["reason"]
-    # No enrollment counts -> detectors empty by construction.
+    assert not [d for d in report["inert_detectors"] if d["detector"] == "under_supply"]
     analysis = report["results"]["analysis"]
-    assert analysis["modality_mismatch"] == []
-    assert analysis["under_supply"] == []
+    assert analysis["modality_mismatch"] == []      # no fill % without IR
+    assert analysis["under_supply"]                 # live waitlist status fires
+    assert all(r["waitlisted"] == 0 for r in analysis["under_supply"])
 
 
 def test_cli_args_parse_enrollment_and_elumen_fixture(monkeypatch, tmp_path,

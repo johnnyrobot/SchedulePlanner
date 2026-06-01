@@ -135,22 +135,90 @@ def make_prereq_parser(model: str = MODEL):
 
 # ----------------------------------------------------------- job 2: explain
 def explain(results: dict, model: str = MODEL) -> str:
-    """Plain-language summary. LLM if available, else templated fallback."""
+    """Plain-language briefing. LLM if available, else the templated fallback.
+
+    Both paths share the SAME rich `_template_summary` (per-program status,
+    time-to-complete, broken official maps, concrete fixes, and the course-level
+    supply bottlenecks), so improving the summary improves the OFFLINE fallback
+    too — not just the LLM prompt.
+    """
     summary = _template_summary(results)
+    if not summary:
+        return "No programs were analyzed, so there is nothing to brief on yet."
     if not available(model):
         return summary
     try:
-        prompt = ("Rewrite the following scheduling findings as a concise briefing "
-                  "for a community college dean. Lead with the most actionable "
-                  "items. Keep it under 200 words.\n\n" + summary)
+        prompt = (
+            "You are writing a short internal briefing for a community college "
+            "dean, based ONLY on the scheduling analysis below. Use only the "
+            "facts given — never invent course numbers, counts, terms, or fixes. "
+            "Write 150-300 words of clear prose: open with the single most "
+            "important takeaway and the recommended actions, then each program's "
+            "time-to-complete and any broken official map, then the supply "
+            "bottlenecks (courses offered too rarely or with only one section). "
+            "Be specific and actionable. No preamble, no markdown headings.\n\n"
+            "ANALYSIS\n" + summary)
         return _chat(prompt, model=model).strip()
     except Exception:
         return summary
 
 
+def _status_label(p: dict, ft, pt) -> str:
+    """Mirror the UI badge: no plan / needs fix / map broken / on track."""
+    if not ft and not pt:
+        return "no plan"
+    if p.get("official_map_issues") and ft and ft.get("needs_fix"):
+        return "needs fix"
+    if p.get("official_map_issues"):
+        return "map broken"
+    return "on track"
+
+
+def _diagnostics_lines(analysis: dict) -> list:
+    """One bullet per NON-EMPTY supply-diagnostic category (course-level).
+
+    Empty categories (e.g. modality_mismatch / under_supply on live data, which
+    need the IR enrollment export) are simply omitted rather than printed as
+    'none', so the briefing stays focused on real bottlenecks.
+    """
+    out = []
+    rg = analysis.get("rotation_gaps") or []
+    if rg:
+        out.append("- Rotation gaps (required course offered in too few terms): "
+                   + ", ".join(f"{x['course']} ({x['offered']}/{x['of']})" for x in rg))
+    ss = analysis.get("single_section") or []
+    if ss:
+        out.append("- Single-section risk (only one section — a single point of "
+                   "failure): " + ", ".join(x["course"] for x in ss))
+    mm = analysis.get("modality_mismatch") or []
+    if mm:
+        out.append("- Modality mismatch (offered only in a low-fill delivery mode): "
+                   + ", ".join(f"{x['course']} ({x['fill_pct']}% fill)" for x in mm))
+    us = analysis.get("under_supply") or []
+    if us:
+        def _u(x):
+            if x.get("waitlisted", 0) > 0:                 # IR headcount (precise)
+                return f"{x['course']} ({x['waitlisted']} waitlisted)"
+            sw = x.get("sections_waitlisted")              # live status (breadth)
+            if sw is not None:
+                return f"{x['course']} ({sw}/{x.get('sections_total')} sections waitlisted)"
+            return str(x["course"])
+        out.append("- Under-supply (sections at capacity / waitlist pressure): "
+                   + ", ".join(_u(x) for x in us))
+    return out
+
+
 def _template_summary(results: dict) -> str:
-    lines = []
-    for pcode, p in results.get("programs", {}).items():
+    """Rich plain-text briefing facts — the single source of truth fed to BOTH
+    the LLM prompt and the offline fallback.
+
+    Per program: status (mirrors the UI badge), full-time/part-time
+    time-to-complete, any broken official map, and the concrete fix. Then a
+    course-level supply-bottlenecks section from the analysis block. Returns ""
+    when there are no programs (callers treat that as 'nothing to brief')."""
+    programs = results.get("programs", {})
+    prog_lines = []
+    for pcode, p in programs.items():
         ft = p["cohorts"].get("full_time")
         pt = p["cohorts"].get("part_time")
         bits = []
@@ -160,18 +228,30 @@ def _template_summary(results: dict) -> str:
         if pt:
             tag = " (needs schedule change)" if pt.get("needs_fix") else ""
             bits.append(f"part-time {pt['terms_used']} terms{tag}")
-        line = f"{p['title']}: " + "; ".join(bits)
+        timing = "; ".join(bits) if bits else "no feasible plan found"
+        line = f"- {p['title']} — {_status_label(p, ft, pt)}: {timing}."
         if p["official_map_issues"]:
-            line += f"  [published map broken: {'; '.join(p['official_map_issues'])}]"
-        # surface any concrete fixes
+            line += f"\n    published map broken: {'; '.join(p['official_map_issues'])}"
+        # surface any concrete fixes (first cohort that has them)
         for ck in ("full_time", "part_time"):
             c = p["cohorts"].get(ck)
             if c and c.get("fixes"):
                 fx = ", ".join(f"add {f['course']} in {f['season']}" for f in c["fixes"])
-                line += f"  [fix: {fx}]"
+                line += f"\n    recommended fix: {fx}"
                 break
-        lines.append(line)
-    return "\n".join(lines)
+        prog_lines.append(line)
+    if not prog_lines:
+        return ""
+    n_prog = len(programs)
+    n_terms = results.get("terms_in_data")
+    header = f"Scheduling analysis of {n_prog} program" + ("s" if n_prog != 1 else "")
+    if n_terms:
+        header += f" across {n_terms} terms of schedule data"
+    out = [header + ".", "", "PROGRAMS", *prog_lines]
+    diag = _diagnostics_lines(results.get("analysis") or {})
+    if diag:
+        out += ["", "SUPPLY BOTTLENECKS (course-level, across all programs)", *diag]
+    return "\n".join(out)
 
 
 if __name__ == "__main__":

@@ -141,8 +141,21 @@
         border-radius:2px;padding:3px 7px;color:var(--amber)}
   .inert{border-top:1px solid var(--hair);padding:10px 0;margin-top:4px}
   .inert .det{font-family:var(--mono);font-size:12px;color:var(--amber)}
+  .inert .det.on{color:var(--green)}
   .inert .why{font-family:var(--mono);font-size:12px;color:var(--dim);margin-top:3px}
   .inert .rem{font-family:var(--mono);font-size:12px;color:var(--green);margin-top:3px}
+  .inert .join{font-family:var(--mono);font-size:12px;color:var(--blue);margin-top:3px}
+  /* Optional (experimental) live-form enrichments + their badge. */
+  .liveopts{align-items:center;gap:14px;flex-wrap:wrap}
+  .liveopt{display:flex;align-items:center;gap:7px;font-size:13px;color:var(--ink);cursor:pointer}
+  .liveopt input{cursor:pointer}
+  .xb{font-family:var(--mono);font-size:10px;letter-spacing:.04em;text-transform:uppercase;
+      color:var(--amber);background:var(--warn-bg);border:1px solid var(--hair);border-radius:4px;padding:1px 5px}
+  /* Plain-English "what live covers" callout above the live panels. */
+  .disclosure{background:var(--panel);border:1px solid var(--line);border-left:3px solid var(--blue);
+      border-radius:8px;padding:12px 14px}
+  .disclosure h4{margin:0 0 6px;font-size:13px;color:var(--ink)}
+  .disclosure p{margin:0;font-size:13px;color:var(--dim);line-height:1.5}
   .spinner{display:inline-block;width:12px;height:12px;border:2px solid var(--hair);
            border-top-color:var(--amber);border-radius:50%;animation:spin .7s linear infinite}
   @keyframes spin{to{transform:rotate(360deg)}}
@@ -196,11 +209,22 @@
                placeholder="e.g. Biology" spellcheck="false">
       </label>
     </div>
+    <div class="row mt liveopts">
+      <label class="liveopt"><input type="checkbox" id="liveElumen">
+        <span>Include prerequisites from eLumen</span> <span class="xb">experimental</span>
+        <span class="tip" tabindex="0" role="button" aria-label="What is the eLumen prerequisites option?">?<span class="tip-bub" role="tooltip">Fetches prerequisites from the public LACCD <b>eLumen</b> catalog so the solver can order courses (only <i>itemType = Prerequisite</i>; co-reqs/advisories excluded). <b>Experimental</b> — best-effort: the endpoint's ToU / rate-limit / approval review is pending.</span></span>
+      </label>
+    </div>
+    <div class="row mt liveopts">
+      <button class="ghost" id="liveEnrollBtn" type="button" onclick="pickLiveEnrollment()">Add enrollment export (optional)</button>
+      <span id="liveEnrollName" class="hint"></span>
+      <span class="tip" tabindex="0" role="button" aria-label="What is the enrollment export option?">?<span class="tip-bub" role="tooltip">An IR / PeopleSoft enrollment export (<b>.xlsx</b>) with seat <b>Cap / Tot / Wait</b> counts. Adds capacity / fill-rate analysis on top of the live schedule. <b>Experimental</b> — joined to live sections by <i>term + CRN</i>; if none match, counts aren't applied and you'll see the join count.</span></span>
+    </div>
     <div class="row mt">
       <button id="liveBtn" onclick="fetchLive()">Build from live LACCD data</button>
       <span id="liveStatus" class="hint"></span>
     </div>
-    <p class="hint">Term codes are comma-separated (e.g. <b>2264,2266,2268</b>).</p>
+    <p class="hint">Term codes are comma-separated (e.g. <b>2264,2266,2268</b>). The two options above are optional.</p>
   </div>
 
   <div class="row mt" id="actions" style="display:none">
@@ -265,16 +289,28 @@
   <ul>
     <li><b>Rotation gaps</b> — a required course offered in too few of the terms analyzed (shown as offered / total).</li>
     <li><b>Single-section risk</b> — only one section exists, so a single cancellation or conflict blocks everyone.</li>
-    <li><b>Modality mismatch</b> — offered only in a delivery mode students aren't filling (with the fill %).</li>
-    <li><b>Under-supply</b> — demand (waitlist) exceeds the seats offered.</li>
+    <li><b>Capacity / fill-rate</b> (modality mismatch) — a required course whose seats aren't filling (a low
+      enrolled ÷ capacity %). Needs real enrollment counts, so on live data it's an experimental add-on (below).</li>
+    <li><b>Under-supply</b> — demand exceeds the seats offered. On live data this shows as how many of a
+      course's sections are <b>waitlisted</b> (at capacity); with the enrollment export it sharpens to the
+      exact waitlist headcount.</li>
   </ul>
 
   <h3>6 · Live-data extras (Option 2)</h3>
   <p><b>Reconciliation</b> shows how many of the program's required courses were actually offered in the
     fetched terms versus not offered (with the missing course codes).</p>
-  <p><b>Inert detectors</b>: modality-mismatch and under-supply need real enrollment counts from the
-    IR / PeopleSoft export, which isn't wired in yet. Until it is, those two stay <b>inert</b> — so an empty
-    result there means "not yet measurable," not "all clear."</p>
+  <p><b>Under-supply runs live</b>: the published schedule marks each section Open / Waitlist / Closed, so a
+    course with waitlisted sections is flagged straight from live data (no export needed) — shown as
+    "<i>2/6 sections waitlisted</i>".</p>
+  <p><b>Two experimental add-ons on the live form</b>: the schedule API has no enrolled ÷ capacity counts and
+    the program map has no prerequisites, so two things need extra data — and you can supply both right on the
+    live form. <b>Add enrollment export</b> joins an IR / PeopleSoft <b>.xlsx</b> by term + CRN to unlock the
+    <b>capacity / fill-rate</b> diagnostic (and sharpens under-supply from waitlisted-section breadth to an exact
+    headcount). <b>Include prerequisites from eLumen</b> pulls real prerequisites so the solver can order courses.
+    Both are <b>experimental</b>: the eLumen endpoint's terms-of-use review is pending, and the live↔enrollment
+    join isn't validated on real data, so a real export may match zero sections (you'll see the join count). An
+    empty result means "not yet measurable," not "all clear." For fully validated capacity analysis, use
+    <b>Option 1</b> with a workbook that already includes the counts.</p>
 
   <h3>7 · The Gemma 4 badge</h3>
   <p>The pill in the top-right shows whether a local <b>Gemma 4</b> model (via Ollama) is available. When
@@ -303,6 +339,10 @@
 
 <script>
 let dataPath = "";
+// Optional enrollment export chosen on the live form (empty = none). Kept
+// separate from dataPath (Option 1's workbook) — this one only enriches a live
+// fetch and is never used as the analyze() input.
+let liveEnrollPath = "";
 
 // Escape any data-derived string before it goes into innerHTML. Fields below
 // can originate from uploaded workbooks or external (live-data) APIs, so they
@@ -396,11 +436,32 @@ async function loadDemo(){
 // markup is a static HTML literal; the user-entered campus/program are echoed
 // into #picked via .textContent (the browser escapes it, so no escapeHtml()
 // is needed here). The live-panel fields ARE escaped in renderLivePanel().
+// Optional enrollment-export picker for the live form. Reuses choose_file()
+// (xlsx-filtered) and stores the path in liveEnrollPath; the filename + a remove
+// link render beside the button. This file only ENRICHES a live fetch (it is
+// passed as enrollment_path), never used as a standalone workbook.
+async function pickLiveEnrollment(){
+  let r;
+  try{ r = await window.pywebview.api.choose_file(); }
+  catch(e){ r = {path:''}; }
+  if(r && r.path){
+    liveEnrollPath = r.path;
+    const name = r.path.split(/[\\/]/).pop();
+    document.getElementById('liveEnrollName').innerHTML =
+      escapeHtml(name)+' <a href="#" onclick="clearLiveEnrollment();return false;">✕ remove</a>';
+  }
+}
+function clearLiveEnrollment(){
+  liveEnrollPath = '';
+  document.getElementById('liveEnrollName').textContent = '';
+}
+
 async function fetchLive(){
   const btn=document.getElementById('liveBtn');
   const campus=document.getElementById('liveCampus').value.trim();
   const terms=document.getElementById('liveTerms').value.trim();
   const program=document.getElementById('liveProgram').value.trim();
+  const elumenLive=document.getElementById('liveElumen').checked;
   btn.disabled=true; btn.textContent='Fetching…';
   // Live also auto-runs its own pipeline (no picked file involved), so clear
   // dataPath and hide the file-only "Generate schedules" button.
@@ -412,7 +473,10 @@ async function fetchLive(){
   document.getElementById('status').innerHTML='<span class="spinner"></span> fetching + solving';
   let res;
   try{
-    res = await window.pywebview.api.fetch_live(campus, terms, program);
+    // Pass the two optional (experimental) enrichments: an enrollment export
+    // path (null when none chosen) and the eLumen-prereqs toggle.
+    res = await window.pywebview.api.fetch_live(
+      campus, terms, program, liveEnrollPath||null, elumenLive);
   }catch(e){
     res = {error:'Unexpected error talking to the app: '+String(e)};
   }
@@ -456,6 +520,15 @@ function showResult(res){
 // reason/remedy). ALL data-derived strings are run through escapeHtml().
 function renderLivePanel(res){
   let html='';
+  // Plain-English disclosure: what the API-only live path can and can't measure,
+  // and the two honest ways to reach capacity/fill depth.
+  html+='<div class="card"><div class="disclosure"><h4>What live data covers</h4>'+
+    '<p>Live mode reads the public LACCD schedule + program map: you get the full '+
+    '2-year schedule plus rotation, single-section and <b>waitlist</b> signals. '+
+    'Enrollment / capacity counts aren’t published by any LACCD API, so '+
+    '<b>capacity / fill-rate analysis needs those numbers</b> — add an '+
+    'enrollment export on the live form (experimental), or use <b>Option 1</b> and '+
+    'upload a workbook that already includes them.</p></div></div>';
   const rec=res.reconciliation;
   if(rec){
     const codes=(rec.unmatched||[]).map(c=>'<span class="code">'+escapeHtml(c)+'</span>').join('');
@@ -473,24 +546,38 @@ function renderLivePanel(res){
       (codes?'<div class="hint">Not offered in the fetched terms:</div><div class="codes">'+codes+'</div>':'')+
       '</div>';
   }
+  // Plain-language names for the machine detector keys (the panel avoids raw
+  // jargon like "modality_mismatch"). Any future key falls back to itself.
+  const DET_LABELS={
+    modality_mismatch:'Capacity / fill-rate analysis',
+    prerequisite_ordering:'Prerequisite ordering',
+  };
   const inert=res.inert_detectors||[];
   if(inert.length){
-    // Baseline entries are inert and carry reason/remedy. If enrollment
-    // enrichment is ever wired in, analyze_live can emit active entries
-    // (status "active", with label/metric) — render those without dropping
-    // their data or mislabeling them "inert".
+    // Each entry is either inert (carries reason/remedy) or — when an
+    // enrollment export joined, or eLumen prereqs were fetched — active
+    // (carries label/metric). Render both without dropping their data, and
+    // surface the honest "joined N/M sections" count when present.
     const notes=inert.map(d=>{
       const active=d.status==='active';
+      const label=DET_LABELS[d.detector]||d.detector;
       const why=d.reason||d.label||'';
       const rem=d.remedy||d.metric||'';
-      return '<div class="inert"><div class="det">'+(active?'✓ ':'⊘ ')+escapeHtml(d.detector)+
-        (active?' — active on live data':' — inert on live data')+'</div>'+
+      let join='';
+      if(d.matched_sections!=null && d.total_sections!=null){
+        join='<div class="join">joined '+escapeHtml(String(d.matched_sections))+'/'+
+          escapeHtml(String(d.total_sections))+' sections'+
+          (d.matched_sections===0?' — counts not applied':'')+'</div>';
+      }
+      return '<div class="inert"><div class="det'+(active?' on':'')+'">'+(active?'✓ ':'⊘ ')+escapeHtml(label)+
+        (active?' — on':' — needs more data')+'</div>'+
+        join+
         (why?'<div class="why">'+escapeHtml(why)+'</div>':'')+
-        (rem?'<div class="rem">'+(active?'metric: ':'remedy: ')+escapeHtml(rem)+'</div>':'')+'</div>';
+        (rem?'<div class="rem">'+(active?'how: ':'to enable: ')+escapeHtml(rem)+'</div>':'')+'</div>';
     }).join('');
-    html+='<div class="card"><h3>Detectors inert on live data</h3>'+
-      '<p class="hint">These run only once the IR PeopleSoft enrollment export arrives — '+
-      'until then they cannot fire, so an empty result here is expected, not a clean bill.</p>'+
+    html+='<div class="card"><h3>What this live build can measure</h3>'+
+      '<p class="hint">These depend on data the public schedule API doesn’t include. '+
+      'An empty result here means “not yet measurable,” not “all clear.”</p>'+
       notes+'</div>';
   }
   document.getElementById('live').innerHTML=html;
@@ -550,7 +637,7 @@ function render(res){
     mk('Rotation gaps',a.rotation_gaps,x=>'<li>'+escapeHtml(x.course)+' — '+x.offered+'/'+x.of+'</li>')+
     mk('Single-section risk',a.single_section,x=>'<li>'+escapeHtml(x.course)+'</li>')+
     mk('Modality mismatch',a.modality_mismatch,x=>'<li>'+escapeHtml(x.course)+' — '+x.fill_pct+'% fill</li>')+
-    mk('Under-supply',a.under_supply,x=>'<li>'+escapeHtml(x.course)+' — '+x.waitlisted+' waitlisted</li>')+
+    mk('Under-supply',a.under_supply,x=>'<li>'+escapeHtml(x.course)+' — '+(x.waitlisted>0?x.waitlisted+' waitlisted':(x.sections_waitlisted!=null?x.sections_waitlisted+'/'+x.sections_total+' sections waitlisted':'waitlisted'))+'</li>')+
     '</div></div>';
   document.getElementById('out').innerHTML=html;
 }

@@ -12,14 +12,18 @@ LIVE REALITY (what one run actually produces):
   - --terms defaults to the three currently-published terms
     (schedule.DEFAULT_TERMS = 2264, 2266, 2268). Each term is a separate
     schedule API call; pass a comma list to widen or narrow the window.
-  - The schedule API has NO enrollment/capacity/waitlist counts and NO
-    prerequisites, so on a BARE fetch the modality_mismatch and under_supply
-    detectors are INERT and the solver runs without prerequisite ordering.
-    These gaps are surfaced as structured fields in the report below (not
-    hidden). The optional m7 enrichment flags --enrollment (an IR PeopleSoft
-    export joined onto the fetched sections) and --elumen-fixture / --elumen-live
-    (a DNF->CNF prereq map threaded into the catalog) can FLIP these detectors to
-    active; that enrichment runs OUTSIDE engine.run, before the workbook write.
+  - The schedule API has NO enrollment/capacity COUNTS and NO prerequisites, so
+    on a BARE fetch the modality_mismatch detector is INERT (needs a fill ratio)
+    and the solver runs without prerequisite ordering. It DOES expose a
+    per-section availability status (Open/Waitlist/Closed), so under_supply IS
+    active on live data — a Waitlist section is at capacity, giving a coarse
+    waitlist-pressure signal (breadth, not a student headcount). These gaps are
+    surfaced as structured fields in the report below (not hidden). The optional
+    m7 enrichment flags --enrollment (an IR PeopleSoft export joined onto the
+    fetched sections, adding the precise Wait Tot headcount + the fill ratio) and
+    --elumen-fixture / --elumen-live (a DNF->CNF prereq map threaded into the
+    catalog) can FLIP modality_mismatch / prerequisite_ordering to active and
+    sharpen under_supply; that enrichment runs OUTSIDE engine.run, before write.
     These paths carry honest caveats: the enrollment join is fixture-scoped (the
     live-schedule <-> IR (term, CRN) join is not validated on real data, and
     today's committed fixtures match zero sections so a real --enrollment run
@@ -87,45 +91,50 @@ def build(campus, terms, program_query, *, client=None):
     return sections, program
 
 
-# The schedule API ships no enrollment counts and no prerequisites, so two
-# detectors are INERT on live-sourced data by default. We surface that honestly
-# as structured fields rather than letting an empty result look like a clean
-# bill. The m7 enrichment can FLIP an entry to "active" — but ONLY when its data
-# is present AND (for enrollment) the (term, CRN) join actually matched a
-# section. _detector_report() below builds the per-run report from this baseline.
+# The schedule API ships no enrollment COUNTS and no prerequisites, so two
+# detectors are INERT on bare-fetch live data by default: modality_mismatch
+# (needs a fill ratio) and prerequisite_ordering (needs eLumen). under_supply is
+# NOT here — the schedule API's per-section Waitlist status is a live signal it
+# fires on (see engine.analyze + mapping's "Avail Status"); the IR export only
+# sharpens it from breadth (sections waitlisted) to depth (Wait Tot headcount).
+# We surface the remaining gaps honestly as structured fields rather than letting
+# an empty result look like a clean bill. The m7 enrichment can FLIP an entry to
+# "active" — but ONLY when its data is present AND (for enrollment) the
+# (term, CRN) join actually matched a section.
 INERT_DETECTORS = [
     {
         "detector": "modality_mismatch",
         "status": "inert",
         "reason": ("the LACCD schedule API returns no enrollment/capacity counts "
                    "(Cap Enrl / Tot Enrl = 0), so fill ratio cannot be computed"),
-        "remedy": "load the IR PeopleSoft enrollment export (PRD M4)",
-    },
-    {
-        "detector": "under_supply",
-        "status": "inert",
-        "reason": ("the LACCD schedule API returns no waitlist counts "
-                   "(Wait Tot = 0), so waitlist pressure cannot be measured"),
-        "remedy": "load the IR PeopleSoft enrollment export (PRD M4)",
+        "remedy": ("add an enrollment export on the live form (experimental), or "
+                   "use Option 1 with a workbook that has Cap/Tot/Wait counts"),
     },
     {
         "detector": "prerequisite_ordering",
         "status": "inert",
         "reason": ("prerequisites are blank (Program Mapper does not expose them); "
                    "the solver runs without ordering constraints"),
-        "remedy": "wire eLumen prerequisite data into the catalog sheet",
+        "remedy": ("turn on 'Include prerequisites from eLumen' on the live form "
+                   "(experimental)"),
     },
 ]
 
 
 def _enrollment_detector_entries(*, source, matched, total):
-    """Build the two enrollment detectors' report entries.
+    """Build the enrollment-gated detector's report entry (modality_mismatch).
 
-    They flip to "active" ONLY when an enrollment export was joined AND the join
+    It flips to "active" ONLY when an enrollment export was joined AND the join
     matched >=1 section. Absent enrollment, or a zero-match join, keeps the
     honest inert reason. The activation is LABELED fixture-scoped — the
     live-schedule <-> IR (term, CRN) join is NOT validated on real data (no
     committed schedule (2268) + enrollment ({2248,2252}) fixture pair overlaps).
+
+    under_supply is NOT built here: it fires live from the schedule's Waitlist
+    status (engine.analyze + mapping's "Avail Status"), so it is no longer
+    enrollment-gated — the IR export only sharpens it from breadth (sections
+    waitlisted) to depth (Wait Tot headcount). modality_mismatch still needs the
+    Cap/Tot fill ratio, so it remains the only enrollment-gated detector.
 
     ``total`` is the fetched-section count; it is surfaced alongside ``matched``
     as a matched/total ratio for honest match accounting (so the report shows how
@@ -133,9 +142,9 @@ def _enrollment_detector_entries(*, source, matched, total):
     count).
     """
     if source is None:
-        # No enrollment input at all: keep the honest baseline inert entries.
+        # No enrollment input at all: keep the honest baseline inert entry.
         return [dict(d) for d in INERT_DETECTORS
-                if d["detector"] in ("modality_mismatch", "under_supply")]
+                if d["detector"] == "modality_mismatch"]
 
     if matched >= 1:
         active_note = ("FIXTURE-SCOPED: the live-schedule <-> IR (term, CRN) join "
@@ -152,16 +161,6 @@ def _enrollment_detector_entries(*, source, matched, total):
                 "label": active_note,
                 "metric": "fill ratio < 0.55 (Tot Enrl / Cap Enrl)",
             },
-            {
-                "detector": "under_supply",
-                "status": "active",
-                "source": source,
-                "matched_sections": matched,
-                "total_sections": total,
-                "match_ratio": round(matched / total, 4) if total else None,
-                "label": active_note,
-                "metric": "Wait Tot sum > 15",
-            },
         ]
 
     # Enrollment present but the join matched ZERO rows: stay INERT, honestly.
@@ -169,23 +168,10 @@ def _enrollment_detector_entries(*, source, matched, total):
         f"enrollment export {source!r} was loaded but the (term, CRN) join "
         f"matched 0 sections (live-schedule <-> IR fixtures disjoint: schedule "
         f"term 2268 vs enrollment terms {{2248, 2252}}, CRN sets disjoint), so "
-        f"Cap/Tot/Wait stay 0 and the detector cannot fire")
+        f"Cap/Tot stay 0 and the detector cannot fire")
     return [
         {
             "detector": "modality_mismatch",
-            "status": "inert",
-            "source": source,
-            "matched_sections": 0,
-            "total_sections": total,
-            "match_ratio": 0.0 if total else None,
-            "matched_sections_note": "join matched 0 sections",
-            "reason": zero_reason,
-            "remedy": ("supply an enrollment export whose (term, CRN) keys overlap "
-                       "the fetched schedule (validated end-to-end only on a "
-                       "self-consistent fixture set)"),
-        },
-        {
-            "detector": "under_supply",
             "status": "inert",
             "source": source,
             "matched_sections": 0,
@@ -352,21 +338,30 @@ def analyze_live(campus, terms, program_query, out_path, *, client=None,
     elumen_live_active = False
     elumen_coverage = None
     if elumen_live:
-        # Subjects to query eLumen for = the non-empty subjects the fetched
-        # sections actually cover (sorted, unique) — so we only hit the endpoint
-        # for the catalog we built.
+        # The course-id universe we can JOIN a prereq onto: every section course
+        # plus every program course, normalized the same way the catalog is.
+        program_course_ids = {mapping._norm(c["course_id"])
+                              for c in program["courses"]}
+        known_course_ids = (
+            {mapping._norm(r.get("course")) for r in sections}
+            | program_course_ids
+        )
+        requested_course_ids = {c["course_id"] for c in program["courses"]}
+
+        # Subjects to query eLumen for = ONLY the subjects of fetched sections
+        # that belong to a PROGRAM course (not every subject in the campus
+        # listing). The full multi-term listing spans ~50-60 subjects; querying
+        # eLumen for all of them is slow and is a broad crawl of a real,
+        # rate-limit/ToU-pending endpoint. Prereqs are only needed for the
+        # program's own (gated) courses — their targets still resolve from the
+        # already-built catalog — so this bounds the fetch to the handful of
+        # subjects that actually matter (e.g. Biology -> BIOLOGY/CHEM/PHYSICS/...).
         subjects = sorted({
             str(r.get("subject")).strip()
             for r in sections
             if str(r.get("subject") or "").strip()
+            and mapping._norm(r.get("course")) in program_course_ids
         })
-        # The course-id universe we can JOIN a prereq onto: every section course
-        # plus every program course, normalized the same way the catalog is.
-        known_course_ids = (
-            {mapping._norm(r.get("course")) for r in sections}
-            | {mapping._norm(c["course_id"]) for c in program["courses"]}
-        )
-        requested_course_ids = {c["course_id"] for c in program["courses"]}
 
         # Network IO stays OUTSIDE engine.run: reuse an injected client, else
         # open + own one (mirrors build()'s pattern). A per-build cache dedupes
@@ -456,12 +451,6 @@ def _print_banner(report):
             "enrollment export, PRD M4)."),
         ("modality_mismatch", "active"): (
             "modality_mismatch ACTIVE (fixture-scoped: live-schedule <-> IR join "
-            "not validated on real data)."),
-        ("under_supply", "inert"): (
-            "Wait Tot = 0 -> under_supply INERT (need the IR PeopleSoft "
-            "enrollment export, PRD M4)."),
-        ("under_supply", "active"): (
-            "under_supply ACTIVE (fixture-scoped: live-schedule <-> IR join "
             "not validated on real data)."),
         ("prerequisite_ordering", "inert"): (
             "Prerequisites blank (need eLumen) -> solver runs without ordering "

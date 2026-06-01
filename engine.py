@@ -126,23 +126,42 @@ def analyze(active, prog, n_terms):
     required = set(prog["Course ID"])
     out = {"rotation_gaps": [], "single_section": [], "modality_mismatch": [],
            "under_supply": []}
+    # "Avail Status" is an OPTIONAL column: the live schedule fills it with the
+    # API's per-section Open/Waitlist/Closed availability. When present it gives a
+    # live waitlist signal even with no IR enrollment counts; absent (demo / IR
+    # workbooks) under_supply falls back to the Wait Tot headcount alone.
+    has_avail = "Avail Status" in active.columns
     for cid in sorted(required):
-        offered = active[active["CLASS"] == cid]["Term"].nunique()
+        d = active[active["CLASS"] == cid]
+        offered = d["Term"].nunique()
         if offered < n_terms:
             out["rotation_gaps"].append({"course": cid, "offered": int(offered),
                                          "of": int(n_terms)})
-        per_term = active[active["CLASS"] == cid].groupby("Term").size()
+        per_term = d.groupby("Term").size()
         if len(per_term) and per_term.min() == 1:
             out["single_section"].append({"course": cid})
-        d = active[active["CLASS"] == cid]
         if len(d) and d["Cap Enrl"].sum() > 0:
             fill = d["Tot Enrl"].sum() / d["Cap Enrl"].sum()
             if fill < 0.55:
                 out["modality_mismatch"].append({"course": cid,
                                                  "fill_pct": round(fill * 100)})
-        wl = active[active["CLASS"] == cid]["Wait Tot"].sum()
+        # Under-supply prefers the precise IR waitlist headcount (Wait Tot > 15);
+        # when that is absent it uses the live schedule's waitlist STATUS as a
+        # coarser "sections at capacity" signal (presence/breadth, not a count).
+        wl = int(d["Wait Tot"].sum())
+        n_sec = int(len(d))
+        sw = 0
+        if has_avail and n_sec:
+            sw = int(d["Avail Status"].astype(str).str.strip().str.lower()
+                     .str.startswith("wait").sum())
         if wl > 15:
-            out["under_supply"].append({"course": cid, "waitlisted": int(wl)})
+            out["under_supply"].append({"course": cid, "waitlisted": wl,
+                                        "sections_waitlisted": sw,
+                                        "sections_total": n_sec})
+        elif sw > 0:
+            out["under_supply"].append({"course": cid, "waitlisted": 0,
+                                        "sections_waitlisted": sw,
+                                        "sections_total": n_sec})
     return out
 
 

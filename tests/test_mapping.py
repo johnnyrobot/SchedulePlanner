@@ -30,11 +30,24 @@ def test_to_units_coercion():
 def test_build_sections_df_schema_and_zero_enrollment():
     df = mapping.build_sections_df(SECTIONS)
     assert list(df.columns) == ["Term", "CLASS", "Class Status",
-                                "Cap Enrl", "Tot Enrl", "Wait Tot"]
+                                "Cap Enrl", "Tot Enrl", "Wait Tot", "Avail Status"]
     assert (df["Class Status"] == "Active").all()
     assert (df[["Cap Enrl", "Tot Enrl", "Wait Tot"]] == 0).all().all()
+    # these synthetic records carry no live 'status' -> Avail Status blank
+    assert (df["Avail Status"] == "").all()
     assert set(df["CLASS"]) == {"CS 101", "MATH 245"}
     assert pd.api.types.is_integer_dtype(df["Term"])
+
+
+def test_build_sections_df_carries_live_waitlist_status():
+    """A live record's availability status flows into the optional Avail Status
+    column (the under_supply live signal); lifecycle (Class Status) stays Active."""
+    df = mapping.build_sections_df([
+        {"term": 2268, "course": "BIOLOGY 006", "units": "4.00", "status": "Waitlist"},
+        {"term": 2268, "course": "BIOLOGY 006", "units": "4.00", "status": "Open"},
+    ])
+    assert list(df["Avail Status"]) == ["Waitlist", "Open"]
+    assert (df["Class Status"] == "Active").all()
 
 
 def test_build_catalog_df_numeric_units_and_union():
@@ -135,7 +148,14 @@ def test_write_workbook_default_prereqs_keeps_catalog_blank(tmp_path):
 
 
 def test_column_constants_match_engine_required_columns():
-    # Drift guard: the three column-constant lists must equal engine's contract.
-    assert mapping.SECTION_COLUMNS == engine.REQUIRED_COLUMNS["sections"]
+    # Drift guard. catalog/programs equal engine's contract exactly.
     assert mapping.CATALOG_COLUMNS == engine.REQUIRED_COLUMNS["catalog"]
     assert mapping.PROGRAM_COLUMNS == engine.REQUIRED_COLUMNS["programs"]
+    # Sections carries every REQUIRED column (as a prefix) plus ONE optional
+    # additive column the engine reads optionally — "Avail Status" (the live
+    # waitlist signal) — intentionally NOT in REQUIRED_COLUMNS so demo / IR
+    # workbooks without it still validate.
+    req = engine.REQUIRED_COLUMNS["sections"]
+    assert mapping.SECTION_COLUMNS[:len(req)] == req
+    assert mapping.SECTION_COLUMNS == req + ["Avail Status"]
+    assert "Avail Status" not in req

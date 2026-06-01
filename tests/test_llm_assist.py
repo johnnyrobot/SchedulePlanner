@@ -258,6 +258,56 @@ def test_template_summary_empty_for_no_programs():
     assert llm_assist._template_summary({}) == ""
 
 
+def test_template_summary_surfaces_supply_diagnostics():
+    """The enriched briefing surfaces the course-level supply bottlenecks and the
+    terms-of-data context — not just per-program time-to-complete."""
+    res = {
+        "terms_in_data": 8,
+        "programs": {
+            "BIOL": {
+                "title": "Biology AS-T", "official_map_issues": [],
+                "cohorts": {
+                    "full_time": {"terms_used": 4, "needs_fix": False,
+                                  "fixes": [], "plan": {}},
+                    "part_time": None,
+                },
+            },
+        },
+        "analysis": {
+            "rotation_gaps": [{"course": "BIOL 7", "offered": 1, "of": 4}],
+            "single_section": [{"course": "CHEM 211"}],
+            "modality_mismatch": [{"course": "ACCTG 2", "fill_pct": 41}],
+            "under_supply": [{"course": "ENGL 101", "waitlisted": 112}],
+        },
+    }
+    out = llm_assist._template_summary(res)
+    assert "SUPPLY BOTTLENECKS" in out
+    assert "BIOL 7 (1/4)" in out                  # rotation gap: offered/of
+    assert "CHEM 211" in out                      # single-section risk
+    assert "ACCTG 2 (41% fill)" in out            # modality mismatch
+    assert "ENGL 101 (112 waitlisted)" in out     # under-supply
+    assert "8 terms of schedule data" in out      # header context
+    assert "Biology AS-T" in out                  # program still named
+
+
+def test_template_summary_omits_empty_diagnostics():
+    """Empty analysis categories (e.g. live data) are omitted, not printed."""
+    res = {
+        "terms_in_data": 3,
+        "programs": {
+            "BIOL": {"title": "Biology", "official_map_issues": [],
+                     "cohorts": {"full_time": {"terms_used": 2, "needs_fix": False,
+                                               "fixes": [], "plan": {}},
+                                 "part_time": None}},
+        },
+        "analysis": {"rotation_gaps": [], "single_section": [],
+                     "modality_mismatch": [], "under_supply": []},
+    }
+    out = llm_assist._template_summary(res)
+    assert "SUPPLY BOTTLENECKS" not in out        # nothing to flag -> no section
+    assert "Biology" in out
+
+
 # --------------------------------------------------------------------------- #
 # 6. Onboarding (F19-F22): ai_status fields, ensure_model, available().        #
 # --------------------------------------------------------------------------- #

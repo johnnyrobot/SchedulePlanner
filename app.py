@@ -121,7 +121,8 @@ class Api:
             return {"error": f"{type(e).__name__}: {e}"}
 
     # ---- live LACCD data ---------------------------------------------
-    def fetch_live(self, campus, terms, program, client=None):
+    def fetch_live(self, campus, terms, program, enrollment_path=None,
+                   elumen_live=False, client=None):
         """Pull live LACCD data and analyze it, entirely inside the app.
 
         Parses the comma-separated `terms` string into ints, runs the live
@@ -130,6 +131,19 @@ class Api:
         can hand straight to showResult(): the engine `results` (terms_in_data
         / analysis / programs) plus the live-only `reconciliation` and
         `inert_detectors` fields.
+
+        Two optional enrichments (both default off, surfaced as EXPERIMENTAL in
+        the live form) reach capacity/prereq depth the bare schedule API can't:
+          - `enrollment_path`: an IR PeopleSoft export (.xlsx) joined onto the
+            live sections by (term, CRN) to add Cap/Tot/Wait counts (the
+            capacity / fill-rate diagnostic). The live<->IR join is NOT
+            validated on real data, so a real upload may match 0 sections; the
+            detector report carries the honest matched/total count either way.
+          - `elumen_live`: fetch prerequisites from the public eLumen catalog
+            (itemType=Prerequisite only) so the solver can enforce ordering.
+            Best-effort: the endpoint's ToU / rate-limit / approval review is
+            pending. Network for this stays inside analyze_live, outside
+            engine.run.
 
         The optional `client` is passed through so tests can inject a
         FakeClient (replaying committed fixtures, no network). On a no-match
@@ -146,13 +160,22 @@ class Api:
             return {"error": (f"No valid term codes in {terms!r}. Enter one or "
                               "more positive numeric term codes, e.g. "
                               "2264,2266,2268.")}
+        # Normalize the optional enrollment upload: an empty/whitespace path
+        # from the UI (no file chosen) means "no enrollment", not a path to
+        # load. A non-empty path that does not exist is a user-visible error
+        # rather than a traceback out of enrollment.load_enrollment.
+        enroll = (enrollment_path or "").strip() or None
+        if enroll is not None and not os.path.exists(enroll):
+            return {"error": f"Enrollment export not found: {enroll}"}
         try:
             # analyze_live writes a workbook as a side effect; route it to a
             # throwaway temp file so nothing leaks into the user's workspace.
             with tempfile.TemporaryDirectory() as tmp:
                 out_path = os.path.join(tmp, "live_workbook.xlsx")
                 report = build_live_workbook.analyze_live(
-                    campus, parsed_terms, program, out_path, client=client)
+                    campus, parsed_terms, program, out_path,
+                    enrollment_path=enroll, elumen_live=bool(elumen_live),
+                    client=client)
         except Exception as e:
             return {"error": (f"Could not fetch live LACCD data: "
                               f"{type(e).__name__}: {e}")}
