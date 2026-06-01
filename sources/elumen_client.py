@@ -18,7 +18,8 @@ NO OVERCLAIMING / ToU CAVEAT: this client implements ONLY the verified request
 + response shape above. Terms-of-Use review, rate-limit policy, and human
 approval for hitting the live endpoint at scale are STILL PENDING. Do NOT treat
 this module as production-cleared to crawl eLumen — live use is APPROVAL-GATED
-(see docs/eLUMEN_LIVE_USAGE.md). The single networked path is exercised only by
+(see the project's internal eLumen live-usage notes, kept local). The single
+networked path is exercised only by
 the ``@pytest.mark.live`` test, which is deselected by default.
 
 PRODUCTION-USE GUARDRAILS (a polite, BOUNDED client — never a broad crawl):
