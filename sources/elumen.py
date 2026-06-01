@@ -1,19 +1,24 @@
-"""eLumen prerequisite logic -> engine CNF catalog strings (FIXTURE-ONLY).
+"""eLumen prerequisite logic -> engine CNF catalog strings (pure, no network).
 
-================================ NOT VALIDATED ON REAL DATA ===================
-This module is **FIXTURE-ONLY**. There is NO known real eLumen REST endpoint,
-auth scheme, or captured response. Everything here parses a SELF-DEFINED,
-COMMITTED fixture (``tests/fixtures/elumen_prereqs_LAMC.json``) whose shape we
-DEFINE and DOCUMENT below — it is **ASSUMED**, not confirmed against a real
-eLumen payload. First contact with real eLumen data may require adjusting
-``parse_elumen_dnf`` (the change stays isolated to this one module). NOTHING in
-this module opens a socket: it is a pure file read + pure DNF->CNF conversion.
-The live eLumen HTTP client is intentionally NOT built here (no endpoint/auth to
-build against without fabrication) — it is plan-only (see the m7 design §10).
+================================ ROLE IN THE PIPELINE =========================
+This module is the **pure DNF->CNF converter + fixture loader** for eLumen
+prerequisites. It opens NO socket: a file read (``load_elumen_fixture``) plus a
+pure DNF->CNF conversion (``parse_elumen_dnf`` / ``build_prereq_map``).
+
+The REAL live HTTP client lives in ``sources/elumen_client.py`` — a real,
+public, unauthenticated eLumen Public Portal REST endpoint, **verified live
+2026-05-30** (itemType=Prerequisite only; coreqs/advisories excluded; ToU /
+rate-limit / human-approval review still PENDING, so it is best-effort, not
+production-ready). ``build_prereq_map`` below is the SHARED back end for BOTH
+sources: the live path feeds it ``elumen_client.fetch_prereq_records`` output,
+the offline path feeds it ``load_elumen_fixture`` output, and both produce the
+same catalog prereq map. Only ``load_elumen_fixture`` is fixture-scoped (its
+self-defined committed fixture shape is ASSUMED, documented below, and the real
+client mirrors it).
 ==============================================================================
 
-ASSUMED real eLumen prerequisite response shape (documented so a real capture is
-recognizable, and so a future ``sources/elumen_client.py`` knows the target):
+eLumen prerequisite response shape (the committed fixture shape, mirrored by the
+live ``sources/elumen_client.py`` records this module converts):
 
     {
       "source": "elumen ...",          # provenance label

@@ -10,8 +10,11 @@ all-zero / all-blank behavior byte-identically):
     when present (records enriched from the IR export);
   - build_catalog_df / write_workbook accept a ``prereqs`` course-id -> CNF
     string map for the structured-prereq column.
-No column or schema change: the three column-constant lists stay equal to
-engine.REQUIRED_COLUMNS.
+The section sheet additionally carries one OPTIONAL column beyond
+engine.REQUIRED_COLUMNS["sections"] — ``Avail Status`` — holding the schedule
+API's per-section availability (Open/Waitlist/Closed). engine.analyze reads it
+optionally (absent in demo/IR workbooks), so it is additive: it turns the live
+waitlist STATUS into an under_supply signal without needing the IR counts.
 """
 from __future__ import annotations
 
@@ -26,7 +29,8 @@ from .http import SourceDataError
 # (the live source -> mapping step), mirroring sources/http.py's style.
 SOURCE = "live-source mapping"
 
-SECTION_COLUMNS = ["Term", "CLASS", "Class Status", "Cap Enrl", "Tot Enrl", "Wait Tot"]
+SECTION_COLUMNS = ["Term", "CLASS", "Class Status", "Cap Enrl", "Tot Enrl",
+                   "Wait Tot", "Avail Status"]
 CATALOG_COLUMNS = ["Course ID", "Units", "Prerequisites (structured)"]
 PROGRAM_COLUMNS = ["Program Code", "Program Title", "Course ID", "Recommended Semester"]
 
@@ -66,8 +70,7 @@ def build_sections_df(section_records):
             "Term": term,
             "CLASS": _norm(r["course"]),
             # The schedule API only returns offered sections (cancelled ones are
-            # absent); its status field is enrollment availability (Open/Closed/
-            # Waitlist), not lifecycle. So every fetched section is an active offering.
+            # absent), so every fetched section is an active OFFERING (lifecycle).
             "Class Status": "Active",
             # Additive enrollment seam (m7): records enriched from the IR export
             # carry Cap/Tot/Wait Enrl; absent them (the schedule API alone) the
@@ -75,6 +78,10 @@ def build_sections_df(section_records):
             "Cap Enrl": r.get("Cap Enrl", 0),
             "Tot Enrl": r.get("Tot Enrl", 0),
             "Wait Tot": r.get("Wait Tot", 0),
+            # The schedule API's separate AVAILABILITY status (Open/Waitlist/
+            # Closed). Carried through so engine.analyze can read a live waitlist
+            # signal (Waitlist => section at capacity) without the IR counts.
+            "Avail Status": str(r.get("status", "") or ""),
         })
     return pd.DataFrame(rows, columns=SECTION_COLUMNS)
 

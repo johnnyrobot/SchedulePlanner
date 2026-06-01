@@ -22,6 +22,17 @@ import app
 # json_response is a module-level helper in conftest (builds a FakeResponse with
 # a chosen body), not a fixture — import it directly to forge a non-JSON body.
 from conftest import json_response
+# Reuse the self-contained offline eLumen route map (schedule + Program Mapper +
+# eLumen, overlapping courses) from the live-eLumen pipeline test, so the
+# app-level elumen_live flag test runs with no network and no duplicated fixtures.
+from test_elumen_live_pipeline import _routes as _elumen_live_routes
+
+# The committed IR enrollment export fixture (terms {2248, 2252}); term-disjoint
+# from the schedule fixture (2268), so a real join matches 0 sections — the
+# honest baseline that proves the upload path is wired without overclaiming.
+_ENROLL_FIXTURE = os.path.join(
+    os.path.dirname(os.path.dirname(__file__)),
+    "files", "lamc_sample_enrollment.xlsx")
 
 # The `lamc_routes` fixture (the shared live-fixture route map replaying the
 # committed tests/fixtures/) lives in tests/conftest.py, shared with the
@@ -89,9 +100,11 @@ def test_fetch_live_returns_results_plus_reconciliation_and_inert(
     assert set(res["analysis"]) == {
         "rotation_gaps", "single_section", "modality_mismatch", "under_supply"}
     assert "BIOLOGY" in res["programs"]
-    # enrollment-driven detectors stay inert on live-shaped data (no counts)
+    # modality_mismatch stays inert (needs IR fill %); under_supply now fires
+    # from the live schedule Waitlist status (breadth, no IR headcount).
     assert res["analysis"]["modality_mismatch"] == []
-    assert res["analysis"]["under_supply"] == []
+    assert res["analysis"]["under_supply"]
+    assert all(r["waitlisted"] == 0 for r in res["analysis"]["under_supply"])
 
     # reconciliation surfaced for the live panel
     rec = res["reconciliation"]
@@ -102,8 +115,9 @@ def test_fetch_live_returns_results_plus_reconciliation_and_inert(
 
     # inert-detector notes surfaced for the live panel
     inert = res["inert_detectors"]
-    assert {d["detector"] for d in inert} >= {
-        "modality_mismatch", "under_supply", "prerequisite_ordering"}
+    # under_supply is live-active now, so only these two remain inert.
+    assert {d["detector"] for d in inert} == {
+        "modality_mismatch", "prerequisite_ordering"}
     for d in inert:
         assert d["reason"]
         assert d["remedy"]
@@ -285,3 +299,62 @@ def test_ai_status_happy_path_still_a_dict(monkeypatch):
         "installed": False, "running": False, "model": False,
         "model_name": app.llm_assist.MODEL,
     }
+
+
+# ---- live-form optional enrichments: enrollment upload + eLumen toggle ------
+
+def test_fetch_live_elumen_live_flag_threads_prereqs(make_client):
+    """The new elumen_live=True bridge param flows fetch_live -> analyze_live and
+    flips prerequisite_ordering ACTIVE (REAL eLumen), with the live prereq landing
+    in the catalog. Driven by the offline eLumen route map (no network/socket)."""
+    client = make_client(_elumen_live_routes())
+    res = app.Api().fetch_live("LAMC", "2268", "Biology",
+                               elumen_live=True, client=client)
+    assert "error" not in res, res.get("error")
+    det = next(d for d in res["inert_detectors"]
+               if d["detector"] == "prerequisite_ordering")
+    assert det["status"] == "active", det
+    assert det.get("live") is True, det
+    assert "REAL eLumen" in det.get("label", ""), det
+
+
+def test_fetch_live_enrollment_path_threads_and_reports_join(
+        lamc_routes, make_client):
+    """A committed enrollment export passed via enrollment_path flows fetch_live
+    -> analyze_live -> enrich_sections. The committed fixtures are term-disjoint
+    (schedule 2268 vs enrollment {2248, 2252}), so the honest outcome is a
+    0-section join that keeps capacity inert with an explicit matched/total count
+    and a recorded source — proving the upload path is wired and reports the join
+    rather than silently doing nothing."""
+    client = make_client(lamc_routes)
+    res = app.Api().fetch_live("LAMC", "2268", "Biology",
+                               enrollment_path=_ENROLL_FIXTURE, client=client)
+    assert "error" not in res, res.get("error")
+    det = next(d for d in res["inert_detectors"]
+               if d["detector"] == "modality_mismatch")
+    assert det["status"] == "inert", det
+    assert det.get("matched_sections") == 0, det
+    assert det.get("total_sections", 0) >= 1, det
+    assert det.get("source"), det  # the enrollment source is recorded honestly
+
+
+def test_fetch_live_nonexistent_enrollment_returns_error():
+    """A non-empty enrollment_path that does not exist is a readable error dict
+    (caught before any network), not a load_enrollment traceback."""
+    res = app.Api().fetch_live("LAMC", "2268", "Biology",
+                               enrollment_path="/no/such/enrollment.xlsx")
+    assert isinstance(res, dict)
+    assert "error" in res
+    assert "enrollment export not found" in res["error"].lower()
+
+
+def test_fetch_live_blank_enrollment_path_is_ignored(lamc_routes, make_client):
+    """An empty/whitespace enrollment_path (the UI's 'no file chosen' state) is
+    treated as no enrollment — the bare live fetch still succeeds with the two
+    baseline inert detectors, unchanged from the no-arg call."""
+    client = make_client(lamc_routes)
+    res = app.Api().fetch_live("LAMC", "2268", "Biology",
+                               enrollment_path="   ", client=client)
+    assert "error" not in res, res.get("error")
+    assert {d["detector"] for d in res["inert_detectors"]} == {
+        "modality_mismatch", "prerequisite_ordering"}

@@ -137,6 +137,57 @@ def test_f7_under_supply_fires():
     assert "ENGL 101" in us_courses
 
 
+def _prog(cid):
+    return pd.DataFrame([{"Course ID": cid}])
+
+
+def test_under_supply_fires_on_live_waitlist_status_without_counts():
+    """Live signal: with NO IR counts (Wait Tot=0) but an 'Avail Status' of
+    Waitlist on some sections, under_supply fires on section BREADTH."""
+    sec = pd.DataFrame([
+        {"Term": 2268, "CLASS": "BIO 1", "Class Status": "Active", "Cap Enrl": 0,
+         "Tot Enrl": 0, "Wait Tot": 0, "Avail Status": "Waitlist"},
+        {"Term": 2268, "CLASS": "BIO 1", "Class Status": "Active", "Cap Enrl": 0,
+         "Tot Enrl": 0, "Wait Tot": 0, "Avail Status": "Open"},
+        {"Term": 2268, "CLASS": "BIO 1", "Class Status": "Active", "Cap Enrl": 0,
+         "Tot Enrl": 0, "Wait Tot": 0, "Avail Status": "Closed"},
+    ])
+    out = engine.analyze(sec, _prog("BIO 1"), n_terms=1)
+    assert out["under_supply"] == [{"course": "BIO 1", "waitlisted": 0,
+                                    "sections_waitlisted": 1, "sections_total": 3}]
+
+
+def test_under_supply_ir_headcount_beats_live_breadth():
+    """When IR Wait Tot (>15) is present it wins (precise headcount), and the
+    section breadth still rides alongside."""
+    sec = pd.DataFrame([
+        {"Term": 2268, "CLASS": "BIO 1", "Class Status": "Active", "Cap Enrl": 30,
+         "Tot Enrl": 30, "Wait Tot": 20, "Avail Status": "Waitlist"},
+    ])
+    out = engine.analyze(sec, _prog("BIO 1"), n_terms=1)
+    assert out["under_supply"] == [{"course": "BIO 1", "waitlisted": 20,
+                                    "sections_waitlisted": 1, "sections_total": 1}]
+
+
+def test_under_supply_silent_without_waitlist_or_counts():
+    """No waitlist status and no IR counts -> no false under_supply flag."""
+    sec = pd.DataFrame([
+        {"Term": 2268, "CLASS": "BIO 1", "Class Status": "Active", "Cap Enrl": 0,
+         "Tot Enrl": 0, "Wait Tot": 0, "Avail Status": "Open"},
+    ])
+    assert engine.analyze(sec, _prog("BIO 1"), n_terms=1)["under_supply"] == []
+
+
+def test_under_supply_ignores_avail_status_when_column_absent():
+    """A demo/IR workbook with no 'Avail Status' column still works (optional);
+    under_supply then relies on Wait Tot alone."""
+    sec = pd.DataFrame([
+        {"Term": 2268, "CLASS": "BIO 1", "Class Status": "Active", "Cap Enrl": 0,
+         "Tot Enrl": 0, "Wait Tot": 0},
+    ])
+    assert engine.analyze(sec, _prog("BIO 1"), n_terms=1)["under_supply"] == []
+
+
 # F8: official map violation detection
 def test_f8_official_map_violation():
     """PRD F8: official map issues detected for AS-T-CSCI; CS 103 season conflict flagged."""

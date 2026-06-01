@@ -61,9 +61,12 @@ def test_full_chain_offline_through_engine(lamc_routes, make_client, tmp_path):
     assert set(results["analysis"]) == {
         "rotation_gaps", "single_section", "modality_mismatch", "under_supply"}
     assert "BIOLOGY" in results["programs"]
-    # enrollment-driven detectors stay inert on live-shaped data (no counts)
+    # modality_mismatch stays inert (no fill % without IR); under_supply fires
+    # from the live schedule Waitlist status (breadth, headcount 0).
     assert results["analysis"]["modality_mismatch"] == []
-    assert results["analysis"]["under_supply"] == []
+    us = results["analysis"]["under_supply"]
+    assert us, "live waitlist status should fire under_supply"
+    assert all(r["waitlisted"] == 0 and r.get("sections_waitlisted", 0) >= 1 for r in us)
 
 
 def test_build_live_workbook_emits_structured_report(lamc_routes, make_client,
@@ -93,8 +96,9 @@ def test_build_live_workbook_emits_structured_report(lamc_routes, make_client,
 
     # inert-detector gaps surfaced as structured machine-readable fields
     inert = report["inert_detectors"]
-    assert {d["detector"] for d in inert} >= {
-        "modality_mismatch", "under_supply", "prerequisite_ordering"}
+    # under_supply is live-active now (fires from the schedule Waitlist status).
+    assert {d["detector"] for d in inert} == {
+        "modality_mismatch", "prerequisite_ordering"}
     for d in inert:
         assert d["reason"]            # human-readable why
         assert "remedy" in d          # what would un-inert it
