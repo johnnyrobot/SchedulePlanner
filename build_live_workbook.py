@@ -214,6 +214,34 @@ def _prereq_detector_entry(*, source, results, live=False, coverage=None):
         else:
             fallback.append({"course": cid, "reason": res.fallback_reason})
 
+    # A prereq map was threaded in, but it applied ZERO ordering constraints —
+    # e.g. eLumen returned no HARD prerequisites for this program's courses (only
+    # advisories / co-requisites, which the itemType filter excludes), or none of
+    # the fetched prereqs keyed onto a program course. For the solver that is
+    # IDENTICAL to having no prereq data at all, so report INERT honestly rather
+    # than a misleading green "active" with zero constraints — mirroring the
+    # enrollment panel's honest "joined 0 sections — counts not applied".
+    if not exact and not fallback:
+        provenance = "Live eLumen" if live else "The eLumen fixture"
+        entry = {
+            "detector": "prerequisite_ordering",
+            "status": "inert",
+            "source": source,
+            "live": bool(live),
+            "reason": (f"{provenance} returned no hard prerequisites for this "
+                       "program's courses (e.g. only advisories / co-requisites, "
+                       "which don't constrain ordering), so the solver ran "
+                       "without prerequisite ordering"),
+            "remedy": ("none needed if these courses truly have no prerequisites; "
+                       "otherwise check the eLumen coverage report for the "
+                       "course-id join"),
+            "prereq_summary": {"exact_count": 0, "fallback_count": 0,
+                               "exact_courses": [], "fallback_courses": []},
+        }
+        if coverage is not None:
+            entry["coverage"] = coverage
+        return entry
+
     if live:
         label = ("REAL eLumen (live public catalog endpoint, "
                  "itemType=Prerequisite only; coreqs/advisories excluded). "
@@ -245,6 +273,35 @@ def _prereq_detector_entry(*, source, results, live=False, coverage=None):
     if coverage is not None:
         entry["coverage"] = coverage
     return entry
+
+
+def _program_subjects(sections, program):
+    """Subjects to query eLumen for: the subjects of fetched sections that
+    belong to a PROGRAM course — NOT every subject in the campus listing.
+
+    The full multi-term LAMC listing spans ~50-60 subjects; querying eLumen for
+    all of them is slow and is a broad crawl of a real, rate-limit/ToU-pending
+    endpoint. Prereqs are only needed for the program's own (gated) courses (their
+    targets still resolve from the already-built catalog), so this bounds the
+    fetch to the handful of subjects that matter (e.g. Biology -> BIOLOGY / CHEM /
+    PHYSICS / ANATOMY / ...).
+
+    The section<->program-course match is keyed with eLumen's OWN normalizer
+    (``elumen_client.normalize_course_code``), NOT ``mapping._norm``: the schedule
+    and Program Mapper format catalog numbers independently ("BIOLOGY 3" vs
+    "BIOLOGY 03") and ``_norm`` does not strip leading zeros, so a ``_norm``-keyed
+    filter could silently exclude a gated course's subject and never fetch its
+    prereq. ``normalize_course_code`` collapses "BIOLOGY 03" -> "BIOLOGY 3" on both
+    sides, matching how the eLumen<->catalog join already keys.
+    """
+    program_keys = {elumen_client.normalize_course_code(c["course_id"])
+                    for c in program["courses"]}
+    return sorted({
+        str(r.get("subject")).strip()
+        for r in sections
+        if str(r.get("subject") or "").strip()
+        and elumen_client.normalize_course_code(r.get("course")) in program_keys
+    })
 
 
 def analyze_live(campus, terms, program_query, out_path, *, client=None,
@@ -348,20 +405,9 @@ def analyze_live(campus, terms, program_query, out_path, *, client=None,
         )
         requested_course_ids = {c["course_id"] for c in program["courses"]}
 
-        # Subjects to query eLumen for = ONLY the subjects of fetched sections
-        # that belong to a PROGRAM course (not every subject in the campus
-        # listing). The full multi-term listing spans ~50-60 subjects; querying
-        # eLumen for all of them is slow and is a broad crawl of a real,
-        # rate-limit/ToU-pending endpoint. Prereqs are only needed for the
-        # program's own (gated) courses — their targets still resolve from the
-        # already-built catalog — so this bounds the fetch to the handful of
-        # subjects that actually matter (e.g. Biology -> BIOLOGY/CHEM/PHYSICS/...).
-        subjects = sorted({
-            str(r.get("subject")).strip()
-            for r in sections
-            if str(r.get("subject") or "").strip()
-            and mapping._norm(r.get("course")) in program_course_ids
-        })
+        # Bound the eLumen fetch to the program's own subjects (leading-zero
+        # tolerant — see _program_subjects), never the whole campus listing.
+        subjects = _program_subjects(sections, program)
 
         # Network IO stays OUTSIDE engine.run: reuse an injected client, else
         # open + own one (mirrors build()'s pattern). A per-build cache dedupes
