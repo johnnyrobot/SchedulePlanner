@@ -337,3 +337,63 @@ def test_cli_args_parse_enrollment_and_elumen_fixture(monkeypatch, tmp_path,
     assert captured["elumen_fixture"] == ELUMEN_FIXTURE
     # --elumen-live not passed here -> the flag defaults to False (opt-in only).
     assert captured["elumen_live"] is False
+
+
+# ---------------------------------------------------------------------------
+# Zero-prereq honesty: a live eLumen fetch that applies NO prerequisites must
+# report INERT, not a misleading green "active" with 0 constraints.
+# ---------------------------------------------------------------------------
+def test_prereq_detector_zero_prereqs_reports_inert_not_active():
+    """When eLumen returns no HARD prerequisites for a program's courses (e.g.
+    only advisories / co-requisites), build_prereq_map yields an empty results
+    map. _prereq_detector_entry must then report INERT — the solver has zero
+    ordering constraints, identical to no prereq data — NOT a green "active".
+    Mirrors the enrollment panel's honest "joined 0 sections" handling."""
+    entry = build_live_workbook._prereq_detector_entry(
+        source="eLumen live: tenant.example", results={}, live=True)
+    assert entry["detector"] == "prerequisite_ordering"
+    assert entry["status"] == "inert", entry
+    assert entry["reason"] and "no hard prerequisites" in entry["reason"].lower()
+    assert entry["prereq_summary"]["exact_count"] == 0
+    assert entry["prereq_summary"]["fallback_count"] == 0
+    assert entry["live"] is True            # provenance preserved while inert
+
+
+def test_prereq_detector_nonzero_prereqs_stays_active():
+    """Contrast/regression guard: a non-empty results map keeps the entry ACTIVE
+    (the zero-prereq inert branch must not over-fire)."""
+    from sources.prereq_cnf import dnf_to_cnf
+    res = dnf_to_cnf([["MATH 245"]], gated_course="PHYS 102")
+    entry = build_live_workbook._prereq_detector_entry(
+        source="eLumen live: tenant.example", results={"PHYS 102": res}, live=True)
+    assert entry["status"] == "active", entry
+    assert (entry["prereq_summary"]["exact_count"]
+            + entry["prereq_summary"]["fallback_count"]) >= 1
+
+
+# ---------------------------------------------------------------------------
+# eLumen subject bound: program-scoped AND leading-zero tolerant.
+# ---------------------------------------------------------------------------
+def test_program_subjects_is_leading_zero_tolerant():
+    """The schedule emits 'ANATOMY 1' while Program Mapper lists 'ANATOMY 01';
+    the bound must still recognize that section as a program course and query the
+    ANATOMY subject. mapping._norm would NOT (it doesn't strip leading zeros), so
+    this pins the elumen_client.normalize_course_code keying."""
+    sections = [
+        {"subject": "ANATOMY", "course": "ANATOMY 1"},
+        {"subject": "PHYSICS", "course": "PHYSICS 6"},   # not a program course
+    ]
+    program = {"courses": [{"course_id": "ANATOMY 01"},
+                           {"course_id": "BIOLOGY 03"}]}
+    assert build_live_workbook._program_subjects(sections, program) == ["ANATOMY"]
+
+
+def test_program_subjects_bounds_to_program_courses_only():
+    """A subject offered in the listing but NOT belonging to any program course
+    is excluded — the whole point of the bound (no broad campus crawl)."""
+    sections = [
+        {"subject": "BIOLOGY", "course": "BIOLOGY 3"},
+        {"subject": "DANCE", "course": "DANCE 100"},     # not in the program
+    ]
+    program = {"courses": [{"course_id": "BIOLOGY 3"}]}
+    assert build_live_workbook._program_subjects(sections, program) == ["BIOLOGY"]
