@@ -5,16 +5,21 @@ name: CI
 # The gating `test` job installs the pinned, hash-checked dependency set from
 # requirements.lock, so every run resolves the SAME package versions (and
 # verifies their hashes). Live/network tests are deselected by default via
-# pytest.ini (`addopts = -m "not live"`), so pull requests are never gated on
-# network access.
+# pytest.ini (`addopts = -m "not live"`) and only ever run from live-tests.yml,
+# so pull requests are never gated on network access.
 #
-# This workflow does NOT build, sign, or notarize any binary.
+# This workflow does NOT build, sign, or notarize any binary — the macOS bundle
+# is produced (unsigned) by release-build.yml; signing is out of scope.
 
 on:
   push:
     branches: [main]
   pull_request:
   workflow_dispatch:
+  schedule:
+    # Weekly heartbeat (Mondays 13:00 UTC) so the advisory drift job below runs
+    # even with no commits.
+    - cron: "0 13 * * 1"
 
 permissions:
   contents: read
@@ -47,8 +52,27 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install --require-hashes -r requirements.lock
-      - name: Offline test suite (live deselected by default via pytest.ini)
-        run: python -m pytest -m "not live"
+      - name: Offline suite + live-deselect gate
+        # scripts/run_qa.sh runs `pytest -m 'not live'` and asserts that exactly
+        # the live-marked tests were deselected, so a silently added/removed live
+        # test trips the gate.
+        run: bash scripts/run_qa.sh
+
+  lint:
+    name: lint (ruff, critical rules)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Install ruff (pinned)
+        run: pip install "ruff==0.15.11"
+      - name: Ruff (syntax errors + undefined names only)
+        # Intentionally minimal: pyflakes E9/F63/F7/F82 catch real breakage
+        # (syntax errors, undefined names, broken f-strings) without imposing a
+        # style on the existing, unformatted codebase.
+        run: ruff check --select E9,F63,F7,F82 .
 
   build-verify:
     name: build-resource verifier self-test
@@ -58,5 +82,26 @@ jobs:
       - name: Resource-checker negative control (portable; no bundle needed)
         # Proves the build resource checker actually fails on a bundle missing
         # the OR-Tools native lib. The --self-test path uses only mktemp + find,
-        # so it runs on any OS without producing a real bundle.
+        # so it runs on any OS without producing a real bundle. The full bundle
+        # verification runs in release-build.yml on macOS.
         run: bash scripts/verify_macos_build.sh --self-test
+
+  drift:
+    name: dependency drift canary (advisory)
+    # Scheduled-only and non-blocking: installs the LOOSE requirements.txt to
+    # detect when upstream releases drift away from requirements.lock (e.g. a new
+    # serializer release that breaks byte-identical fixtures). It never gates PRs.
+    if: github.event_name == 'schedule'
+    runs-on: macos-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Install loose (unpinned) requirements
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      - name: Offline suite against floating deps (non-blocking)
+        run: bash scripts/run_qa.sh

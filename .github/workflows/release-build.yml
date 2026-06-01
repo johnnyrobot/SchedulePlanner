@@ -1,0 +1,56 @@
+name: Release build (macOS, unsigned)
+
+# Builds the macOS SchedulePlanner.app with PyInstaller from the PINNED,
+# hash-checked dependency set (requirements.lock), then runs the headless
+# resource/Mach-O verifier and uploads the bundle as an artifact.
+#
+# MANUAL dispatch only for now. This workflow has not yet been executed on a
+# GitHub-hosted runner; validate it with one manual run before wiring it to
+# release tags. (It wraps scripts/build_macos.sh + scripts/verify_macos_build.sh,
+# which were verified on the dev host per BUILD.md.)
+#
+# HONEST SCOPE — what this deliberately does NOT do:
+#   * No code signing or notarization. The .app is UNSIGNED and un-notarized;
+#     macOS Gatekeeper blocks it on first open (see BUILD.md "macOS Gatekeeper
+#     bypass"). Signing needs an Apple Developer ID certificate + notarytool and
+#     is out of scope.
+#   * No Windows or Linux build. PyInstaller is not a cross-compiler; those
+#     artifacts are built manually via scripts/build_windows.ps1 / build_linux.sh.
+#   * No claim of bit-for-bit identical BINARIES. PyInstaller embeds timestamps
+#     and paths; what is reproducible here is the DEPENDENCY SET (via the lock),
+#     not the byte layout of the bundle.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-macos:
+    name: build dist/SchedulePlanner.app (unsigned)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: requirements.lock
+      - name: Install pinned runtime deps (hash-checked)
+        run: |
+          python -m pip install --upgrade pip
+          pip install --require-hashes -r requirements.lock
+      - name: Install PyInstaller (build tool; BUILD.md-verified version)
+        run: pip install "pyinstaller==6.20.0"
+      - name: Build the macOS bundle
+        run: bash scripts/build_macos.sh
+      - name: Verify bundled resources (headless)
+        run: bash scripts/verify_macos_build.sh
+      - name: Upload unsigned .app artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: SchedulePlanner-macos-unsigned
+          path: dist/SchedulePlanner.app
+          if-no-files-found: error
+          retention-days: 14
