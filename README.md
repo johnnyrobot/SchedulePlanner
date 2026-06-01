@@ -146,8 +146,7 @@ python3 -m pytest -m live            # the 3 network-gated integration tests
 `scripts/run_qa.sh` is the single QA gate: it runs the offline suite and only
 exits 0 when pytest passes *and* exactly the three `live`-marked tests were
 deselected. The headless coverage (perf N5/N6, privacy N1–N4, determinism N11,
-dead-path sweep, live-source error paths) is catalogued in
-`docs/M8_QA_REPORT.md`.
+dead-path sweep, live-source error paths) is exercised by that gate.
 
 ## Optional integrations
 
@@ -191,7 +190,7 @@ desktop UI; `setup_ai()` pulls the configured model with a one-time
 
 `legacy/load_neo4j.py` is an early reference prototype that sketches loading
 the scheduling data into a Neo4j graph for advanced graph queries and
-dashboards (TECH_SPEC §6). It is not wired into the engine, app, or live
+dashboards. It is not wired into the engine, app, or live
 pipeline, and is not runnable as-is (it carries hardcoded sandbox paths). It
 is retained for reference only — treat it as design notes, not an installable
 feature.
@@ -228,17 +227,11 @@ not produced on the macOS dev host.
 
 `--collect-all ortools` is the load-bearing flag (it bundles the OR-Tools
 native libs). Full flag-by-flag rationale, the frozen native-stack smoke test,
-and the macOS Gatekeeper bypass are in `BUILD.md`; Windows/Linux recipes and
-per-OS pywebview backends are in `docs/CROSS_PLATFORM_BUILD.md`.
+and the macOS Gatekeeper bypass are in `BUILD.md`.
 
 ## Docs index
 
-- `PRD.md` — product requirements; §12 milestone table reconciled to shipped reality.
-- `TECH_SPEC.md` — technical design.
 - `BUILD.md` — verified macOS PyInstaller build.
-- `docs/CROSS_PLATFORM_BUILD.md` — Windows/Linux build recipes (prepared, unverified here).
-- `docs/M8_QA_REPORT.md` — what is verified headlessly vs. manual-only + the PRD F/N coverage matrix.
-- `docs/live_smoke_2026.md` — captured live LACCD network smoke transcript.
 
 ## Demo data
 

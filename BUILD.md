@@ -250,8 +250,8 @@ instructor PII**. It is **not** production-cleared: eLumen Terms-of-Use /
 rate-limit review and human approval are pending (live use is **approval-gated**),
 and the eLumen↔schedule course-id join is audited only via the run's printed
 coverage report. The bundled desktop demo does not invoke it. Full details,
-guardrail defaults, privacy posture, and the approval gate are in
-[`docs/eLUMEN_LIVE_USAGE.md`](docs/eLUMEN_LIVE_USAGE.md).
+guardrail defaults, privacy posture, and the approval gate are documented in
+the project's internal eLumen live-usage notes (kept locally, not tracked here).
 
 ## Known build risks / notes
 
@@ -270,14 +270,13 @@ guardrail defaults, privacy posture, and the approval gate are in
 ## Windows / Linux (prepared, not built on the macOS host)
 
 PyInstaller is not a cross-compiler, so the Windows and Linux artifacts must be
-built **on those OSes**. The recipes, helper scripts
-(`scripts/build_windows.ps1`, `scripts/build_linux.sh`), per-OS pywebview
-backend requirements (WebView2 on Windows; GTK/Qt WebKit on Linux), and the
-`--add-data` separator gotcha (`;` on Windows, `:` on macOS/Linux) live in
-**`docs/CROSS_PLATFORM_BUILD.md`**. They are prepared but **NOT produced or
-verified on this macOS dev host** — treat them as untested until run on the
-target OS and checked with `scripts/verify_build_resources.sh` plus the manual
-GUI checklist there.
+built **on those OSes**. The helper scripts
+(`scripts/build_windows.ps1`, `scripts/build_linux.sh`) carry the recipes, the
+per-OS pywebview backend requirements (WebView2 on Windows; GTK/Qt WebKit on
+Linux), and the `--add-data` separator gotcha (`;` on Windows, `:` on
+macOS/Linux). They are prepared but **NOT produced or verified on this macOS
+dev host** — treat them as untested until run on the target OS and checked with
+`scripts/verify_build_resources.sh` plus the manual GUI checklist.
 
 The Windows command, for quick reference (note the `;` separator):
 
@@ -294,10 +293,9 @@ python -m PyInstaller `
 
 ## See also
 
-- `docs/CROSS_PLATFORM_BUILD.md` — Windows/Linux recipes, per-OS pywebview
-  backends, and the shared `verify_build_resources.sh` resource checker.
-- `docs/M8_QA_REPORT.md` — what was verified headlessly vs. what is manual-only
-  (incl. the frozen native-stack smoke test and the PRD F/N coverage matrix).
+- `scripts/build_windows.ps1`, `scripts/build_linux.sh` — Windows/Linux recipes,
+  per-OS pywebview backends, and the shared `verify_build_resources.sh` checker.
+- `scripts/run_qa.sh` — the single QA gate (offline suite + live-deselect check).
 - `scripts/build_macos_console_smoke.sh` — the `--console` smoke harness that
   proves the frozen OR-Tools + pandas + `engine.run` stack loads end to end.
 
