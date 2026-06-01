@@ -30,3 +30,9 @@ data/live_*.xlsx
 
 # Claude Code local settings / session state (never commit)
 .claude/
+
+# Internal planning docs / specs — kept locally, intentionally untracked
+/PRD.md
+/TECH_SPEC.md
+/LAMC_scheduling_data_spec.md
+/docs/
