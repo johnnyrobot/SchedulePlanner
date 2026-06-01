@@ -121,6 +121,32 @@ INERT_DETECTORS = [
 ]
 
 
+def _fmt_secs(s):
+    """Format a seconds value without a trailing '.0' for whole numbers (90.0 -> '90')."""
+    try:
+        f = float(s)
+    except (TypeError, ValueError):
+        return str(s)
+    return str(int(f)) if f.is_integer() else str(f)
+
+
+def _truncation_phrase(ft):
+    """Human phrase for an eLumen fetch that hit its aggregate wall-clock cap.
+
+    Honest in BOTH truncation shapes: when whole subjects were skipped it names
+    the fetched/total count; when the clock crossed mid-way through the final
+    subject (so fetched == total but coverage is still partial) it says so
+    instead of the self-contradictory "after N/N subjects".
+    """
+    cap = _fmt_secs(ft.get("deadline_seconds"))
+    fetched, total = ft.get("queries_fetched"), ft.get("queries_total")
+    if fetched is not None and total is not None and fetched < total:
+        where = f"after {fetched}/{total} subjects"
+    else:
+        where = "while fetching the last subject"
+    return f"hit its {cap}s time cap {where}"
+
+
 def _enrollment_detector_entries(*, source, matched, total):
     """Build the enrollment-gated detector's report entry (modality_mismatch).
 
@@ -214,6 +240,14 @@ def _prereq_detector_entry(*, source, results, live=False, coverage=None):
         else:
             fallback.append({"course": cid, "reason": res.fallback_reason})
 
+    # Did the live eLumen fetch hit its aggregate wall-clock cap? If so, coverage
+    # may be partial — surface that honestly wherever this detector is described.
+    ft = (coverage or {}).get("fetch_truncated") or {}
+    trunc_note = ""
+    if ft.get("exceeded"):
+        trunc_note = (f" NOTE: the eLumen fetch {_truncation_phrase(ft)}, so "
+                      "prerequisite coverage may be partial.")
+
     # A prereq map was threaded in, but it applied ZERO ordering constraints —
     # e.g. eLumen returned no HARD prerequisites for this program's courses (only
     # advisories / co-requisites, which the itemType filter excludes), or none of
@@ -223,15 +257,23 @@ def _prereq_detector_entry(*, source, results, live=False, coverage=None):
     # enrollment panel's honest "joined 0 sections — counts not applied".
     if not exact and not fallback:
         provenance = "Live eLumen" if live else "The eLumen fixture"
+        if ft.get("exceeded"):
+            # Truncated before any hard prereq was collected: the honest reason is
+            # the time cap, NOT "this program has no prerequisites".
+            reason = (f"the eLumen fetch {_truncation_phrase(ft)} before any hard "
+                      "prerequisites were collected, so the solver ran without "
+                      "prerequisite ordering")
+        else:
+            reason = (f"{provenance} returned no hard prerequisites for this "
+                      "program's courses (e.g. only advisories / co-requisites, "
+                      "which don't constrain ordering), so the solver ran "
+                      "without prerequisite ordering")
         entry = {
             "detector": "prerequisite_ordering",
             "status": "inert",
             "source": source,
             "live": bool(live),
-            "reason": (f"{provenance} returned no hard prerequisites for this "
-                       "program's courses (e.g. only advisories / co-requisites, "
-                       "which don't constrain ordering), so the solver ran "
-                       "without prerequisite ordering"),
+            "reason": reason,
             "remedy": ("none needed if these courses truly have no prerequisites; "
                        "otherwise check the eLumen coverage report for the "
                        "course-id join"),
@@ -248,11 +290,11 @@ def _prereq_detector_entry(*, source, results, live=False, coverage=None):
                  "NOT production-ready: ToU / rate-limit / human-approval review "
                  "PENDING. The eLumen<->schedule/Program-Mapper course-id join is "
                  "validated ONLY via the coverage report (normalized course ids, "
-                 "e.g. leading zeros stripped: 'BIOLOGY 03' -> 'BIOLOGY 3').")
+                 "e.g. leading zeros stripped: 'BIOLOGY 03' -> 'BIOLOGY 3')." + trunc_note)
     else:
         label = ("FIXTURE-ONLY: the eLumen prereq slice is parsed from a "
                  "self-defined committed fixture and is NOT validated on real "
-                 "eLumen data.")
+                 "eLumen data." + trunc_note)
 
     entry = {
         "detector": "prerequisite_ordering",
@@ -416,11 +458,11 @@ def analyze_live(campus, terms, program_query, out_path, *, client=None,
         # BOUNDED to the program's own subjects — never a broad background crawl.
         elumen_cache = {}
         if client is not None:
-            records, _fetched = elumen_client.fetch_prereq_records(
+            records, _fetched, fetch_status = elumen_client.fetch_prereq_records(
                 campus, subjects, client=client, cache=elumen_cache)
         else:
             with httpx.Client(timeout=30.0) as owned:
-                records, _fetched = elumen_client.fetch_prereq_records(
+                records, _fetched, fetch_status = elumen_client.fetch_prereq_records(
                     campus, subjects, client=owned, cache=elumen_cache)
 
         kwargs = {}
@@ -429,6 +471,10 @@ def analyze_live(campus, terms, program_query, out_path, *, client=None,
         prereq_map, prereq_results = elumen.build_prereq_map(records, **kwargs)
         elumen_coverage = elumen_client.compute_coverage(
             records, known_course_ids, requested_course_ids=requested_course_ids)
+        # Surface an aggregate wall-clock-cap truncation honestly: prerequisite
+        # coverage may be partial (some subjects skipped). Never silent.
+        if fetch_status.get("exceeded"):
+            elumen_coverage["fetch_truncated"] = fetch_status
         report["elumen_coverage"] = elumen_coverage
         elumen_source = f"eLumen live: {elumen_client.tenant_for(campus)}"
         elumen_live_active = True
@@ -518,6 +564,11 @@ def _print_banner(report):
                 line = ("prerequisite_ordering ACTIVE (fixture-only: eLumen prereq "
                         "CNF threaded; not validated on real eLumen data) -> solver "
                         "enforces ordering constraints.")
+            # Mirror the detector's truncation note so the banner doesn't read as a
+            # clean full-coverage run when the eLumen fetch was actually capped.
+            ft = (d.get("coverage") or {}).get("fetch_truncated") or {}
+            if ft.get("exceeded"):
+                line += f" NOTE: fetch {_truncation_phrase(ft)} — coverage may be partial."
         else:
             line = _BANNER_LINES.get((d["detector"], d["status"]))
         if line is not None:
