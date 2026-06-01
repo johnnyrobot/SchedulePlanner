@@ -7,14 +7,14 @@
 #   python3 build_live_workbook.py --campus LAMC --program Biology \
 #       --terms 2264,2266,2268 --out /tmp/live_LAMC.xlsx
 #
-# and tees the full stdout into docs/live_smoke_2026.md under a banner, so the
+# and tees the full stdout into /tmp/live_smoke_2026.md under a banner, so the
 # milestone has a captured transcript of a real live run.
 #
 # NETWORK BEHAVIOUR (no silent gaps, no hangs):
-#   - On SUCCESS: docs/live_smoke_2026.md holds the full real transcript.
+#   - On SUCCESS: /tmp/live_smoke_2026.md holds the full real transcript.
 #   - On FAILURE (could not reach LACCD): this script exits NON-ZERO with a clear
 #     "could not reach LACCD" message AND still writes a DEFERRED marker into
-#     docs/live_smoke_2026.md so the milestone artifact is never silently
+#     /tmp/live_smoke_2026.md so the milestone artifact is never silently
 #     missing. A hard timeout guards against hangs.
 #
 # DETERMINISTIC OFFLINE STAND-IN:
@@ -32,7 +32,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 cd "${REPO_ROOT}"
 
-DOC="docs/live_smoke_2026.md"
+DOC="/tmp/live_smoke_2026.md"
 OUT_XLSX="/tmp/live_LAMC.xlsx"
 STAMP="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
 
@@ -44,8 +44,6 @@ else
   echo "error: no python3/python on PATH." >&2
   exit 1
 fi
-
-mkdir -p docs
 
 CMD=("${PY}" build_live_workbook.py --campus LAMC --program Biology \
      --terms 2264,2266,2268 --out "${OUT_XLSX}")

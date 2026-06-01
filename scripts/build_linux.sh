@@ -70,7 +70,7 @@ if [ -f "${EXE}" ]; then
   echo ""
   echo "Build complete: ${REPO_ROOT}/${EXE}"
   echo "Verify resources with: ./scripts/verify_build_resources.sh dist/SchedulePlanner"
-  echo "Then complete the MANUAL GUI checklist in docs/CROSS_PLATFORM_BUILD.md."
+  echo "Then complete the MANUAL GUI checklist in BUILD.md."
 else
   echo "error: expected ${EXE} was not produced." >&2
   exit 1
