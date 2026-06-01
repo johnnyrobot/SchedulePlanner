@@ -200,22 +200,22 @@ echo "--- collecting nested code (inner-most first) ---"
 # every nested item but the first). The bash-array + slash-count approach below
 # is portable across BSD/GNU tools.
 nested_items=()
+# Sign EVERY Mach-O file, identified by CONTENT (not name or location). A
+# name/extension/location filter (*.dylib/*.so + framework Contents/MacOS) MISSES:
+#   - framework binaries that live at Versions/<v>/<Name>, e.g.
+#     Python.framework/Versions/3.13/Python (not under Contents/MacOS);
+#   - bare extension-less Mach-O files, e.g. Frameworks/Tcl, Frameworks/Tk;
+#   - CLI executables in bin/ dirs, e.g. torch/bin/protoc, torch/bin/torch_shm_manager.
+# Apple notarization rejects ANY unsigned/adhoc Mach-O ("not signed with a valid
+# Developer ID", "no secure timestamp", "no hardened runtime"), which is exactly
+# how the first submission failed. `file` is the portable content check — slower
+# across the whole bundle, but correct (the top-level .app binary is sealed when
+# we sign the outer bundle last, so we exclude it here).
 while IFS= read -r -d '' f; do
-  nested_items+=("${f}")
-done < <(
-  {
-    # Standalone native libraries.
-    find "${APP}" -type f \( -name '*.dylib' -o -name '*.so' \) -print0
-    # Executables inside nested .framework / .app bundles (helpers,
-    # Python.framework, etc.). Skip the top-level bundle itself — its own main
-    # executable is sealed when we sign the outer .app last.
-    find "${APP}" \( -name '*.framework' -o -name '*.app' \) -type d -print0 \
-      | while IFS= read -r -d '' inner; do
-          [ "${inner}" = "${APP}" ] && continue
-          find "${inner}/Contents/MacOS" -maxdepth 1 -type f -perm -u+x -print0 2>/dev/null || true
-        done
-  }
-)
+  case "$(file -b "${f}" 2>/dev/null)" in
+    *Mach-O*) nested_items+=("${f}") ;;
+  esac
+done < <(find "${APP}" -type f -print0)
 
 # Depth-sort deepest-first by counting '/' separators in each path. We use a
 # newline-delimited intermediate here; PyInstaller bundle paths do not contain
