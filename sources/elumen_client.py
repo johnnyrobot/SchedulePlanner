@@ -114,6 +114,14 @@ BACKOFF_MAX_SECONDS = 30.0
 # Statuses treated as transient (worth a backoff retry). Every other 4xx is a
 # hard client error and fails immediately; data-shape drift never retries.
 RETRYABLE_STATUS = frozenset({429, 500, 502, 503, 504})
+# Aggregate wall-clock cap for a whole fetch_prereq_records batch. The per-request
+# timeout (on the injected httpx.Client) + bounded backoff bound a SINGLE request,
+# but across subjects x pages the total could otherwise grow to minutes against a
+# slow/degenerate endpoint while the UI's synchronous fetch_live blocks. This caps
+# the aggregate at a predictable bound: once exceeded, the batch stops and returns
+# the records gathered so far, with an honest "exceeded" status (never silent).
+# Generous vs the ~40s a normal handful-of-subjects fetch takes; None disables it.
+DEFAULT_FETCH_DEADLINE_SECONDS = 90.0
 
 # The leaf itemType values that count as a hard prerequisite ordering
 # constraint (after collapsing case + hyphens/spaces). Co-Requisite ("corequisite")
@@ -471,7 +479,8 @@ def _get_json_retrying(url, *, params, client, source, max_retries=MAX_RETRIES):
 # ---- networked fetch (thin shell around get_json) -------------------------
 def fetch_courses(campus, query, *, client=None, page_size=MAX_PAGE_SIZE,
                   max_pages=DEFAULT_MAX_PAGES, request_delay=REQUEST_DELAY_SECONDS,
-                  max_retries=MAX_RETRIES, cache=None, _rate_limiter=None):
+                  max_retries=MAX_RETRIES, cache=None, _rate_limiter=None,
+                  _deadline=None):
     """Fetch raw course wrappers for one query, following pagination.
 
     Hits the verified eLumen endpoint via ``sources.http.get_json`` (browser UA,
@@ -505,7 +514,14 @@ def fetch_courses(campus, query, *, client=None, page_size=MAX_PAGE_SIZE,
 
     limiter = _rate_limiter if _rate_limiter is not None else _RateLimiter(request_delay)
     wrappers = []
+    truncated = False
     for page in range(1, int(max_pages) + 1):
+        if _deadline is not None and time.monotonic() >= _deadline:
+            # Aggregate wall-clock cap hit mid-pagination: stop and return the
+            # pages gathered so far. Do NOT cache a partial result (so an
+            # identical query is free to re-fetch in full on a later, un-capped run).
+            truncated = True
+            break
         params = {
             "status": "approved",
             "tenant": tenant,
@@ -547,8 +563,9 @@ def fetch_courses(campus, query, *, client=None, page_size=MAX_PAGE_SIZE,
         wrappers.extend(page_courses)
         if len(page_courses) < page_size:
             break
-    if cache is not None:
+    if cache is not None and not truncated:
         # Memoize a copy so later mutation of our return value cannot corrupt it.
+        # A deadline-truncated (partial) fetch is NOT cached.
         cache[cache_key] = list(wrappers)
     return wrappers
 
@@ -556,13 +573,16 @@ def fetch_courses(campus, query, *, client=None, page_size=MAX_PAGE_SIZE,
 def fetch_prereq_records(campus, queries, *, client=None,
                          page_size=MAX_PAGE_SIZE, max_pages=DEFAULT_MAX_PAGES,
                          request_delay=REQUEST_DELAY_SECONDS,
-                         max_retries=MAX_RETRIES, cache=None):
+                         max_retries=MAX_RETRIES, cache=None,
+                         deadline_seconds=DEFAULT_FETCH_DEADLINE_SECONDS):
     """Fetch + parse records across many queries (e.g. subject codes).
 
-    Returns ``(records, fetched_course_ids)``: ``records`` is the de-duplicated
-    list of ``{course_id, raw, dnf}`` (first wrapper wins per course_id),
-    ``fetched_course_ids`` is the set of every course_id eLumen returned. A
-    string ``queries`` is treated as one query.
+    Returns ``(records, fetched_course_ids, fetch_status)``: ``records`` is the
+    de-duplicated list of ``{course_id, raw, dnf}`` (first wrapper wins per
+    course_id), ``fetched_course_ids`` is the set of every course_id eLumen
+    returned, and ``fetch_status`` is an honest summary of how far the batch got
+    (``deadline_seconds``, ``exceeded``, ``queries_total``, ``queries_fetched``,
+    ``queries_skipped``). A string ``queries`` is treated as one query.
 
     Production-use guardrails: a SINGLE shared ``_RateLimiter`` throttles every
     request across ALL queries (so N subjects are spaced apart, not just pages
@@ -570,21 +590,42 @@ def fetch_prereq_records(campus, queries, *, client=None,
     (tenant, query, page_size) lookups. ``request_delay``/``max_retries`` tune
     the throttle and bounded backoff. Bounded by design: it queries ONLY the
     given ``queries`` (the selected program's subjects) — never a broad crawl.
+
+    AGGREGATE WALL-CLOCK CAP: the per-request timeout + bounded backoff bound a
+    single request, but across subjects x pages the total could grow to minutes
+    against a slow endpoint while a synchronous caller (the UI's fetch_live)
+    blocks. ``deadline_seconds`` caps the whole batch at one shared absolute
+    monotonic deadline, checked before each subject AND each page; once exceeded,
+    remaining subjects are skipped and ``fetch_status['exceeded']`` is True (the
+    records gathered so far are still returned — never silent, never unbounded).
+    ``deadline_seconds=None`` (or <= 0) disables the cap.
     """
     if isinstance(queries, str):
         queries = [queries]
+    queries = list(queries)
     # One shared limiter + cache for the whole batch: throttle spans queries, and
     # a subject seen twice (e.g. cross-listed) is fetched once.
     limiter = _RateLimiter(request_delay)
     if cache is None:
         cache = {}
+    # A single absolute deadline shared across all subjects + pages.
+    deadline_at = None
+    if deadline_seconds is not None and deadline_seconds > 0:
+        deadline_at = time.monotonic() + float(deadline_seconds)
+
     records = []
     seen = set()
-    for query in queries:
+    skipped = []
+    for i, query in enumerate(queries):
+        if deadline_at is not None and time.monotonic() >= deadline_at:
+            # Cap hit before this subject: skip it and every remaining one, and
+            # record them so the caller can report partial coverage honestly.
+            skipped = list(queries[i:])
+            break
         for wrapper in fetch_courses(campus, query, client=client,
                                      page_size=page_size, max_pages=max_pages,
                                      max_retries=max_retries, cache=cache,
-                                     _rate_limiter=limiter):
+                                     _rate_limiter=limiter, _deadline=deadline_at):
             record = course_record(wrapper)
             if record is None:
                 continue
@@ -593,7 +634,19 @@ def fetch_prereq_records(campus, queries, *, client=None,
                 continue
             seen.add(cid)
             records.append(record)
-    return records, seen
+    # "exceeded" is true if we skipped subjects OR the clock crossed the deadline
+    # during the final subject's pagination (so a mid-last-subject truncation is
+    # still surfaced, not silently dropped).
+    exceeded = bool(skipped) or (
+        deadline_at is not None and time.monotonic() >= deadline_at)
+    fetch_status = {
+        "deadline_seconds": deadline_seconds,
+        "exceeded": exceeded,
+        "queries_total": len(queries),
+        "queries_fetched": len(queries) - len(skipped),
+        "queries_skipped": skipped,
+    }
+    return records, seen, fetch_status
 
 
 # ---- coverage reporting (nothing silent) ----------------------------------
@@ -656,7 +709,7 @@ def prereq_map_for_campus(campus, queries, *, client=None,
     """
     from . import elumen as _elumen  # noqa: WPS433 (lazy, keeps hot path pure)
 
-    records, _fetched = fetch_prereq_records(
+    records, _fetched, fetch_status = fetch_prereq_records(
         campus, queries, client=client, page_size=page_size, max_pages=max_pages,
         request_delay=request_delay, max_retries=max_retries, cache=cache,
     )
@@ -664,4 +717,7 @@ def prereq_map_for_campus(campus, queries, *, client=None,
     coverage = compute_coverage(
         records, known_course_ids, requested_course_ids=requested_course_ids
     )
+    # Surface an aggregate-deadline truncation honestly (coverage may be partial).
+    if fetch_status.get("exceeded"):
+        coverage["fetch_truncated"] = fetch_status
     return prereqs, results, coverage

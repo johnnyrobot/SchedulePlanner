@@ -397,3 +397,48 @@ def test_program_subjects_bounds_to_program_courses_only():
     ]
     program = {"courses": [{"course_id": "BIOLOGY 3"}]}
     assert build_live_workbook._program_subjects(sections, program) == ["BIOLOGY"]
+
+
+# ---------------------------------------------------------------------------
+# eLumen aggregate wall-clock cap: a truncated fetch is surfaced honestly in the
+# prerequisite detector (never silent partial coverage).
+# ---------------------------------------------------------------------------
+def test_prereq_detector_surfaces_fetch_truncation():
+    """When the eLumen fetch hit its wall-clock cap (coverage carries
+    fetch_truncated), the detector says so: an active entry appends the time-cap
+    note to its label, and a zero-prereq result reports the cap as the reason
+    (NOT the misleading 'this program has no prerequisites')."""
+    from sources.prereq_cnf import dnf_to_cnf
+    cov = {"courses_fetched": 1, "fetch_truncated": {
+        "deadline_seconds": 90.0, "exceeded": True,
+        "queries_total": 6, "queries_fetched": 2,
+        "queries_skipped": ["W", "X", "Y", "Z"]}}
+
+    res = dnf_to_cnf([["MATH 245"]], gated_course="PHYS 102")
+    active = build_live_workbook._prereq_detector_entry(
+        source="eLumen live", results={"PHYS 102": res}, live=True, coverage=cov)
+    assert active["status"] == "active"
+    assert "time cap" in active["label"].lower()
+    assert "2/6 subjects" in active["label"]
+    assert "90s" in active["label"] and "90.0s" not in active["label"]  # int-formatted
+
+    capped_empty = build_live_workbook._prereq_detector_entry(
+        source="eLumen live", results={}, live=True, coverage=cov)
+    assert capped_empty["status"] == "inert"
+    assert "time cap" in capped_empty["reason"].lower()
+    assert "no hard prerequisites" not in capped_empty["reason"].lower()
+
+
+def test_prereq_detector_truncation_wording_mid_last_subject():
+    """A mid-last-subject truncation (queries_fetched == queries_total but still
+    exceeded) must NOT read 'after N/N subjects' (self-contradictory); it says
+    'while fetching the last subject' instead."""
+    from sources.prereq_cnf import dnf_to_cnf
+    cov = {"fetch_truncated": {
+        "deadline_seconds": 90.0, "exceeded": True,
+        "queries_total": 6, "queries_fetched": 6, "queries_skipped": []}}
+    res = dnf_to_cnf([["MATH 245"]], gated_course="PHYS 102")
+    active = build_live_workbook._prereq_detector_entry(
+        source="eLumen live", results={"PHYS 102": res}, live=True, coverage=cov)
+    assert "while fetching the last subject" in active["label"]
+    assert "6/6" not in active["label"]

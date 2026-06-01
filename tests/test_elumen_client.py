@@ -302,13 +302,84 @@ def test_fetch_courses_single_page_offline(make_client, fixture_payload):
 
 def test_fetch_prereq_records_offline(make_client, fixture_payload):
     client = make_client({"/public/courses": fixture_payload})
-    records, fetched = ec.fetch_prereq_records("LAMC", ["BIOTECH"], client=client)
+    records, fetched, status = ec.fetch_prereq_records(
+        "LAMC", ["BIOTECH"], client=client)
     assert fetched == {
         "ANATOMY 1", "BIOTECH 102", "MICRO 20", "BIOTECH 3",
         "BIOTECH 8", "BIOLOGY 3", "KIN MAJ 102",
     }
     by_id = {r["course_id"] for r in records}
     assert by_id == fetched  # no duplicates
+    # The generous default deadline is not hit: the batch completes, un-truncated.
+    assert status["exceeded"] is False
+    assert status["queries_total"] == 1
+    assert status["queries_fetched"] == 1
+    assert status["queries_skipped"] == []
+
+
+def test_fetch_prereq_records_aggregate_deadline_truncates(
+        monkeypatch, make_client, fixture_payload):
+    """The aggregate wall-clock cap stops the batch and reports it honestly. A
+    fake clock jumps past the deadline after the first subject, so the 2nd subject
+    is skipped (never hits the network) and fetch_status names the truncation —
+    never a silent partial nor an unbounded hang."""
+    client = make_client({"/public/courses": fixture_payload})
+    # Fake monotonic: the deadline is computed on call #1 (=0 -> deadline 10), the
+    # first subject's checks (#2 outer, #3 page) stay under it, then call #4 (the
+    # 2nd subject's pre-fetch check) jumps to 1000 and trips the cap.
+    ticks = {"n": 0}
+
+    def fake_monotonic():
+        ticks["n"] += 1
+        return 0.0 if ticks["n"] <= 3 else 1000.0
+
+    monkeypatch.setattr(ec.time, "monotonic", fake_monotonic)
+    # request_delay=0 -> the throttle never calls monotonic, so the tick budget
+    # above maps cleanly onto the deadline checks.
+    records, fetched, status = ec.fetch_prereq_records(
+        "LAMC", ["BIOTECH", "BIOLOGY"], client=client,
+        request_delay=0, deadline_seconds=10)
+    assert status["exceeded"] is True
+    assert status["queries_total"] == 2
+    assert status["queries_fetched"] == 1
+    assert status["queries_skipped"] == ["BIOLOGY"]
+    assert len(client.calls) == 1          # the capped 2nd subject was never fetched
+    assert records and fetched             # the first subject's records are returned
+
+
+def test_fetch_prereq_records_deadline_none_disables_cap(make_client, fixture_payload):
+    """deadline_seconds=None disables the cap entirely (no truncation, ever)."""
+    client = make_client({"/public/courses": fixture_payload})
+    records, fetched, status = ec.fetch_prereq_records(
+        "LAMC", ["BIOTECH", "BIOLOGY"], client=client, deadline_seconds=None)
+    assert status["exceeded"] is False
+    assert status["queries_skipped"] == []
+    assert status["queries_fetched"] == 2
+
+
+def test_fetch_prereq_records_mid_last_subject_truncation_flagged(
+        monkeypatch, make_client, fixture_payload):
+    """If the clock crosses the deadline DURING the (only) subject's pagination —
+    no whole subject skipped — exceeded is STILL True (never a silent partial),
+    with queries_skipped empty. Pins the second 'exceeded' clause."""
+    client = make_client({"/public/courses": fixture_payload})
+    # call#1 (=0 -> deadline 10); subject pre-check call#2 (=0) passes; the page
+    # check inside fetch_courses (call#3 = 1000) trips the cap before the request.
+    ticks = {"n": 0}
+
+    def fake_monotonic():
+        ticks["n"] += 1
+        return 0.0 if ticks["n"] <= 2 else 1000.0
+
+    monkeypatch.setattr(ec.time, "monotonic", fake_monotonic)
+    records, fetched, status = ec.fetch_prereq_records(
+        "LAMC", ["BIOTECH"], client=client, request_delay=0, deadline_seconds=10)
+    assert status["exceeded"] is True
+    assert status["queries_skipped"] == []
+    assert status["queries_total"] == 1
+    assert status["queries_fetched"] == 1
+    assert len(client.calls) == 0      # the page was never fetched (capped first)
+    assert records == []
 
 
 def test_prereq_map_for_campus_offline(make_client, fixture_payload):
