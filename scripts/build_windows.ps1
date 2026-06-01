@@ -70,7 +70,7 @@ if (Test-Path $Exe) {
     Write-Host ""
     Write-Host "Build complete: $RepoRoot\$Exe"
     Write-Host "Verify resources with (Git Bash / WSL): ./scripts/verify_build_resources.sh dist/SchedulePlanner"
-    Write-Host "Then complete the MANUAL GUI checklist in docs/CROSS_PLATFORM_BUILD.md."
+    Write-Host "Then complete the MANUAL GUI checklist in BUILD.md."
 } else {
     Write-Error "expected $Exe was not produced."
     exit 1
