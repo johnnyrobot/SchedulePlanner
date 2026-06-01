@@ -65,7 +65,7 @@
            font-family:var(--mono);font-size:11px;font-weight:400;line-height:1.5;color:var(--ink);
            text-transform:none;letter-spacing:0;box-shadow:0 6px 20px #00000026;
            opacity:0;visibility:hidden;transition:opacity .12s}
-  .tip:hover .tip-bub,.tip:focus-within .tip-bub,.tip.open .tip-bub{opacity:1;visibility:visible}
+  .tip:hover .tip-bub,.tip.open .tip-bub{opacity:1;visibility:visible}
   .tip.tip-left .tip-bub{left:auto;right:0}
   .tip-bub b{color:var(--ink);font-weight:600}
   .bwrap{display:inline-flex;align-items:center;gap:6px}
@@ -204,7 +204,7 @@
   </div>
 
   <div class="row mt" id="actions" style="display:none">
-    <button id="runBtn" onclick="runAnalysis()">Generate schedules</button>
+    <button id="runBtn" onclick="runAnalysis()" style="display:none">Generate schedules</button>
     <button class="ghost" id="explainBtn" onclick="doExplain()" style="display:none">
       Explain for admin
     </button>
@@ -310,9 +310,14 @@ let dataPath = "";
 function escapeHtml(s){ return String(s==null?'':s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
 async function refreshAI(){
-  const s = await window.pywebview.api.ai_status();
   const pill = document.getElementById('aiPill');
   const txt = document.getElementById('aiText');
+  // The probe is across the JS<->Python bridge, which can reject independently
+  // of app.py's already-guarded ai_status(); degrade to "offline" so the pill
+  // always reaches a terminal state instead of sticking on "checking AI…".
+  let s;
+  try { s = await window.pywebview.api.ai_status(); }
+  catch(e){ pill.className='pill off'; txt.textContent='Offline mode (no Gemma 4)'; return; }
   if(s.running && s.model){
     pill.className='pill on'; txt.textContent='Gemma 4 ready ('+s.model_name+')';
   } else if(s.installed && !s.model){
@@ -324,8 +329,19 @@ async function refreshAI(){
 
 async function setupAI(e){
   e && e.preventDefault();
-  document.getElementById('aiText').innerHTML='<span class="spinner"></span> downloading model…';
-  await window.pywebview.api.setup_ai();
+  const txt=document.getElementById('aiText');
+  txt.innerHTML='<span class="spinner"></span> downloading model…';
+  // A model pull can fail (no Ollama, network down, the ~7 GB pull errors out).
+  // app.py returns {ok:false,error}; surface that instead of silently looping
+  // back to "get it" with no feedback on a multi-minute action.
+  let r;
+  try { r = await window.pywebview.api.setup_ai(); }
+  catch(err){ r = {ok:false, error:String(err)}; }
+  if(r && !r.ok){
+    document.getElementById('aiPill').className='pill off';
+    txt.innerHTML='Download failed — <a href="#" onclick="setupAI(event)" style="color:var(--amber)">retry</a>';
+    return;
+  }
   refreshAI();
 }
 
@@ -334,10 +350,21 @@ async function pick(){
   if(!r.path) return;
   dataPath = r.path;
   document.getElementById('picked').textContent = r.path;
+  // The picked-file path is the only one that defers its run to a "Generate
+  // schedules" click, so it is the only entry point that reveals #runBtn.
+  // (Load demo / Build from live auto-run instead and keep it hidden.)
+  document.getElementById('runBtn').style.display='inline-block';
   document.getElementById('actions').style.display='flex';
 }
 
 async function runAnalysis(){
+  // #runBtn only governs the picked-file path. Demo/live auto-run and clear
+  // dataPath, so guard against a stray run with no file rather than calling
+  // analyze("") (which the engine reports as "File not found.").
+  if(!dataPath){
+    document.getElementById('status').textContent='Choose a data file first (or use Load demo data / Build from live LACCD data).';
+    return;
+  }
   const btn=document.getElementById('runBtn');
   btn.disabled=true; btn.textContent='Solving…';
   document.getElementById('status').innerHTML='<span class="spinner"></span> running solver';
@@ -349,6 +376,10 @@ async function runAnalysis(){
 async function loadDemo(){
   const btn=document.getElementById('demoBtn');
   btn.disabled=true; btn.textContent='Loading…';
+  // The demo auto-runs here — there is no picked file to "Generate schedules"
+  // from — so clear any prior path and hide the file-only run button.
+  dataPath='';
+  document.getElementById('runBtn').style.display='none';
   document.getElementById('actions').style.display='flex';
   document.getElementById('picked').textContent='bundled demo data';
   document.getElementById('status').innerHTML='<span class="spinner"></span> running solver on demo data';
@@ -371,6 +402,10 @@ async function fetchLive(){
   const terms=document.getElementById('liveTerms').value.trim();
   const program=document.getElementById('liveProgram').value.trim();
   btn.disabled=true; btn.textContent='Fetching…';
+  // Live also auto-runs its own pipeline (no picked file involved), so clear
+  // dataPath and hide the file-only "Generate schedules" button.
+  dataPath='';
+  document.getElementById('runBtn').style.display='none';
   document.getElementById('liveStatus').innerHTML='<span class="spinner"></span> pulling live LACCD data';
   document.getElementById('actions').style.display='flex';
   document.getElementById('picked').textContent='live LACCD data · '+campus+' · '+program;
@@ -389,22 +424,31 @@ async function fetchLive(){
 // Shared rendering for both a picked file and the bundled demo. Data-derived
 // fields are HTML-escaped because they can come from uploaded workbooks / APIs.
 function showResult(res){
-  // ai_used = a Gemma 4 parser was AVAILABLE this run (used for messy prereq
-  // text + the briefing). Structured prereqs are still regex-parsed, so this
-  // signals the AI layer is ON — not that every prerequisite was LLM-parsed.
-  document.getElementById('status').textContent = res.ai_used ? 'Gemma 4 enabled' : 'regex parse (offline)';
   document.getElementById('live').innerHTML='';
   if(res.error){
+    // Nothing was solved: say so honestly rather than leaving the spinner or a
+    // misleading "regex parse (offline)" parser-mode label beside the error.
+    document.getElementById('status').textContent='analysis did not run';
     document.getElementById('out').innerHTML='<div class="card" style="color:var(--red)">'+escapeHtml(res.error)+'</div>';
     document.getElementById('explainBtn').style.display='none';
     document.getElementById('explainBox').innerHTML='';
     return;
   }
+  // ai_used = a Gemma 4 parser was AVAILABLE this run (used for messy prereq
+  // text + the briefing). Structured prereqs are still regex-parsed, so this
+  // signals the AI layer is ON — not that every prerequisite was LLM-parsed.
+  document.getElementById('status').textContent = res.ai_used ? 'Gemma 4 enabled' : 'regex parse (offline)';
   render(res);
+  // A fresh analysis invalidates any previous run's briefing — clear it so a
+  // stale briefing can't sit under the new results.
+  document.getElementById('explainBox').innerHTML='';
   // Live fetches carry reconciliation + inert-detector fields; a file/demo
   // analyze does not, so the panel only appears for live data.
   if(res.reconciliation || res.inert_detectors) renderLivePanel(res);
   document.getElementById('explainBtn').style.display='inline-block';
+  // Results render below the input cards (often below the fold); bring them
+  // into view so a successful run never looks like nothing happened.
+  document.getElementById('out').scrollIntoView({behavior:'smooth', block:'start'});
 }
 
 // Render the live-data-only panel: course reconciliation (matched/unmatched
@@ -431,10 +475,19 @@ function renderLivePanel(res){
   }
   const inert=res.inert_detectors||[];
   if(inert.length){
-    const notes=inert.map(d=>
-      '<div class="inert"><div class="det">⊘ '+escapeHtml(d.detector)+' — inert on live data</div>'+
-      '<div class="why">'+escapeHtml(d.reason)+'</div>'+
-      '<div class="rem">remedy: '+escapeHtml(d.remedy)+'</div></div>').join('');
+    // Baseline entries are inert and carry reason/remedy. If enrollment
+    // enrichment is ever wired in, analyze_live can emit active entries
+    // (status "active", with label/metric) — render those without dropping
+    // their data or mislabeling them "inert".
+    const notes=inert.map(d=>{
+      const active=d.status==='active';
+      const why=d.reason||d.label||'';
+      const rem=d.remedy||d.metric||'';
+      return '<div class="inert"><div class="det">'+(active?'✓ ':'⊘ ')+escapeHtml(d.detector)+
+        (active?' — active on live data':' — inert on live data')+'</div>'+
+        (why?'<div class="why">'+escapeHtml(why)+'</div>':'')+
+        (rem?'<div class="rem">'+(active?'metric: ':'remedy: ')+escapeHtml(rem)+'</div>':'')+'</div>';
+    }).join('');
     html+='<div class="card"><h3>Detectors inert on live data</h3>'+
       '<p class="hint">These run only once the IR PeopleSoft enrollment export arrives — '+
       'until then they cannot fire, so an empty result here is expected, not a clean bill.</p>'+
@@ -444,16 +497,20 @@ function renderLivePanel(res){
 }
 
 function badge(p){
-  const ft=p.cohorts.full_time;
+  const ft=p.cohorts.full_time, pt=p.cohorts.part_time;
   let cls='b-ok', txt='on track';
-  if(p.official_map_issues.length && ft && ft.needs_fix){ cls='b-bad'; txt='needs fix'; }
+  // An all-null cohort solve (solver found no feasible plan) must never read
+  // green "on track" just because the official map happened to be issue-free.
+  if(!ft && !pt){ cls='b-bad'; txt='no plan'; }
+  else if(p.official_map_issues.length && ft && ft.needs_fix){ cls='b-bad'; txt='needs fix'; }
   else if(p.official_map_issues.length){ cls='b-warn'; txt='map broken'; }
   // badge text is a static literal (not data-derived); the tooltip copy is static too.
   return '<span class="bwrap"><span class="badge '+cls+'">'+txt+'</span>'+
     '<span class="tip tip-left" tabindex="0" role="button" aria-label="What does this status mean?">?'+
     '<span class="tip-bub" role="tooltip"><b>on track</b> = completes on the official map · '+
     '<b>map broken</b> = the official map has problems · '+
-    '<b>needs fix</b> = the full-time path needs an added offering to finish on time.</span></span></span>';
+    '<b>needs fix</b> = the full-time path needs an added offering to finish on time · '+
+    '<b>no plan</b> = the scheduler could not produce any plan for this program.</span></span></span>';
 }
 
 function cohortCard(label, c){
@@ -477,6 +534,13 @@ function render(res){
       '<div class="cohorts">'+cohortCard('Full-time',p.cohorts.full_time)+
       cohortCard('Part-time',p.cohorts.part_time)+'</div></div>';
   }
+  if(Object.keys(res.programs).length===0){
+    // A schema-valid programs sheet with zero data rows yields {} — don't
+    // present that as a clean success; say no programs were found.
+    html='<div class="card"><h3>No programs found</h3>'+
+      '<p class="hint">The workbook\'s programs sheet had no program rows, so there is nothing to schedule. '+
+      'Check that the programs sheet has at least one data row.</p></div>'+html;
+  }
   // analysis block
   const a=res.analysis;
   const mk=(t,arr,fn)=>'<div class="a"><h4>'+t+'</h4><ul>'+
@@ -494,6 +558,9 @@ function render(res){
 async function doExplain(){
   const box=document.getElementById('explainBox');
   box.innerHTML='<div class="card"><span class="spinner"></span> writing summary…</div>';
+  // The briefing renders below the results (below the fold), so scroll to it —
+  // otherwise clicking "Explain for admin" looks like it does nothing.
+  box.scrollIntoView({behavior:'smooth', block:'start'});
   const r=await window.pywebview.api.explain();
   box.innerHTML='<div class="card"><h3>Briefing</h3><div class="explain mt">'+escapeHtml(r.text)+'</div></div>';
 }
@@ -520,7 +587,9 @@ function showView(name){
   const showGuide = name === 'guide';
   document.getElementById('guide').hidden = !showGuide;
   document.getElementById('planner').hidden = showGuide;
-  window.scrollTo(0, 0);
+  // Scroll to top when entering the guide; preserve the planner's scroll
+  // position when returning so a long results list isn't jumped to the top.
+  if(showGuide) window.scrollTo(0, 0);
 }
 
 // ---- (?) tooltips: hover shows; click pins/unpins; Esc / outside-click close
@@ -541,6 +610,11 @@ document.addEventListener('keydown', function(e){
 });
 
 window.addEventListener('pywebviewready', refreshAI);
+// pywebviewready is a one-shot event with no ordering guarantee vs this inline
+// script. If the bridge is already injected when we get here, the listener
+// above would never fire — so kick refreshAI() now too. It is idempotent, so
+// the worst case (both paths firing) is a harmless double ai_status() probe.
+if (window.pywebview && window.pywebview.api) { refreshAI(); }
 </script>
 </body>
 </html>
