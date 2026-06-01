@@ -31,6 +31,9 @@ data/live_*.xlsx
 # Claude Code local settings / session state (never commit)
 .claude/
 
+# graphify knowledge-graph build artifacts (local-only; rebuild with /graphify)
+graphify-out/
+
 # Internal planning docs / specs — kept locally, intentionally untracked
 /PRD.md
 /TECH_SPEC.md
