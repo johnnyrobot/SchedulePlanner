@@ -62,7 +62,13 @@ Cal-GETC is the only goal with cross-system aliases (ASSIST bundles the legacy C
    - *Engineering Drafting Technician* — 19 prereqs returned before the cap.
    - *Engineering* — 26 prereqs returned before the cap.
 3. **Draft-gate: 100%.** All 161 programs × 3 goals were flagged “Draft — unverified”; the counts still await an articulation-officer sign-off.
-4. **Honest reconciliation.** 47 programs had no prerequisites applied — certificates whose courses aren’t offered in Fall 2268 (0 matched courses), correctly reported rather than hidden.
+4. **Honest reconciliation.** 47 programs apply no prerequisite ordering — either their courses aren’t offered in Fall 2268, or (more often) the offered courses carry only advisories / co-requisites, which the parser correctly excludes — reported rather than hidden.
+
+## Known limitations
+
+- **eLumen prerequisites are a planning aid, not ground truth.** The pipeline extracts eLumen faithfully (only `itemType=Prerequisite`; advisories / co-requisites dropped), but eLumen’s public-portal data can diverge from the published LA Mission College catalog. A spot-check of 9 courses matched **7/9** against the official catalog; both misses were calculus — **MATH 261** (eLumen lists only `MATH 260`; the catalog requires a trig + precalc compound, so eLumen *understates*) and **MATH 262** (eLumen adds `MATH 261S`, which the catalog omits). The divergence is in eLumen’s source data, not the parser — confirm prerequisites against the official catalog / a counselor (this is why the GE / prereq output is draft-gated).
+- **The prereq counts are subject-level**, not per a program’s own course list (see the metric note above), so they recur across programs that share subjects.
+- **Single term (2268).** Course-match rates rise across a multi-term window; GE and prerequisite coverage are scoped to what’s offered this term.
 
 ## Full results (every program, all 3 goals)
 
