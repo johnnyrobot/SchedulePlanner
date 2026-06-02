@@ -166,6 +166,11 @@
   .ge-major{font-family:var(--mono);font-size:12px;color:var(--dim);
           margin-top:14px;line-height:1.7}
   .ge-major b{color:var(--green);font-weight:500}
+  /* Draft banner: unreviewed pattern counts are NOT authoritative (content gate). */
+  .ge-draft{font-size:12.5px;line-height:1.6;color:var(--amber);
+          background:var(--warn-bg);border:1px solid var(--hair);border-radius:6px;
+          padding:9px 13px;margin:2px 0 14px}
+  .ge-draft b{font-weight:600}
   /* Optional (experimental) live-form enrichments + their badge. */
   .liveopts{align-items:center;gap:14px;flex-wrap:wrap}
   .liveopt{display:flex;align-items:center;gap:7px;font-size:13px;color:var(--ink);cursor:pointer}
@@ -639,6 +644,11 @@ function renderLivePanel(res){
     const flabel = f => FLAGLBL[f] || String(f).replace(/_/g,' ');
     const PLAN = {shared:'met by major', concrete:'concrete', reserve:'reserve'};
     let h = '<div class="card"><h3>General Education — '+escapeHtml(pname)+'</h3>';
+    // Content-review gate: an unreviewed pattern is a DRAFT. Show the backend's
+    // draft_warning (one source of truth) so placeholder counts are never
+    // mistaken for authoritative. Self-clears when reviewed_by is filled in.
+    if (ge.draft_warning) h += '<div class="ge-draft" role="alert">⚠️ <b>Draft — unverified.</b> '+
+         escapeHtml(ge.draft_warning.replace(/^Draft — unverified:\s*/,''))+'</div>';
     h += '<div class="ge-sub">Live from ASSIST · status: '+escapeHtml(ge.assist_status||'')+
          ' <span class="tip" tabindex="0" role="button" aria-label="About this GE data">?'+
          '<span class="tip-bub" role="tooltip">'+escapeHtml(ge.assist_caveat||'')+'</span></span></div>';
