@@ -2,7 +2,7 @@
   "pattern": "igetc",
   "display_name": "IGETC",
   "effective_year": "2026-2027",
-  "source": "REPLACE WITH OFFICIAL Cal-GETC STANDARDS URL",
+  "source": "REPLACE WITH OFFICIAL IGETC STANDARDS URL",
   "reviewed_by": "", "reviewed_on": "",
   "areas": [
     {"code": "1A", "title": "English Composition", "count": 1, "units_min": 3},

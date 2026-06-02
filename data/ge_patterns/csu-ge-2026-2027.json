@@ -2,7 +2,7 @@
   "pattern": "csu-ge",
   "display_name": "CSU GE-Breadth",
   "effective_year": "2026-2027",
-  "source": "REPLACE WITH OFFICIAL Cal-GETC STANDARDS URL",
+  "source": "REPLACE WITH OFFICIAL CSU GE-BREADTH STANDARDS URL",
   "reviewed_by": "", "reviewed_on": "",
   "areas": [
     {"code": "A1", "title": "Oral Communication", "count": 1, "units_min": 3},
