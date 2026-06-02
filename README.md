@@ -93,6 +93,20 @@ in `tests/test_live_offline_pipeline.py`, which replays real API responses
 captured once into `tests/fixtures/` — so the most fragile dependency is
 testable without a network and fails loudly on schema drift.
 
+> [!NOTE]
+> **Known limitation — eLumen prerequisites are a planning aid, not ground
+> truth.** When prerequisites are enabled (`--elumen-live`), they come from
+> LACCD's public eLumen portal, and the pipeline extracts them faithfully (only
+> `itemType=Prerequisite` leaves; advisories and co-requisites are correctly
+> dropped). A 2026-06 spot-check of 9 courses against the official LA Mission
+> College catalog matched **7/9** exactly — but **eLumen's portal data can
+> diverge from the published catalog**, especially on **compound** (“A *and* B”)
+> requirements and **support-section (“…S”) courses**. Two real examples:
+> `MATH 261` (eLumen lists only `MATH 260`; the catalog requires a trig +
+> precalc combination, so eLumen *understates* it) and `MATH 262` (eLumen adds
+> `MATH 261S`, which the catalog omits). Treat eLumen-derived prerequisites as a
+> planning aid and confirm against the official catalog or a counselor.
+
 ### Transfer GE (Cal-GETC / IGETC / CSU GE)
 
 Add a lower-division **transfer GE pattern** to the plan with `--transfer-goal`
