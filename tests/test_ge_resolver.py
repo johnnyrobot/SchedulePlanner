@@ -167,3 +167,73 @@ def test_shipped_patterns_are_unreviewed_by_design():
     # content-review gate. If a reviewer signs one off, update this deliberately.
     for goal in ("igetc", "csu-ge", "cal-getc"):
         assert ge.is_reviewed(ge.load_pattern(goal)) is False
+
+
+def test_resolve_ignores_cross_system_assist_codes_for_numeric_pattern():
+    # ASSIST's Cal-GETC list bundles the legacy CSU GE-Breadth letter codes
+    # (A2/B4/E/US1...) as aliases of the SAME courses already tagged under the
+    # native numeric codes. A numeric (IGETC/Cal-GETC) pattern must IGNORE those
+    # other-system codes — report them as cross_system, NOT as unknown areas —
+    # while still crediting the courses via its own numeric codes (the live
+    # 27-unknown Cal-GETC bug).
+    pattern = {"pattern": "cal-getc", "areas": [
+        {"code": "1A", "title": "English", "count": 1, "units_min": 3},
+        {"code": "2", "title": "Math", "count": 1, "units_min": 3},
+    ]}
+    assist = {
+        "1A": {"title": "English", "courses": ["ENGL 101"]},
+        "2": {"title": "Math", "courses": ["MATH 261"]},
+        "A2": {"title": "Written Communication", "courses": ["ENGL 101"]},  # CSU alias of 1A
+        "B4": {"title": "Math/Quant", "courses": ["MATH 261"]},             # CSU alias of 2
+        "E": {"title": "Lifelong Learning", "courses": ["PE 1"]},           # no Cal-GETC equiv
+        "US1": {"title": "American History", "courses": ["HIST 11"]},       # not a GE area
+    }
+    offered = {"ENGL 101", "MATH 261"}
+    rows, cov = ge.resolve(pattern, assist, offered, {"courses": [], "ge_requirements": []})
+    assert cov["unknown_areas"] == []                                  # no false unknowns
+    assert set(cov["cross_system_areas"]) == {"A2", "B4", "E", "US1"}  # honestly ignored
+    by_area = {r["area"]: r for r in rows}
+    assert by_area["1A"]["candidates"] == ["ENGL 101"]  # coverage unchanged via native code
+    assert by_area["2"]["candidates"] == ["MATH 261"]
+
+
+def test_resolve_keeps_same_system_unmatched_codes_as_unknown():
+    # Only OTHER-system codes are ignored: a same-system code the pattern does not
+    # declare (5C lab) still surfaces as unknown, while the CSU alias B3 does not.
+    pattern = {"pattern": "cal-getc", "areas": [
+        {"code": "5", "title": "Sci", "count": 2, "units_min": 7,
+         "subareas": [{"code": "5A", "min": 1}, {"code": "5B", "min": 1}]}]}
+    assist = {"5A": {"title": "Phys", "courses": ["PHYS 1"]},
+              "5B": {"title": "Bio", "courses": ["BIOL 3"]},
+              "5C": {"title": "Lab", "courses": ["BIOL 3"]},
+              "B3": {"title": "Lab Activity", "courses": ["BIOL 3"]}}  # CSU alias -> ignored
+    offered = {"PHYS 1", "BIOL 3"}
+    rows, cov = ge.resolve(pattern, assist, offered, {"courses": [], "ge_requirements": []})
+    assert "5C" in cov["unknown_areas"]            # same-system, undeclared -> unknown
+    assert "B3" in cov["cross_system_areas"]       # other-system -> ignored
+    assert "B3" not in cov["unknown_areas"]
+
+
+def test_resolve_alpha_pattern_ignores_numeric_assist_codes():
+    # Mirror image: a CSU-GE (alpha) pattern ignores numeric (IGETC) alias codes.
+    pattern = {"pattern": "csu-ge", "areas": [
+        {"code": "A2", "title": "Written", "count": 1, "units_min": 3}]}
+    assist = {"A2": {"title": "Written", "courses": ["ENGL 101"]},
+              "1A": {"title": "English Composition", "courses": ["ENGL 101"]}}  # IGETC alias
+    rows, cov = ge.resolve(pattern, assist, {"ENGL 101"},
+                           {"courses": [], "ge_requirements": []})
+    assert cov["unknown_areas"] == []
+    assert cov["cross_system_areas"] == ["1A"]
+
+
+def test_resolve_mixed_system_pattern_disables_cross_system_filter():
+    # Defensive: a pattern that mixes numeric + alpha codes has no single system,
+    # so NO cross-system filtering happens (every unmatched code stays unknown).
+    pattern = {"areas": [{"code": "1A", "title": "x", "count": 1, "units_min": 3},
+                         {"code": "A2", "title": "y", "count": 1, "units_min": 3}]}
+    assist = {"1A": {"title": "x", "courses": ["C 1"]},
+              "B4": {"title": "z", "courses": ["C 2"]}}
+    rows, cov = ge.resolve(pattern, assist, {"C 1", "C 2"},
+                           {"courses": [], "ge_requirements": []})
+    assert cov["cross_system_areas"] == []
+    assert "B4" in cov["unknown_areas"]
