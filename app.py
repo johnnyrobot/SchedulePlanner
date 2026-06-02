@@ -122,7 +122,7 @@ class Api:
 
     # ---- live LACCD data ---------------------------------------------
     def fetch_live(self, campus, terms, program, enrollment_path=None,
-                   elumen_live=False, client=None):
+                   elumen_live=False, transfer_goal="none", client=None):
         """Pull live LACCD data and analyze it, entirely inside the app.
 
         Parses the comma-separated `terms` string into ints, runs the live
@@ -175,7 +175,7 @@ class Api:
                 report = build_live_workbook.analyze_live(
                     campus, parsed_terms, program, out_path,
                     enrollment_path=enroll, elumen_live=bool(elumen_live),
-                    client=client)
+                    transfer_goal=transfer_goal, client=client)
         except Exception as e:
             return {"error": (f"Could not fetch live LACCD data: "
                               f"{type(e).__name__}: {e}")}
@@ -196,6 +196,7 @@ class Api:
         out["campus"] = report.get("campus")
         out["live_terms"] = report.get("terms")
         out["program_info"] = report.get("program")
+        out["ge_coverage"] = report.get("ge_coverage")
         # Live data has no prerequisite/LLM parse step; mark accordingly so the
         # status line does not falsely claim a Gemma 4 parse.
         out["ai_used"] = False

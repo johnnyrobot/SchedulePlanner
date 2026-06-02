@@ -361,3 +361,28 @@ def test_fetch_live_blank_enrollment_path_is_ignored(lamc_routes, make_client):
     assert "error" not in res, res.get("error")
     assert {d["detector"] for d in res["inert_detectors"]} == {
         "modality_mismatch", "prerequisite_ordering", "ge_scheduling"}
+
+
+# ---- Task 8: transfer_goal param + ge_coverage flattening ------------------
+
+import json, pathlib
+FIXX = pathlib.Path(__file__).parent / "fixtures"
+
+
+def test_fetch_live_passes_transfer_goal_and_flattens_ge(lamc_routes, make_client):
+    routes = dict(lamc_routes)
+    routes["/api/AcademicYears"] = json.loads((FIXX / "assist_academic_years.json").read_text())
+    routes["/api/transferability/courses"] = json.loads(
+        (FIXX / "assist_transferability_igetc_LAMC.json").read_text())
+    api = app.Api()
+    out = api.fetch_live("LAMC", "2268", "Biology",
+                         transfer_goal="igetc", client=make_client(routes))
+    assert "error" not in out
+    assert out["ge_coverage"]["requested"] is True
+
+
+def test_fetch_live_none_goal_has_no_ge(lamc_routes, make_client):
+    api = app.Api()
+    out = api.fetch_live("LAMC", "2268", "Biology",
+                         transfer_goal="none", client=make_client(lamc_routes))
+    assert out.get("ge_coverage") is None
