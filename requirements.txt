@@ -9,6 +9,10 @@ openpyxl>=3.1
 ortools>=9.8
 pywebview>=5.0
 httpx>=0.27
+# Local PDF -> structured JSON for the Local AA/AS GE feature (catalog parsing).
+# Pure-Python wrapper over a bundled Apache-2.0 Java extractor; needs Java 11+ at
+# runtime (the feature is opt-in and gated, like the optional Ollama AI layer).
+opendataloader-pdf>=2.4
 # AI layer is optional and talks to Ollama over HTTP; no Python dep required.
 # Install Ollama separately from https://ollama.com/download
 

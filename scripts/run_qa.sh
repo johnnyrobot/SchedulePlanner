@@ -22,8 +22,9 @@ cd "${REPO_ROOT}"
 
 # The number of `live`-marked tests deselected by `-m "not live"`. This is the
 # stable invariant the gate locks; bump it only when a live test is added/removed.
-# (Was 3; the real eLumen prereq client added test_live_lamc_endpoint_schema.)
-EXPECTED_DESELECTED=4
+# (Was 3; the real eLumen prereq client added test_live_lamc_endpoint_schema.
+#  Was 4; Spec 2 added test_pdf_loader.py::test_extract_real_pdf_roundtrip.)
+EXPECTED_DESELECTED=5
 
 # Only python3 is on PATH in this environment (no bare `python`).
 PYTHON=python3

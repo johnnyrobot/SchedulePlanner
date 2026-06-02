@@ -386,3 +386,49 @@ def test_fetch_live_none_goal_has_no_ge(lamc_routes, make_client):
     out = api.fetch_live("LAMC", "2268", "Biology",
                          transfer_goal="none", client=make_client(lamc_routes))
     assert out.get("ge_coverage") is None
+
+
+# --- Spec 2: local AA/AS GE from a catalog PDF (OpenDataLoader) -------------
+_CATALOG_ODL = os.path.join(os.path.dirname(__file__), "fixtures",
+                            "catalog_odl_sample.json")
+
+
+def _load_catalog_odl():
+    with open(_CATALOG_ODL, encoding="utf-8") as fh:
+        return json.load(fh)
+
+
+def test_preview_local_ge_no_file_returns_error():
+    r = app.Api().preview_local_ge("")
+    assert r["ok"] is False and "catalog PDF" in r["error"]
+
+
+def test_preview_local_ge_needs_java(monkeypatch, tmp_path):
+    f = tmp_path / "c.pdf"
+    f.write_bytes(b"%PDF-1.4\n")
+    monkeypatch.setattr(app.pdf_loader, "available", lambda: False)
+    r = app.Api().preview_local_ge(str(f))
+    assert r["needs_java"] is True and r["ok"] is False
+
+
+def test_preview_local_ge_happy(monkeypatch, tmp_path):
+    odl = _load_catalog_odl()
+    f = tmp_path / "c.pdf"
+    f.write_bytes(b"%PDF-1.4\n")
+    monkeypatch.setattr(app.pdf_loader, "available", lambda: True)
+    monkeypatch.setattr(app.pdf_loader, "extract", lambda _p: odl)
+    r = app.Api().preview_local_ge(str(f))
+    assert r["ok"] is True and r["section_found"] is True
+    assert any(a["code"] == "A" for a in r["areas"])
+
+
+def test_fetch_live_local_ge_uses_catalog(lamc_routes, make_client, monkeypatch):
+    odl = _load_catalog_odl()
+    # Patch the shared module's extract so no JVM/PDF is needed in CI.
+    monkeypatch.setattr(app.pdf_loader, "extract", lambda _p: odl)
+    out = app.Api().fetch_live("LAMC", "2268", "Biology", None, False, "local",
+                               "/some/catalog.pdf", client=make_client(lamc_routes))
+    assert "error" not in out
+    assert out["ge_coverage"]["source"] == "catalog"
+    assert out["ge_coverage"]["areas"]
+    assert out["ge_coverage"]["draft_warning"]

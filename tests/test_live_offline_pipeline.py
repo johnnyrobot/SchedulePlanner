@@ -237,3 +237,35 @@ def test_analyze_live_ge_disabled_has_no_coverage(lamc_routes, make_client, tmp_
         "LAMC", [2268], "Biology", str(tmp_path / "no_ge_live.xlsx"),
         client=make_client(lamc_routes), transfer_goal="none")
     assert report.get("ge_coverage") is None
+
+
+def test_analyze_live_local_ge_from_catalog_json(lamc_routes, make_client, tmp_path):
+    # Spec 2: transfer_goal="local" + an injected OpenDataLoader JSON (no Java)
+    # sources GE from the catalog and reuses the same resolve/solver/panel path.
+    odl = json.loads((FIX / "catalog_odl_sample.json").read_text())
+    report = build_live_workbook.analyze_live(
+        "LAMC", [2268], "Biology", str(tmp_path / "local_ge.xlsx"),
+        client=make_client(lamc_routes), transfer_goal="local", odl_json=odl)
+    cov = report["ge_coverage"]
+    assert cov["requested"] is True and cov["pattern"] == "local"
+    assert cov["source"] == "catalog"
+    assert cov["reviewed"] is False and cov["draft_warning"]
+    assert cov["areas"]                       # parsed areas were resolved
+    assert cov["catalog_diagnostics"]["section_found"] is True
+    ge_det = next(d for d in report["inert_detectors"] if d["detector"] == "ge_scheduling")
+    assert ge_det["status"] == "active"
+    assert report["results"] is not None
+
+
+def test_analyze_live_local_ge_no_section_degrades(lamc_routes, make_client, tmp_path):
+    # A catalog with no GE section degrades to honest, empty coverage (no schedule
+    # silently shaped), never an exception.
+    odl = {"kids": [{"type": "heading", "heading level": 1,
+                     "content": "Course Descriptions"}]}
+    report = build_live_workbook.analyze_live(
+        "LAMC", [2268], "Biology", str(tmp_path / "local_none.xlsx"),
+        client=make_client(lamc_routes), transfer_goal="local", odl_json=odl)
+    cov = report["ge_coverage"]
+    assert cov["pattern"] == "local" and cov["areas"] == []
+    assert cov.get("error")
+    assert report["results"] is not None

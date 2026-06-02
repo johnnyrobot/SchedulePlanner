@@ -88,6 +88,8 @@ KNOWN_LIVE_NODES = {
     "tests/test_llm_assist.py::test_live_explain_against_real_ollama",
     "tests/test_engine_features.py::test_llm_assist_cli_no_args_runs",
     "tests/test_elumen_client.py::test_live_lamc_endpoint_schema",
+    # Spec 2: real OpenDataLoader PDF extraction (needs Java 11+ + the package).
+    "tests/test_pdf_loader.py::test_extract_real_pdf_roundtrip",
 }
 
 

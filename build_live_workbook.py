@@ -71,8 +71,8 @@ import os
 import httpx
 
 import engine
-from sources import (assist, elumen, elumen_client, enrollment, ge, mapping,
-                     program_mapper, schedule)
+from sources import (assist, catalog_ge, elumen, elumen_client, enrollment, ge,
+                     mapping, pdf_loader, program_mapper, schedule)
 
 
 def build(campus, terms, program_query, *, client=None,
@@ -379,6 +379,50 @@ _GE_CAVEAT = ("ASSIST is public but ToU/rate-limit/human-approval review is "
               "PENDING; bounded fetch (one call per pattern per college per "
               "year); best-effort, not production-ready.")
 
+_LOCAL_GE_NAME = "local Associate-degree (AA/AS) GE"
+_LOCAL_GE_CAVEAT = ("Parsed from the catalog PDF you provided (OpenDataLoader, "
+                    "on-device). A planning aid, not an official articulation — "
+                    "confirm GE areas and eligible courses with a counselor.")
+
+
+def _resolve_local_ge(sections, program, *, catalog_pdf=None, odl_json=None):
+    """Build (ge_rows, ge_coverage) for the LOCAL AA/AS GE goal from a catalog PDF.
+
+    Sources the (pattern, area->courses) from the catalog via OpenDataLoader +
+    catalog_ge, then reuses the SAME ge.resolve path the transfer goals use; the
+    result is always DRAFT-gated (a parsed pattern is never pre-reviewed).
+    Network/JVM stays here (outside engine.run). Never raises — a parse failure or
+    an empty parse degrades to an honest all-reserve coverage with the error
+    surfaced (and no ge_requirements sheet, so nothing is silently scheduled).
+    """
+    coverage = {"requested": True, "pattern": "local", "source": "catalog",
+                "assist_status": "catalog", "assist_caveat": _LOCAL_GE_CAVEAT,
+                "academic_year": None, "areas": [], "shared_with_major": [],
+                "unknown_areas": [], "cross_system_areas": [],
+                "reviewed": False,
+                "draft_warning": _ge_draft_warning({"display_name": _LOCAL_GE_NAME})}
+    try:
+        odl = odl_json if odl_json is not None else pdf_loader.extract(catalog_pdf)
+        cat_pattern, area_courses, cat_diag = catalog_ge.extract_local_ge(odl)
+    except Exception as exc:  # noqa: BLE001 - honest degradation, never raise
+        coverage["error"] = f"catalog parse failed: {type(exc).__name__}: {exc}"
+        coverage["catalog_diagnostics"] = {"section_found": False, "area_count": 0,
+                                           "total_courses": 0, "areas": [],
+                                           "notes": [coverage["error"]]}
+        return None, coverage
+    coverage["catalog_diagnostics"] = cat_diag
+    if not cat_pattern.get("areas"):
+        notes = cat_diag.get("notes") or ["no GE areas were parsed from the catalog PDF"]
+        coverage["error"] = notes[0]
+        return None, coverage
+    offered = {mapping._norm(r["course"]) for r in sections}
+    ge_rows, resolved = ge.resolve(cat_pattern, area_courses, offered, program)
+    coverage["areas"] = resolved["areas"]
+    coverage["shared_with_major"] = resolved["shared_with_major"]
+    coverage["unknown_areas"] = resolved["unknown_areas"]
+    coverage["cross_system_areas"] = resolved.get("cross_system_areas", [])
+    return ge_rows, coverage
+
 
 def _ge_draft_warning(pattern):
     """Plain-language DRAFT notice for an unreviewed GE pattern (CLI + UI share it).
@@ -430,7 +474,8 @@ def analyze_live(campus, terms, program_query, out_path, *, client=None,
                  enrollment_map=None, prereq_max_clauses=None,
                  transfer_goal="none", assist_year_id=None, ge_pattern_path=None,
                  program_id=None, program_title="", program_award="",
-                 assist_areas=None, elumen_cache=None):
+                 assist_areas=None, elumen_cache=None,
+                 catalog_pdf=None, odl_json=None):
     """Run the full live pipeline and return a structured, JSON-serializable report.
 
     The report carries the reconciliation (matched/unmatched program courses)
@@ -577,7 +622,13 @@ def analyze_live(campus, terms, program_query, out_path, *, client=None,
     # --- transfer-pattern GE (outside engine.run, on raw records, before write) ---
     ge_rows = None
     ge_coverage = None
-    if transfer_goal and str(transfer_goal).lower() != "none":
+    goal_l = str(transfer_goal).lower() if transfer_goal else "none"
+    if goal_l == "local":
+        # Local AA/AS GE: source (pattern, area->courses) from the catalog PDF,
+        # then reuse the SAME resolver/solver/panel path as the transfer goals.
+        ge_rows, ge_coverage = _resolve_local_ge(
+            sections, program, catalog_pdf=catalog_pdf, odl_json=odl_json)
+    elif goal_l != "none":
         ge_coverage = {"requested": True, "pattern": str(transfer_goal).lower(),
                        "assist_caveat": _GE_CAVEAT}
         try:
