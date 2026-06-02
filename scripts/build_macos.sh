@@ -38,6 +38,12 @@ fi
 
 echo "Building SchedulePlanner.app from ${REPO_ROOT} (using ${PY}) ..."
 
+# Stage a pinned Temurin JRE under build/jre so the catalog-PDF (Local AA/AS GE)
+# feature is zero-setup — no user Java install. Downloaded + checksum-verified;
+# bundled into the .app below via ditto. (build/ is gitignored.)
+echo "Staging bundled JRE ..."
+bash "${REPO_ROOT}/scripts/fetch_jre.sh"
+
 # --clean drops PyInstaller's cache so this is a fresh, reproducible build.
 # NOTE: --add-data separator is ':' on macOS/Linux (';' on Windows).
 "${PY}" -m PyInstaller \
@@ -53,6 +59,13 @@ echo "Building SchedulePlanner.app from ${REPO_ROOT} (using ${PY}) ..."
 
 APP="dist/SchedulePlanner.app"
 if [ -d "${APP}" ]; then
+  # Embed the bundled JRE under Contents/Resources/jre. ditto (not PyInstaller
+  # --add-data) preserves the runtime's executable bits + symlinks. The sign step
+  # (scripts/sign_notarize_macos.sh) then signs its Mach-O like any other nested
+  # binary, with the JVM-ready entitlements already in packaging/entitlements.mac.plist.
+  echo "Embedding bundled JRE -> ${APP}/Contents/Resources/jre ..."
+  ditto "${REPO_ROOT}/build/jre" "${APP}/Contents/Resources/jre"
+
   echo ""
   echo "Build complete: ${REPO_ROOT}/${APP}"
   echo "Launch with:    open ${APP}"
