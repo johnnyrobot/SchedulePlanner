@@ -55,3 +55,130 @@ def load_pattern(transfer_goal, *, path=None):
 def _canon(course_id):
     """Canonical join key (leading zeros stripped), matching the eLumen join."""
     return normalize_course_code(course_id)
+
+
+def _flatten_areas(pattern):
+    """Yield (area_code, title, count, units_min, attributes) per schedulable area.
+
+    A pattern area with subareas is expanded into one requirement per subarea
+    (count 1 each) plus, if the parent count exceeds the subarea minimums, a
+    parent 'any' requirement over the union of subarea codes for the remainder.
+    Areas without subareas yield a single requirement.
+    """
+    for area in pattern.get("areas", []):
+        code = area["code"]
+        title = area.get("title", "")
+        attrs = area.get("attributes", {}) or {}
+        subareas = area.get("subareas")
+        if not subareas:
+            yield {"area": code, "title": title, "count": int(area.get("count", 1)),
+                   "units_min": float(area.get("units_min", 3)), "attributes": attrs,
+                   "member_codes": [code]}
+            continue
+        assigned = 0
+        for sub in subareas:
+            yield {"area": sub["code"], "title": title, "count": int(sub.get("min", 1)),
+                   "units_min": float(area.get("units_min", 3)) / max(1, int(area.get("count", 1))),
+                   "attributes": attrs, "member_codes": [sub["code"]]}
+            assigned += int(sub.get("min", 1))
+        remainder = int(area.get("count", 1)) - assigned
+        if remainder > 0:
+            yield {"area": code, "title": title, "count": remainder,
+                   "units_min": float(area.get("units_min", 3)) / max(1, int(area.get("count", 1))),
+                   "attributes": attrs,
+                   "member_codes": [s["code"] for s in subareas]}
+
+
+def resolve(pattern, assist_areas, offered, program, *, concrete_threshold=3):
+    """Resolve GE requirements for a program under a pattern.
+
+    Inputs:
+      - pattern: a loaded pattern dict (load_pattern).
+      - assist_areas: {area_code: {'title', 'courses': [normalized ids]}} (assist.fetch_ge_courses).
+      - offered: an iterable of course ids offered in the fetched terms (mapping._norm form).
+      - program: the Program Mapper program dict (courses + ge_requirements).
+      - concrete_threshold: max offered eligible courses for an area to go concrete.
+
+    Returns (rows, coverage):
+      - rows: list of GE requirement rows for the ge_requirements sheet, each
+        {area, area_title, required_count, resolution, candidates, recommended, units}.
+        Candidates are OFFERED course ids in the SAME (canonical-mapped) form as
+        the offered set, so the engine can schedule them.
+      - coverage: {areas: [...flags...], shared_with_major: [...], unknown_areas: [...]}.
+    """
+    offered_by_canon = {}
+    for cid in offered:
+        offered_by_canon.setdefault(_canon(cid), cid)  # first wins, deterministic if offered is sorted
+
+    major_canon = {_canon(c["course_id"]) for c in program.get("courses", [])}
+    recs = {g["area"]: g.get("recommended_course", "")
+            for g in program.get("ge_requirements", [])}
+
+    # --- major<->GE sharing: which areas a fixed major course already covers ---
+    shared = []  # {area, course}
+    shared_areas = {}  # area_code -> count covered by major
+    for area_code, info in assist_areas.items():
+        eligible_canon = {_canon(c) for c in info.get("courses", [])}
+        for c in program.get("courses", []):
+            if _canon(c["course_id"]) in eligible_canon:
+                shared.append({"area": area_code, "course": c["course_id"]})
+                shared_areas[area_code] = shared_areas.get(area_code, 0) + 1
+
+    # --- disjoint candidate assignment (smallest offered set first -> GE<->GE off) ---
+    requirements = sorted(_flatten_areas(pattern), key=lambda r: r["area"])
+    # Build per-requirement offered-eligible candidate lists, then strip duplicates
+    # so each offered course serves at most one requirement.
+    offered_eligible = {}
+    for req in requirements:
+        cands = []
+        for member in req["member_codes"]:
+            for c in assist_areas.get(member, {}).get("courses", []):
+                ca = _canon(c)
+                if ca in offered_by_canon and ca not in major_canon:
+                    cands.append(offered_by_canon[ca])
+        offered_eligible[req["area"]] = sorted(set(cands))
+
+    used = set()
+    for req in sorted(requirements, key=lambda r: (len(offered_eligible[r["area"]]), r["area"])):
+        offered_eligible[req["area"]] = [c for c in offered_eligible[req["area"]] if c not in used]
+        used.update(offered_eligible[req["area"]])
+
+    rows, area_cov = [], []
+    for req in requirements:
+        area = req["area"]
+        flags = []
+        required = max(0, req["count"] - shared_areas.get(area, 0))
+        eligible_any = bool(assist_areas.get(area, {}).get("courses"))
+        offered_cands = offered_eligible[area]
+        if not eligible_any:
+            flags.append("no_assist_data")
+        if required <= 0:
+            area_cov.append({"area": area, "title": req["title"], "required": 0,
+                             "resolution": "shared", "flags": flags})
+            continue
+        rec = recs.get(area, "")
+        rec_offered = rec and _canon(rec) in offered_by_canon
+        concrete = bool(offered_cands) and (
+            rec_offered or 0 < len(offered_cands) <= concrete_threshold)
+        if concrete and rec_offered and offered_by_canon[_canon(rec)] not in offered_cands:
+            offered_cands = sorted(set(offered_cands + [offered_by_canon[_canon(rec)]]))
+        if not offered_cands:
+            flags.append("no_offering")
+        resolution = "concrete" if concrete else "reserve"
+        rows.append({
+            "area": area, "area_title": req["title"], "required_count": required,
+            "resolution": resolution,
+            "candidates": offered_cands if resolution == "concrete" else [],
+            "recommended": offered_by_canon.get(_canon(rec), "") if rec_offered else "",
+            "units": req["units_min"],
+        })
+        area_cov.append({"area": area, "title": req["title"], "required": required,
+                         "resolution": resolution, "eligible_count": len(
+                             assist_areas.get(area, {}).get("courses", [])),
+                         "offered_count": len(offered_cands), "flags": flags})
+
+    unknown = sorted(set(assist_areas) - {a["code"] for a in pattern.get("areas", [])}
+                     - {m for a in pattern.get("areas", []) for m in
+                        [s["code"] for s in a.get("subareas", []) or []]})
+    coverage = {"areas": area_cov, "shared_with_major": shared, "unknown_areas": unknown}
+    return rows, coverage
