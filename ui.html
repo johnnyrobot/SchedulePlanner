@@ -145,6 +145,27 @@
   .inert .why{font-family:var(--mono);font-size:12px;color:var(--dim);margin-top:3px}
   .inert .rem{font-family:var(--mono);font-size:12px;color:var(--green);margin-top:3px}
   .inert .join{font-family:var(--mono);font-size:12px;color:var(--blue);margin-top:3px}
+  /* General Education coverage panel — roomy table + friendly chips. */
+  .ge-sub{font-family:var(--mono);font-size:11px;color:var(--dim);
+          margin:2px 0 14px;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+  .ge-table{width:100%;border-collapse:collapse;margin-top:2px}
+  .ge-table th{font-family:var(--mono);font-size:10px;text-transform:uppercase;
+          letter-spacing:.1em;color:var(--dim);text-align:left;font-weight:500;
+          padding:0 16px 8px 0;border-bottom:1px solid var(--line)}
+  .ge-table td{font-size:13px;color:var(--ink);padding:10px 16px 10px 0;
+          border-bottom:1px solid var(--hair);vertical-align:top}
+  .ge-table tr:last-child td{border-bottom:none}
+  .ge-table td.area{font-family:var(--mono);color:var(--dim);white-space:nowrap}
+  .ge-need{font-family:var(--mono);color:var(--dim)}
+  .ge-plan{font-family:var(--mono);font-size:12px}
+  .ge-plan.shared,.ge-plan.concrete{color:var(--green)}
+  .ge-plan.reserve{color:var(--dim)}
+  .ge-flag{display:inline-block;font-family:var(--mono);font-size:10px;color:var(--amber);
+          background:var(--warn-bg);border:1px solid var(--hair);border-radius:4px;
+          padding:1px 6px;margin:0 4px 2px 0;white-space:nowrap}
+  .ge-major{font-family:var(--mono);font-size:12px;color:var(--dim);
+          margin-top:14px;line-height:1.7}
+  .ge-major b{color:var(--green);font-weight:500}
   /* Optional (experimental) live-form enrichments + their badge. */
   .liveopts{align-items:center;gap:14px;flex-wrap:wrap}
   .liveopt{display:flex;align-items:center;gap:7px;font-size:13px;color:var(--ink);cursor:pointer}
@@ -611,21 +632,43 @@ function renderLivePanel(res){
 
   const ge = (res && res.ge_coverage) || null;
   if (ge && ge.requested) {
-    let h = '<div class="card"><h3>General Education ('+escapeHtml(ge.pattern)+')</h3>';
-    h += '<p class="hint">ASSIST status: '+escapeHtml(ge.assist_status||'')+
-         ' · '+escapeHtml(ge.assist_caveat||'')+'</p>';
+    const PNAME = {igetc:'IGETC', 'cal-getc':'Cal-GETC', 'csu-ge':'CSU GE'};
+    const pname = PNAME[ge.pattern] || String(ge.pattern||'').toUpperCase();
+    const FLAGLBL = {no_assist_data:'no ASSIST data', no_offering:'not offered this window',
+                     unknown_area:'unknown area', pm_no_ge:'no program GE'};
+    const flabel = f => FLAGLBL[f] || String(f).replace(/_/g,' ');
+    const PLAN = {shared:'met by major', concrete:'concrete', reserve:'reserve'};
+    let h = '<div class="card"><h3>General Education — '+escapeHtml(pname)+'</h3>';
+    h += '<div class="ge-sub">Live from ASSIST · status: '+escapeHtml(ge.assist_status||'')+
+         ' <span class="tip" tabindex="0" role="button" aria-label="About this GE data">?'+
+         '<span class="tip-bub" role="tooltip">'+escapeHtml(ge.assist_caveat||'')+'</span></span></div>';
     if (ge.error) h += '<p class="hint">'+escapeHtml(ge.error)+'</p>';
-    h += '<table class="t"><thead><tr><th>Area</th><th>Title</th><th>Need</th>'+
-         '<th>Resolution</th><th>Flags</th></tr></thead><tbody>';
+    h += '<table class="ge-table"><thead><tr><th>Area</th><th>Title</th><th>Need</th>'+
+         '<th>Plan</th><th>Notes</th></tr></thead><tbody>';
     (ge.areas||[]).forEach(a=>{
-      h += '<tr><td>'+escapeHtml(a.area)+'</td><td>'+escapeHtml(a.title||'')+'</td><td>'+
-           escapeHtml(String(a.required))+'</td><td>'+escapeHtml(a.resolution)+'</td><td>'+
-           escapeHtml((a.flags||[]).join(', '))+'</td></tr>';
+      const r = String(a.resolution||'');
+      const chips = (a.flags||[]).map(f=>'<span class="ge-flag">'+escapeHtml(flabel(f))+'</span>').join('');
+      h += '<tr><td class="area">'+escapeHtml(a.area)+'</td>'+
+           '<td>'+escapeHtml(a.title||'')+'</td>'+
+           '<td class="ge-need">'+escapeHtml(String(a.required))+'</td>'+
+           '<td><span class="ge-plan '+escapeHtml(r)+'">'+escapeHtml(PLAN[r]||r)+'</span></td>'+
+           '<td>'+chips+'</td></tr>';
     });
     h += '</tbody></table>';
-    if ((ge.shared_with_major||[]).length)
-      h += '<p class="hint">Satisfied by major courses: '+
-           escapeHtml(ge.shared_with_major.map(s=>s.area+'→'+s.course).join(', '))+'</p>';
+    const shared = ge.shared_with_major || [];
+    if (shared.length) {
+      const areas = [...new Set(shared.map(s=>s.area))].sort();
+      const bySubj = {};
+      [...new Set(shared.map(s=>s.course))].forEach(c=>{
+        const i = String(c).lastIndexOf(' ');
+        const subj = i>=0 ? c.slice(0,i) : c, num = i>=0 ? c.slice(i+1) : '';
+        (bySubj[subj] = bySubj[subj] || []).push(num);
+      });
+      const courses = Object.keys(bySubj).sort().map(s=>
+        escapeHtml(s)+' '+bySubj[s].sort().map(n=>escapeHtml(n)).join('/')).join(', ');
+      h += '<div class="ge-major"><b>✓ Met by your major</b> — areas '+
+           escapeHtml(areas.join(' / '))+': '+courses+'</div>';
+    }
     h += '</div>';
     document.getElementById('live').insertAdjacentHTML('beforeend', h);
   }
