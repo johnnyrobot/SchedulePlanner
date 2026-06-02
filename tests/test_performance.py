@@ -171,3 +171,23 @@ def test_n6_whole_program_run_under_budget(n6_fixture):
         f"engine.run on the single deep-chain program took {elapsed:.2f}s, "
         f"over the PRD N6 budget of {N6_BUDGET_SECONDS}s"
     )
+
+
+def test_ge_solve_is_fast(tmp_path):
+    import time, pandas as pd, engine
+    out = tmp_path / "perf_ge.xlsx"
+    secs = [{"Term": 20248, "CLASS": f"GE {i}", "Class Status": "Active",
+             "Cap Enrl": 0, "Tot Enrl": 0, "Wait Tot": 0} for i in range(1, 7)]
+    cat = [{"Course ID": f"GE {i}", "Units": 3, "Prerequisites (structured)": ""} for i in range(1, 7)]
+    with pd.ExcelWriter(out, engine="openpyxl") as xl:
+        pd.DataFrame(secs).to_excel(xl, sheet_name="sections", index=False)
+        pd.DataFrame(cat).to_excel(xl, sheet_name="catalog", index=False)
+        pd.DataFrame([{"Program Code": "P", "Program Title": "P", "Course ID": "GE 1",
+                       "Recommended Semester": 1}]).to_excel(xl, sheet_name="programs", index=False)
+        pd.DataFrame([{"Program Code": "P", "Pattern": "igetc", "Area": "3A",
+                       "Area Title": "Arts", "Required Count": 1, "Resolution": "concrete",
+                       "Candidate Course IDs": "GE 2;GE 3;GE 4", "Recommended Course": "",
+                       "Units": 3.0}]).to_excel(xl, sheet_name="ge_requirements", index=False)
+    t0 = time.monotonic()
+    engine.run(str(out))
+    assert time.monotonic() - t0 < 15  # well under the 10s/cohort solver cap x2

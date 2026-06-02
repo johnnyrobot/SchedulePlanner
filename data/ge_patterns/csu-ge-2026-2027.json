@@ -1,0 +1,19 @@
+{
+  "pattern": "csu-ge",
+  "display_name": "CSU GE-Breadth",
+  "effective_year": "2026-2027",
+  "source": "REPLACE WITH OFFICIAL CSU GE-BREADTH STANDARDS URL",
+  "reviewed_by": "", "reviewed_on": "",
+  "areas": [
+    {"code": "A1", "title": "Oral Communication", "count": 1, "units_min": 3},
+    {"code": "A2", "title": "Written Communication", "count": 1, "units_min": 3},
+    {"code": "A3", "title": "Critical Thinking", "count": 1, "units_min": 3},
+    {"code": "B1", "title": "Physical Science", "count": 1, "units_min": 3},
+    {"code": "B2", "title": "Life Science", "count": 1, "units_min": 3},
+    {"code": "B4", "title": "Mathematics/Quantitative Reasoning", "count": 1, "units_min": 3},
+    {"code": "C1", "title": "Arts", "count": 1, "units_min": 3},
+    {"code": "C2", "title": "Humanities", "count": 1, "units_min": 3},
+    {"code": "D", "title": "Social Sciences", "count": 1, "units_min": 3},
+    {"code": "E", "title": "Lifelong Learning and Self-Development", "count": 1, "units_min": 3}
+  ]
+}

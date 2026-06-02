@@ -247,6 +247,23 @@ def test_live_pipeline_keeps_network_behind_injected_client():
     assert "client" not in inspect.signature(engine.run).parameters
 
 
+def test_assist_sends_no_credentials(make_client):
+    import json, pathlib
+    from sources import assist
+    fix = pathlib.Path(__file__).parent / "fixtures"
+    routes = {"/api/AcademicYears": json.loads((fix / "assist_academic_years.json").read_text()),
+              "/api/transferability/courses":
+                  json.loads((fix / "assist_transferability_igetc_LAMC.json").read_text())}
+    client = make_client(routes)
+    assist.fetch_ge_courses("LAMC", "igetc", client=client)
+    for call in client.calls:
+        hdrs = {k.lower(): v for k, v in (call["headers"] or {}).items()}
+        assert "authorization" not in hdrs
+        assert "cookie" not in hdrs            # cookies are jar-managed, never hand-set PII
+        # Only the campus/year/listType params travel — no user data.
+        assert set((call["params"] or {}) ) <= {"institutionId", "academicYearId", "listType"}
+
+
 def test_build_live_workbook_uses_injected_client_no_network(
         lamc_routes, make_client, tmp_path, monkeypatch):
     """End-to-end: with an injected FakeClient, the live pipeline runs with the

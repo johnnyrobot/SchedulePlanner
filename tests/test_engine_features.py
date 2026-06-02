@@ -336,3 +336,81 @@ def test_f17_briefing_fallback(monkeypatch):
     assert "Computer Science" in text or "Engineering" in text, (
         f"Expected program title in briefing, got:\n{text}"
     )
+
+
+import pandas as pd
+import engine
+
+
+def _ge_workbook(tmp_path, ge_rows):
+    """Minimal 4-sheet workbook: one major course + GE requirements."""
+    out = tmp_path / "ge_wb.xlsx"
+    sections = pd.DataFrame([
+        {"Term": 20248, "CLASS": "BIOLOGY 7", "Class Status": "Active",
+         "Cap Enrl": 0, "Tot Enrl": 0, "Wait Tot": 0},
+        {"Term": 20248, "CLASS": "ART 101", "Class Status": "Active",
+         "Cap Enrl": 0, "Tot Enrl": 0, "Wait Tot": 0},
+        {"Term": 20248, "CLASS": "ART 105", "Class Status": "Active",
+         "Cap Enrl": 0, "Tot Enrl": 0, "Wait Tot": 0},
+    ])
+    catalog = pd.DataFrame([
+        {"Course ID": "BIOLOGY 7", "Units": 4, "Prerequisites (structured)": ""},
+        {"Course ID": "ART 101", "Units": 3, "Prerequisites (structured)": ""},
+        {"Course ID": "ART 105", "Units": 3, "Prerequisites (structured)": ""},
+    ])
+    programs = pd.DataFrame([
+        {"Program Code": "BIO", "Program Title": "Biology", "Course ID": "BIOLOGY 7",
+         "Recommended Semester": 1}])
+    with pd.ExcelWriter(out, engine="openpyxl") as xl:
+        sections.to_excel(xl, sheet_name="sections", index=False)
+        catalog.to_excel(xl, sheet_name="catalog", index=False)
+        programs.to_excel(xl, sheet_name="programs", index=False)
+        pd.DataFrame(ge_rows, columns=engine_ge_cols()).to_excel(
+            xl, sheet_name="ge_requirements", index=False)
+    return str(out)
+
+
+def engine_ge_cols():
+    from sources.mapping import GE_REQUIREMENT_COLUMNS
+    return GE_REQUIREMENT_COLUMNS
+
+
+def test_engine_schedules_concrete_ge_choice(tmp_path):
+    rows = [{"Program Code": "BIO", "Pattern": "igetc", "Area": "3A",
+             "Area Title": "Arts", "Required Count": 1, "Resolution": "concrete",
+             "Candidate Course IDs": "ART 101;ART 105", "Recommended Course": "ART 101",
+             "Units": 3.0}]
+    res = engine.run(_ge_workbook(tmp_path, rows))
+    cohort = res["programs"]["BIO"]["cohorts"]["full_time"]
+    scheduled = [c for terms in cohort["plan"].values() for c in terms]
+    # Exactly one of the two candidates is scheduled (choose-from-set, count == 1).
+    assert len(set(scheduled) & {"ART 101", "ART 105"}) == 1
+    assert "BIOLOGY 7" in scheduled                      # major course still scheduled
+    assert cohort["ge"]["3A"]["resolution"] == "concrete"
+
+
+def test_engine_reserves_ge_slot(tmp_path):
+    rows = [{"Program Code": "BIO", "Pattern": "igetc", "Area": "1A",
+             "Area Title": "English", "Required Count": 1, "Resolution": "reserve",
+             "Candidate Course IDs": "", "Recommended Course": "", "Units": 3.0}]
+    res = engine.run(_ge_workbook(tmp_path, rows))
+    cohort = res["programs"]["BIO"]["cohorts"]["full_time"]
+    flat = [c for terms in cohort["plan"].values() for c in terms]
+    assert any(c.startswith("GE:") and "1A" in c for c in flat)   # reserve slot token in plan
+
+
+def test_no_ge_sheet_is_byte_identical(tmp_path):
+    # A workbook without the 4th sheet must behave exactly as before this feature.
+    out = tmp_path / "no_ge.xlsx"
+    sections = pd.DataFrame([{"Term": 20248, "CLASS": "BIOLOGY 7", "Class Status": "Active",
+                              "Cap Enrl": 0, "Tot Enrl": 0, "Wait Tot": 0}])
+    catalog = pd.DataFrame([{"Course ID": "BIOLOGY 7", "Units": 4,
+                             "Prerequisites (structured)": ""}])
+    programs = pd.DataFrame([{"Program Code": "BIO", "Program Title": "Biology",
+                              "Course ID": "BIOLOGY 7", "Recommended Semester": 1}])
+    with pd.ExcelWriter(out, engine="openpyxl") as xl:
+        sections.to_excel(xl, sheet_name="sections", index=False)
+        catalog.to_excel(xl, sheet_name="catalog", index=False)
+        programs.to_excel(xl, sheet_name="programs", index=False)
+    res = engine.run(str(out))
+    assert "ge" not in res["programs"]["BIO"]["cohorts"]["full_time"]

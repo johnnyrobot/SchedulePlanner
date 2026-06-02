@@ -157,3 +157,10 @@ def test_run_qa_script_exists_and_is_executable():
     assert "not live" in text, "run_qa.sh must pass -m 'not live' explicitly"
     assert "python3" in text, "run_qa.sh must invoke python3 (no bare `python`)"
     assert "set -euo pipefail" in text, "run_qa.sh must use strict bash mode"
+
+
+def test_ge_caveat_is_honest():
+    from build_live_workbook import _GE_CAVEAT
+    low = _GE_CAVEAT.lower()
+    assert "pending" in low and "best-effort" in low
+    assert "production-ready" not in low or "not production-ready" in low

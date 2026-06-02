@@ -313,7 +313,8 @@ def test_cli_args_parse_enrollment_and_elumen_fixture(monkeypatch, tmp_path,
     def fake_analyze(campus, terms, program, out, *, client=None,
                      enrollment_path=None, elumen_fixture=None,
                      elumen_live=False, enrollment_map=None,
-                     prereq_max_clauses=None):
+                     prereq_max_clauses=None, transfer_goal="none",
+                     assist_year_id=None, ge_pattern_path=None):
         captured.update(
             campus=campus, terms=terms, program=program, out=out,
             enrollment_path=enrollment_path, elumen_fixture=elumen_fixture,
@@ -442,3 +443,21 @@ def test_prereq_detector_truncation_wording_mid_last_subject():
         source="eLumen live", results={"PHYS 102": res}, live=True, coverage=cov)
     assert "while fetching the last subject" in active["label"]
     assert "6/6" not in active["label"]
+
+
+def test_ge_detector_inert_when_not_requested():
+    from build_live_workbook import _ge_detector_entry
+    e = _ge_detector_entry(None)
+    assert e["detector"] == "ge_scheduling" and e["status"] == "inert"
+
+
+def test_ge_detector_active_when_requested():
+    from build_live_workbook import _ge_detector_entry
+    cov = {"requested": True, "pattern": "igetc", "assist_status": "ok",
+           "areas": [{"area": "3A", "resolution": "concrete", "flags": []},
+                     {"area": "1A", "resolution": "reserve", "flags": ["no_offering"]}],
+           "shared_with_major": [{"area": "5B", "course": "BIOLOGY 7"}]}
+    e = _ge_detector_entry(cov)
+    assert e["status"] == "active"
+    assert e["summary"] == {"areas_total": 2, "concrete": 1, "reserved": 1,
+                            "shared_with_major": 1, "flagged": 1}

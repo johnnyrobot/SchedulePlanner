@@ -86,6 +86,41 @@ def load_data(path: str):
     return sec, cat, prog
 
 
+def _load_ge(path):
+    """Read the OPTIONAL ge_requirements sheet/csv. Returns a list of row dicts
+    (parsed candidates) keyed nowhere — the caller filters by Program Code.
+    Absent sheet -> [] (so engine.run on a 3-sheet workbook is unchanged)."""
+    try:
+        if os.path.isdir(path):
+            csv = os.path.join(path, "ge_requirements.csv")
+            if not os.path.exists(csv):
+                return []
+            df = pd.read_csv(csv)
+        else:
+            xl = pd.ExcelFile(path)
+            if "ge_requirements" not in xl.sheet_names:
+                return []
+            df = xl.parse("ge_requirements")
+    except Exception:
+        return []
+    rows = []
+    for _, r in df.iterrows():
+        cands = [c.strip() for c in str(r.get("Candidate Course IDs", "") or "").split(";")
+                 if c.strip()]
+        rows.append({
+            "program_code": r["Program Code"],
+            "pattern": r.get("Pattern", ""),
+            "area": str(r["Area"]),
+            "area_title": r.get("Area Title", ""),
+            "required_count": int(r.get("Required Count", 1)),
+            "resolution": str(r.get("Resolution", "reserve")),
+            "candidates": cands,
+            "recommended": str(r.get("Recommended Course", "") or ""),
+            "units": float(r.get("Units", 3.0)),
+        })
+    return rows
+
+
 def parse_prereq(s, llm=None):
     """'(A OR B) AND (C)' -> [['A','B'],['C']].  If text looks unstructured and
     an llm callable is provided, delegate to it."""
@@ -166,17 +201,46 @@ def analyze(active, prog, n_terms):
 
 
 # ----------------------------------------------------------------- solver
-def solve_cohort(pcode, prog, course_seasons, units, prereqs, cohort, allow_fixes):
+def solve_cohort(pcode, prog, course_seasons, units, prereqs, cohort, allow_fixes,
+                 ge_rows=None):
     H, maxu = cohort["horizon"], cohort["max_units"]
     courses = sorted(closure(list(prog[prog["Program Code"] == pcode]["Course ID"]),
                              prereqs))
+    ge_rows = [r for r in (ge_rows or []) if r["program_code"] == pcode]
+
     m = cp_model.CpModel()
-    take = {(c, t): m.NewBoolVar(f"x_{c}_{t}")
-            for c in courses for t in range(1, H + 1)}
+    take = {}
+
+    # Fixed (major) courses: taken exactly once.
     for c in courses:
+        for t in range(1, H + 1):
+            take[(c, t)] = m.NewBoolVar(f"x_{c}_{t}")
         m.AddExactlyOne(take[(c, t)] for t in range(1, H + 1))
+
+    # Concrete GE candidate courses: taken at most once (selection picks them).
+    ge_candidates = sorted({c for r in ge_rows if r["resolution"] == "concrete"
+                            for c in r["candidates"]} - set(courses))
+    for c in ge_candidates:
+        for t in range(1, H + 1):
+            take[(c, t)] = m.NewBoolVar(f"g_{c}_{t}")
+        m.AddAtMostOne(take[(c, t)] for t in range(1, H + 1))
+
+    # Reserve pseudo-items: one per required count; scheduled exactly once.
+    reserve_items = []  # (item_id, label, units)
+    for r in sorted(ge_rows, key=lambda x: x["area"]):
+        if r["resolution"] != "reserve":
+            continue
+        for i in range(r["required_count"]):
+            item_id = f"GE:{r['pattern']}:{r['area']}#{i}"
+            label = f"GE:{r['pattern']}:{r['area']} — choose one ({r['area_title']})"
+            reserve_items.append((item_id, label, float(r["units"])))
+            for t in range(1, H + 1):
+                take[(item_id, t)] = m.NewBoolVar(f"r_{item_id}_{t}")
+            m.AddExactlyOne(take[(item_id, t)] for t in range(1, H + 1))
+
+    # Season availability (fixed + GE candidate courses; reserve items are season-free).
     fixes_pen = []
-    for c in courses:
+    for c in courses + ge_candidates:
         avail = course_seasons.get(c, set())
         for t in range(1, H + 1):
             if term_season(t) not in avail:
@@ -184,6 +248,8 @@ def solve_cohort(pcode, prog, course_seasons, units, prereqs, cohort, allow_fixe
                     fixes_pen.append(take[(c, t)])
                 else:
                     m.Add(take[(c, t)] == 0)
+
+    # Prereqs (fixed courses only; v1 does not expand closure over GE candidates).
     for c in courses:
         for grp in prereqs.get(c, []):
             grp = [p for p in grp if p in courses]
@@ -192,12 +258,37 @@ def solve_cohort(pcode, prog, course_seasons, units, prereqs, cohort, allow_fixe
             for t in range(1, H + 1):
                 m.Add(sum(take[(p, tp)] for p in grp for tp in range(1, t)) >= 1)\
                     .OnlyEnforceIf(take[(c, t)])
+
+    # Choose-from-set selection: exactly required_count of an area's candidates.
+    rec_misses = []
+    for r in ge_rows:
+        if r["resolution"] != "concrete":
+            continue
+        taken = {c: sum(take[(c, t)] for t in range(1, H + 1)) for c in r["candidates"]}
+        m.Add(sum(taken.values()) == r["required_count"])
+        if r["recommended"] and r["recommended"] in taken:
+            miss = m.NewBoolVar(f"miss_{r['area']}")
+            m.Add(taken[r["recommended"]] + miss >= 1)  # miss=1 iff recommended not taken
+            rec_misses.append(miss)
+
+    # Unit cap per term across ALL items (courses + GE candidates + reserve slots).
+    reserve_units = {iid: u for iid, _lbl, u in reserve_items}
+    unit_items = courses + ge_candidates
     for t in range(1, H + 1):
-        m.Add(sum(int(units.get(c, 3)) * take[(c, t)] for c in courses) <= maxu)
+        terms_units = [int(units.get(c, 3)) * take[(c, t)] for c in unit_items]
+        terms_units += [int(round(reserve_units[iid])) * take[(iid, t)]
+                        for iid, _lbl, _u in reserve_items]
+        m.Add(sum(terms_units) <= maxu)
+
+    # Makespan over every scheduled item.
     last = m.NewIntVar(1, H, "last")
-    for c in courses:
+    for c in courses + ge_candidates + [iid for iid, _l, _u in reserve_items]:
         m.Add(last >= sum(t * take[(c, t)] for t in range(1, H + 1)))
-    m.Minimize(1000 * sum(fixes_pen) + last if allow_fixes else last)
+
+    objective = 100 * last + 1 * sum(rec_misses)
+    if allow_fixes:
+        objective = 100000 * sum(fixes_pen) + objective
+    m.Minimize(objective)
 
     solver = cp_model.CpSolver()
     solver.parameters.max_time_in_seconds = 10
@@ -206,16 +297,33 @@ def solve_cohort(pcode, prog, course_seasons, units, prereqs, cohort, allow_fixe
     st = solver.Solve(m)
     if st not in (cp_model.OPTIMAL, cp_model.FEASIBLE):
         return None
+
     plan, fixes = {}, []
-    for c in courses:
+    for c in courses + ge_candidates:
         for t in range(1, H + 1):
             if solver.Value(take[(c, t)]):
                 plan.setdefault(t, []).append(c)
                 if term_season(t) not in course_seasons.get(c, set()):
                     fixes.append({"course": c, "season": term_season(t)})
-    return {"terms_used": int(solver.Value(last)),
-            "plan": {int(t): sorted(v) for t, v in sorted(plan.items())},
-            "fixes": fixes}
+    for iid, lbl, _u in reserve_items:
+        for t in range(1, H + 1):
+            if solver.Value(take[(iid, t)]):
+                plan.setdefault(t, []).append(lbl)
+
+    ge_out = {}
+    for r in ge_rows:
+        chosen = [c for c in r["candidates"]
+                  if any(solver.Value(take[(c, t)]) for t in range(1, H + 1))] \
+            if r["resolution"] == "concrete" else []
+        ge_out[r["area"]] = {"title": r["area_title"], "resolution": r["resolution"],
+                             "chosen": sorted(chosen), "units": r["units"]}
+
+    result = {"terms_used": int(solver.Value(last)),
+              "plan": {int(t): sorted(v) for t, v in sorted(plan.items())},
+              "fixes": fixes}
+    if ge_rows:
+        result["ge"] = ge_out
+    return result
 
 
 def official_map_issues(pcode, prog, course_seasons, prereqs):
@@ -235,6 +343,7 @@ def official_map_issues(pcode, prog, course_seasons, prereqs):
 def run(path: str, llm=None) -> dict:
     sec, cat, prog = load_data(path)
     active, course_seasons, units, prereqs = build_model(sec, cat, prog, llm)
+    ge_rows = _load_ge(path)
     n_terms = sec["Term"].nunique()
 
     results = {"terms_in_data": int(n_terms),
@@ -248,10 +357,10 @@ def run(path: str, llm=None) -> dict:
                  "cohorts": {}}
         for ck, cohort in COHORTS.items():
             res = solve_cohort(pcode, prog, course_seasons, units, prereqs,
-                               cohort, allow_fixes=False)
+                               cohort, allow_fixes=False, ge_rows=ge_rows)
             if res is None:
                 res = solve_cohort(pcode, prog, course_seasons, units, prereqs,
-                                   cohort, allow_fixes=True)
+                                   cohort, allow_fixes=True, ge_rows=ge_rows)
                 if res:
                     res["needs_fix"] = True
             entry["cohorts"][ck] = res

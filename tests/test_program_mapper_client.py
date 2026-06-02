@@ -74,7 +74,7 @@ def test_get_program_courses_falls_back_to_first_pathway(make_client):
                 "type": "COURSE", "term": {"termNumber": 1}, "minUnits": 3.0}}]},
     }
     client = make_client(routes)
-    courses = pm.get_program_courses("LAMC", "p2", client=client)
+    courses = pm.get_program_courses("LAMC", "p2", client=client)["courses"]
     assert [c["course_id"] for c in courses] == ["ENGL 101"]
 
 
@@ -93,3 +93,42 @@ def test_get_program_courses_raises_on_malformed_program_map(make_client):
     msg = str(ei.value)
     assert "program-maps/m3" in msg
     assert "pathwayElements" in msg
+
+
+MAP_WITH_GE = {"pathwayElements": [
+    {"name": "CS 101", "shortDescription": "Intro CS",
+     "requirement": {"requirementType": "MAJOR_CORE"},
+     "recommendedOpportunity": {"type": "COURSE", "term": {"termNumber": 1},
+                                "courseCode": "CS 101", "minUnits": 3.0}},
+    {"name": "MATH 261 or MATH 247", "shortDescription": "Choose a course",
+     "requirement": {"requirementType": "MAJOR_CORE"},
+     "recommendedOpportunity": {"type": "CHOICE", "term": {"termNumber": 2}}},
+    {"name": "Arts", "shortDescription": "Choose a course from Area 3A.",
+     "requirement": {"requirementType": "GENERAL_EDUCATION"},
+     "recommendedOpportunity": {"type": "CHOICE", "term": {"termNumber": 3}}},
+    {"name": "English Composition", "shortDescription": "Choose a course from Area 1A.",
+     "requirement": {"requirementType": "GENERAL_EDUCATION"},
+     "recommendedOpportunity": {"type": "CHOICE", "term": {"termNumber": 1},
+                                "courseCode": "ENGL 101"}},
+]}
+ROUTES_GE = {
+    "/home-page-content": HOME,
+    "/program-groups/g1": GROUP_G1,
+    "/programs/p1": {"pathways": [{"defaultPathway": True, "programMapId": "mge"}]},
+    "/program-maps/mge": MAP_WITH_GE,
+}
+
+
+def test_fetch_program_extracts_ge_requirements_and_major_choices(make_client):
+    client = make_client(ROUTES_GE)
+    prog = pm.fetch_program("LAMC", "computer science", client=client)
+    # Concrete major courses unchanged.
+    assert [c["course_id"] for c in prog["courses"]] == ["CS 101"]
+    # GE area requirements captured with area codes parsed from the description.
+    ge = {g["area"]: g for g in prog["ge_requirements"]}
+    assert set(ge) == {"3A", "1A"}
+    assert ge["1A"]["recommended_course"] == "ENGL 101"
+    assert ge["3A"]["recommended_course"] == ""
+    # Major CHOICE captured separately as an explicit option list.
+    assert prog["major_choices"] == [{"options": ["MATH 261", "MATH 247"],
+                                      "recommended_semester": 2}]

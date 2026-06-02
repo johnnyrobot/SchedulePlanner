@@ -71,7 +71,8 @@ import os
 import httpx
 
 import engine
-from sources import elumen, elumen_client, enrollment, mapping, program_mapper, schedule
+from sources import (assist, elumen, elumen_client, enrollment, ge, mapping,
+                     program_mapper, schedule)
 
 
 def build(campus, terms, program_query, *, client=None):
@@ -317,6 +318,33 @@ def _prereq_detector_entry(*, source, results, live=False, coverage=None):
     return entry
 
 
+def _ge_detector_entry(coverage):
+    """Detector-style entry so _print_banner + UI render GE like the others."""
+    if not coverage or not coverage.get("requested"):
+        return {"detector": "ge_scheduling", "status": "inert",
+                "reason": "no transfer GE goal selected; major courses only."}
+    areas = coverage.get("areas", [])
+    return {
+        "detector": "ge_scheduling", "status": "active",
+        "pattern": coverage.get("pattern"),
+        "academic_year": coverage.get("academic_year"),
+        "assist_status": coverage.get("assist_status"),
+        "label": coverage.get("assist_caveat", ""),
+        "summary": {
+            "areas_total": len(areas),
+            "concrete": sum(1 for a in areas if a["resolution"] == "concrete"),
+            "reserved": sum(1 for a in areas if a["resolution"] == "reserve"),
+            "shared_with_major": len(coverage.get("shared_with_major", [])),
+            "flagged": sum(1 for a in areas if a.get("flags")),
+        },
+    }
+
+
+_GE_CAVEAT = ("ASSIST is public but ToU/rate-limit/human-approval review is "
+              "PENDING; bounded fetch (one call per pattern per college per "
+              "year); best-effort, not production-ready.")
+
+
 def _program_subjects(sections, program):
     """Subjects to query eLumen for: the subjects of fetched sections that
     belong to a PROGRAM course — NOT every subject in the campus listing.
@@ -348,7 +376,8 @@ def _program_subjects(sections, program):
 
 def analyze_live(campus, terms, program_query, out_path, *, client=None,
                  enrollment_path=None, elumen_fixture=None, elumen_live=False,
-                 enrollment_map=None, prereq_max_clauses=None):
+                 enrollment_map=None, prereq_max_clauses=None,
+                 transfer_goal="none", assist_year_id=None, ge_pattern_path=None):
     """Run the full live pipeline and return a structured, JSON-serializable report.
 
     The report carries the reconciliation (matched/unmatched program courses)
@@ -486,6 +515,37 @@ def analyze_live(campus, terms, program_query, out_path, *, client=None,
             kwargs["max_clauses"] = prereq_max_clauses
         prereq_map, prereq_results = elumen.build_prereq_map(records, **kwargs)
 
+    # --- transfer-pattern GE (outside engine.run, on raw records, before write) ---
+    ge_rows = None
+    ge_coverage = None
+    if transfer_goal and str(transfer_goal).lower() != "none":
+        ge_coverage = {"requested": True, "pattern": str(transfer_goal).lower(),
+                       "assist_caveat": _GE_CAVEAT}
+        try:
+            pattern = ge.load_pattern(transfer_goal, path=ge_pattern_path)
+        except ge.PatternError as exc:
+            ge_coverage.update({"assist_status": "unavailable",
+                                "areas": [], "shared_with_major": [],
+                                "error": f"pattern unavailable: {exc}"})
+            pattern = None
+        if pattern is not None:
+            offered = {mapping._norm(r["course"]) for r in sections}
+            try:
+                assist_areas, year_id = assist.fetch_ge_courses(
+                    campus, transfer_goal, academic_year_id=assist_year_id, client=client)
+                ge_coverage["assist_status"] = "ok"
+            except Exception as exc:  # noqa: BLE001 - ASSIST down -> full reserve, honest
+                assist_areas, year_id = {}, assist_year_id
+                ge_coverage["assist_status"] = "unavailable"
+                ge_coverage["error"] = f"ASSIST unavailable: {type(exc).__name__}: {exc}"
+            ge_coverage["academic_year"] = {"id": year_id}
+            ge_rows, resolved = ge.resolve(pattern, assist_areas, offered, program)
+            ge_coverage["areas"] = resolved["areas"]
+            ge_coverage["shared_with_major"] = resolved["shared_with_major"]
+            ge_coverage["unknown_areas"] = resolved["unknown_areas"]
+    if ge_coverage is not None:
+        report["ge_coverage"] = ge_coverage
+
     matched, unmatched = mapping.reconcile_courses(sections, program)
     report["program"] = {
         "code": program["code"],
@@ -510,11 +570,14 @@ def analyze_live(campus, terms, program_query, out_path, *, client=None,
                                   live=elumen_live_active,
                                   coverage=elumen_coverage)]
     )
+    report["inert_detectors"].append(_ge_detector_entry(ge_coverage))
 
     os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
-    # Task 5 only PASSES the prereq map + enriched records; write_workbook's
-    # prereqs kwarg is owned by mapping.py (Task 4). engine.py is untouched.
-    mapping.write_workbook(sections, program, out_path, prereqs=prereq_map)
+    mapping.write_workbook(sections, program, out_path, prereqs=prereq_map,
+                           pattern=(str(transfer_goal).lower()
+                                    if transfer_goal and str(transfer_goal).lower() != "none"
+                                    else None),
+                           ge_rows=ge_rows)
     report["workbook"] = out_path
     report["results"] = engine.run(out_path)
     return report
@@ -602,13 +665,18 @@ def main():
               "best-effort and NOT production-ready; the eLumen<->catalog join "
               "is validated only via the coverage report. If --elumen-fixture is "
               "also given, --elumen-live wins."))
+    ap.add_argument("--transfer-goal", default="none",
+                    choices=["none", "cal-getc", "igetc", "csu-ge"],
+                    dest="transfer_goal",
+                    help="add transfer-pattern GE to the plan (default: none).")
     args = ap.parse_args()
     terms = [int(t) for t in args.terms.split(",") if t.strip()]
 
     report = analyze_live(args.campus, terms, args.program, args.out,
                           enrollment_path=args.enrollment,
                           elumen_fixture=args.elumen_fixture,
-                          elumen_live=args.elumen_live)
+                          elumen_live=args.elumen_live,
+                          transfer_goal=args.transfer_goal)
     if report["error"]:
         _print_banner(report)
         raise SystemExit(1)
