@@ -330,6 +330,10 @@ def _ge_detector_entry(coverage):
         "academic_year": coverage.get("academic_year"),
         "assist_status": coverage.get("assist_status"),
         "label": coverage.get("assist_caveat", ""),
+        # Content-review gate: an unreviewed pattern (blank reviewed_by) is a DRAFT.
+        # The warning self-clears once a qualified reviewer signs the pattern file.
+        "reviewed": coverage.get("reviewed", False),
+        "draft_warning": coverage.get("draft_warning", ""),
         "summary": {
             "areas_total": len(areas),
             "concrete": sum(1 for a in areas if a["resolution"] == "concrete"),
@@ -343,6 +347,22 @@ def _ge_detector_entry(coverage):
 _GE_CAVEAT = ("ASSIST is public but ToU/rate-limit/human-approval review is "
               "PENDING; bounded fetch (one call per pattern per college per "
               "year); best-effort, not production-ready.")
+
+
+def _ge_draft_warning(pattern):
+    """Plain-language DRAFT notice for an unreviewed GE pattern (CLI + UI share it).
+
+    Fired whenever ge.is_reviewed(pattern) is False — i.e. the pattern file's
+    per-area counts/units have NOT been verified against the official standard by
+    a qualified reviewer. Kept jargon-free so it reads the same in the banner and
+    the desktop panel; the wording deliberately frames the GE plan as a planning
+    aid, not an authoritative articulation.
+    """
+    name = pattern.get("display_name") or str(pattern.get("pattern") or "this")
+    return (f"Draft — unverified: the {name} requirement counts and units in this "
+            "build have not been verified against the official standard by a "
+            "qualified reviewer. Use as a planning aid only — confirm with a "
+            "counselor before relying on it.")
 
 
 def _program_subjects(sections, program):
@@ -529,6 +549,12 @@ def analyze_live(campus, terms, program_query, out_path, *, client=None,
                                 "error": f"pattern unavailable: {exc}"})
             pattern = None
         if pattern is not None:
+            # Content-review gate: surface a DRAFT warning whenever the pattern's
+            # per-area counts haven't been signed off (reviewed_by blank). This is
+            # independent of ASSIST availability — it's about the static rules.
+            ge_coverage["reviewed"] = ge.is_reviewed(pattern)
+            if not ge_coverage["reviewed"]:
+                ge_coverage["draft_warning"] = _ge_draft_warning(pattern)
             offered = {mapping._norm(r["course"]) for r in sections}
             try:
                 assist_areas, year_id = assist.fetch_ge_courses(
@@ -615,6 +641,12 @@ def _print_banner(report):
         # --elumen-live run, so it is intentionally NOT in this dict.
     }
     for d in report["inert_detectors"]:
+        if d["detector"] == "ge_scheduling":
+            # An unreviewed GE pattern is a DRAFT — say so loudly, never silently
+            # present placeholder counts as authoritative.
+            if d.get("draft_warning"):
+                print(f"NOTE: {d['draft_warning']}")
+            continue
         if d["detector"] == "prerequisite_ordering" and d["status"] == "active":
             # The ACTIVE prereq note must reflect the real provenance; a hardcoded
             # "fixture-only" line would contradict the JSON detector on a live run.
