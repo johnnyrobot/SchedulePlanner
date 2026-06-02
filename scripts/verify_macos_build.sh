@@ -85,6 +85,25 @@ main() {
   echo "--- resource check (shared) ---"
   bash "${RESOURCE_CHECK}" "${app}"
 
+  # Check 4: the bundled JRE (zero-setup catalog-PDF parsing) exists and runs.
+  local jre_java="${app}/Contents/Resources/jre/bin/java"
+  echo "--- bundled JRE check ---"
+  if [ ! -x "${jre_java}" ]; then
+    echo "FAIL: bundled JRE launcher missing/not executable at ${jre_java}" >&2
+    echo "      (scripts/build_macos.sh should ditto build/jre into the bundle)" >&2
+    exit 1
+  fi
+  if ! file "${jre_java}" | grep -q 'Mach-O'; then
+    echo "FAIL: ${jre_java} is not a Mach-O binary: $(file "${jre_java}")" >&2
+    exit 1
+  fi
+  if "${jre_java}" -version >/dev/null 2>&1; then
+    echo "PASS: bundled JRE runs ($("${jre_java}" -version 2>&1 | head -1))"
+  else
+    echo "FAIL: bundled JRE at ${jre_java} did not run '-version'" >&2
+    exit 1
+  fi
+
   # Negative control: prove the resource check bites.
   echo "--- negative control ---"
   negative_control
