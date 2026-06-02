@@ -20,6 +20,7 @@ import chat_assist
 import engine
 import llm_assist
 import report_export
+from sources import catalog_ge, pdf_loader
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 
@@ -44,6 +45,15 @@ class Api:
         result = webview.windows[0].create_file_dialog(
             webview.OPEN_DIALOG,
             file_types=("Data files (*.xlsx;*.xls)", "All files (*.*)"))
+        if not result:
+            return {"path": ""}
+        return {"path": result[0]}
+
+    def choose_pdf(self):
+        """Pick a catalog PDF (for the Local AA/AS GE option). Mirrors choose_file."""
+        result = webview.windows[0].create_file_dialog(
+            webview.OPEN_DIALOG,
+            file_types=("PDF files (*.pdf)", "All files (*.*)"))
         if not result:
             return {"path": ""}
         return {"path": result[0]}
@@ -125,7 +135,8 @@ class Api:
 
     # ---- live LACCD data ---------------------------------------------
     def fetch_live(self, campus, terms, program, enrollment_path=None,
-                   elumen_live=False, transfer_goal="none", client=None):
+                   elumen_live=False, transfer_goal="none", catalog_pdf=None,
+                   client=None):
         """Pull live LACCD data and analyze it, entirely inside the app.
 
         Parses the comma-separated `terms` string into ints, runs the live
@@ -178,7 +189,8 @@ class Api:
                 report = build_live_workbook.analyze_live(
                     campus, parsed_terms, program, out_path,
                     enrollment_path=enroll, elumen_live=bool(elumen_live),
-                    transfer_goal=transfer_goal, client=client)
+                    transfer_goal=transfer_goal,
+                    catalog_pdf=(catalog_pdf or None), client=client)
         except Exception as e:
             return {"error": (f"Could not fetch live LACCD data: "
                               f"{type(e).__name__}: {e}")}
@@ -205,6 +217,36 @@ class Api:
         out["ai_used"] = False
         self._last_results = out
         return out
+
+    # ---- local AA/AS GE (catalog PDF) ---------------------------------
+    def preview_local_ge(self, pdf_path):
+        """Parse a catalog PDF and return the detected local-GE DRAFT to confirm.
+
+        Returns ``{"ok", "needs_java", "section_found", "areas":[{code,title,
+        course_count}], "total_courses", "notes", "error"?}`` — the confirm step
+        before a local-GE build. Gated on ``pdf_loader.available()`` (Java 11+ and
+        the package); guarded so it never raises into the JS bridge. Reads only
+        (no schedule produced here); the build happens later via fetch_live.
+        """
+        p = (pdf_path or "").strip()
+        if not p or not os.path.exists(p):
+            return {"ok": False, "needs_java": False, "areas": [],
+                    "error": "Choose a catalog PDF first."}
+        if not pdf_loader.available():
+            return {"ok": False, "needs_java": True, "areas": [],
+                    "error": ("This needs Java 11+ to read PDFs — install it from "
+                              "https://adoptium.net/, then try again.")}
+        try:
+            odl = pdf_loader.extract(p)
+            _pattern, _area_courses, diag = catalog_ge.extract_local_ge(odl)
+        except Exception as e:
+            return {"ok": False, "needs_java": False, "areas": [],
+                    "error": f"Could not read the catalog PDF: {type(e).__name__}: {e}"}
+        return {"ok": bool(diag.get("area_count")), "needs_java": False,
+                "section_found": bool(diag.get("section_found")),
+                "areas": diag.get("areas", []),
+                "total_courses": diag.get("total_courses", 0),
+                "notes": diag.get("notes", [])}
 
     def explain(self):
         """Return a plain-language briefing for the last analysis.

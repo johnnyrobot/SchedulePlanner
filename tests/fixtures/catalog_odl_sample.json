@@ -1,0 +1,35 @@
+{
+  "file name": "synthetic_catalog.pdf",
+  "number of pages": 1,
+  "kids": [
+    { "type": "heading", "heading level": 1, "content": "Programs of Study" },
+    { "type": "paragraph", "content": "This catalog lists the degrees and programs offered." },
+    { "type": "heading", "heading level": 1, "content": "General Education Requirements" },
+    { "type": "paragraph", "content": "Students must complete one course from each area below." },
+    { "type": "heading", "heading level": 2, "content": "Area A — Natural Sciences" },
+    { "type": "list", "kids": [
+      { "type": "paragraph", "content": "BIOL 3 General Biology" },
+      { "type": "paragraph", "content": "CHEM 101 General Chemistry" },
+      { "type": "paragraph", "content": "PHYS SC 1 Physical Science" }
+    ]},
+    { "type": "heading", "heading level": 2, "content": "Area B — Social and Behavioral Sciences" },
+    { "type": "table", "number of rows": 3, "number of columns": 2, "rows": [
+      { "type": "table row", "row number": 1, "cells": [
+        { "type": "table cell", "kids": [ { "type": "paragraph", "content": "HIST 11" } ] },
+        { "type": "table cell", "kids": [ { "type": "paragraph", "content": "United States History" } ] }
+      ]},
+      { "type": "table row", "row number": 2, "cells": [
+        { "type": "table cell", "kids": [ { "type": "paragraph", "content": "POL SCI 1" } ] },
+        { "type": "table cell", "kids": [ { "type": "paragraph", "content": "American Government" } ] }
+      ]},
+      { "type": "table row", "row number": 3, "cells": [
+        { "type": "table cell", "kids": [ { "type": "paragraph", "content": "PSYCH 1" } ] },
+        { "type": "table cell", "kids": [ { "type": "paragraph", "content": "General Psychology" } ] }
+      ]}
+    ]},
+    { "type": "heading", "heading level": 2, "content": "Mathematics and Quantitative Reasoning" },
+    { "type": "paragraph", "content": "Complete one: MATH 245 or MATH 261." },
+    { "type": "heading", "heading level": 1, "content": "Graduation Requirements" },
+    { "type": "paragraph", "content": "A minimum of 60 units including ZZZZ 999 is required." }
+  ]
+}

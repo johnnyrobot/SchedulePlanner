@@ -48,6 +48,7 @@ echo "Building SchedulePlanner.app from ${REPO_ROOT} (using ${PY}) ..."
   --add-data 'ui.html:.' \
   --add-data 'files/lamc_data.xlsx:files' \
   --collect-all ortools \
+  --collect-all opendataloader_pdf \
   app.py
 
 APP="dist/SchedulePlanner.app"

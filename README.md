@@ -176,6 +176,25 @@ major**, not double-scheduled.
 >    change breaks that mapping, an area will surface `no ASSIST data` — the
 >    signal to re-check the codes.
 
+### Local AA/AS GE (from a catalog PDF)
+
+For a college's **own** Associate-degree GE (which ASSIST doesn't cover), pick
+**Local AA/AS GE (catalog PDF)** in the desktop live form and choose your catalog
+PDF. The app reads it **on-device** with [OpenDataLoader PDF](https://opendataloader.org)
+(Apache-2.0; its default Fast mode is local and deterministic — no cloud, no GPU),
+locates the General-Education section, and extracts each area's eligible courses.
+The detected GE is shown as a **draft for you to confirm** before it schedules,
+and — like the transfer patterns — carries a *“Draft — unverified”* notice; it is
+a planning aid, not an official articulation.
+
+Extraction lives in `sources/pdf_loader.py` (the OpenDataLoader wrapper) and
+`sources/catalog_ge.py` (a generic heading/table/list → areas+courses parser);
+the result feeds the **same** `ge.resolve` → solver → GE-coverage path as the
+transfer patterns. **Requires Java 11+** at runtime (install from
+[Adoptium](https://adoptium.net/)); the feature is opt-in and gated, so the rest
+of the app — and CI — never need Java. Catalog formats vary, so areas/courses the
+parser can't read are reported honestly (and reserved), never hidden.
+
 ### Regenerate the bundled synthetic demo
 
 ```bash
