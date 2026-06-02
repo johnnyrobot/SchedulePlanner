@@ -214,6 +214,16 @@
         <span>Include prerequisites from eLumen</span> <span class="xb">experimental</span>
         <span class="tip" tabindex="0" role="button" aria-label="What is the eLumen prerequisites option?">?<span class="tip-bub" role="tooltip">Fetches prerequisites from the public LACCD <b>eLumen</b> catalog so the solver can order courses (only <i>itemType = Prerequisite</i>; co-reqs/advisories excluded). <b>Experimental</b> — best-effort: the endpoint's ToU / rate-limit / approval review is pending.</span></span>
       </label>
+      <label class="liveopt"><span>Transfer GE goal</span>
+        <select id="liveTransferGoal">
+          <option value="none" selected>None — major only</option>
+          <option value="cal-getc">Cal-GETC (CSU + UC)</option>
+          <option value="igetc">IGETC</option>
+          <option value="csu-ge">CSU GE-Breadth</option>
+        </select>
+        <span class="xb">experimental</span>
+        <span class="tip" tabindex="0" role="button" aria-label="What is the transfer GE goal?">?<span class="tip-bub" role="tooltip">Adds lower-division <b>GE</b> to the plan, pulled live from <b>ASSIST</b>. Best-effort — ASSIST's terms-of-use review is pending. GE adds ~20–30 units, so the full-time plan may not fit four terms; check the part-time plan.</span></span>
+      </label>
     </div>
     <div class="row mt liveopts">
       <button class="ghost" id="liveEnrollBtn" type="button" onclick="pickLiveEnrollment()">Add enrollment export (optional)</button>
@@ -311,6 +321,13 @@
     join isn't validated on real data, so a real export may match zero sections (you'll see the join count). An
     empty result means "not yet measurable," not "all clear." For fully validated capacity analysis, use
     <b>Option 1</b> with a workbook that already includes the counts.</p>
+  <p><b>Transfer GE goal</b>: pick Cal-GETC, IGETC, or CSU GE to add lower-division
+  general education to the plan. Each area's eligible courses come live from
+  <b>ASSIST</b>; when an area has one clear (or recommended) offered course the app
+  schedules it, otherwise it reserves a slot ("choose one Area X course"). A major
+  course that also satisfies a GE area is counted once. GE adds ~20–30 units, so the
+  full-time plan may not fit four terms — the part-time plan will. Best-effort:
+  ASSIST's terms-of-use review is pending.</p>
 
   <h3>7 · The Gemma 4 badge</h3>
   <p>The pill in the top-right shows whether a local <b>Gemma 4</b> model (via Ollama) is available. When
@@ -462,6 +479,7 @@ async function fetchLive(){
   const terms=document.getElementById('liveTerms').value.trim();
   const program=document.getElementById('liveProgram').value.trim();
   const elumenLive=document.getElementById('liveElumen').checked;
+  const transferGoal=document.getElementById('liveTransferGoal').value;
   btn.disabled=true; btn.textContent='Fetching…';
   // Live also auto-runs its own pipeline (no picked file involved), so clear
   // dataPath and hide the file-only "Generate schedules" button.
@@ -473,10 +491,11 @@ async function fetchLive(){
   document.getElementById('status').innerHTML='<span class="spinner"></span> fetching + solving';
   let res;
   try{
-    // Pass the two optional (experimental) enrichments: an enrollment export
-    // path (null when none chosen) and the eLumen-prereqs toggle.
+    // Pass the three optional (experimental) enrichments: an enrollment export
+    // path (null when none chosen), the eLumen-prereqs toggle, and the transfer
+    // GE goal (defaults to "none" = major only).
     res = await window.pywebview.api.fetch_live(
-      campus, terms, program, liveEnrollPath||null, elumenLive);
+      campus, terms, program, liveEnrollPath||null, elumenLive, transferGoal);
   }catch(e){
     res = {error:'Unexpected error talking to the app: '+String(e)};
   }
@@ -589,6 +608,27 @@ function renderLivePanel(res){
       notes+'</div>';
   }
   document.getElementById('live').innerHTML=html;
+
+  const ge = (res && res.ge_coverage) || null;
+  if (ge && ge.requested) {
+    let h = '<div class="card"><h3>General Education ('+escapeHtml(ge.pattern)+')</h3>';
+    h += '<p class="hint">ASSIST status: '+escapeHtml(ge.assist_status||'')+
+         ' · '+escapeHtml(ge.assist_caveat||'')+'</p>';
+    if (ge.error) h += '<p class="hint">'+escapeHtml(ge.error)+'</p>';
+    h += '<table class="t"><thead><tr><th>Area</th><th>Title</th><th>Need</th>'+
+         '<th>Resolution</th><th>Flags</th></tr></thead><tbody>';
+    (ge.areas||[]).forEach(a=>{
+      h += '<tr><td>'+escapeHtml(a.area)+'</td><td>'+escapeHtml(a.title||'')+'</td><td>'+
+           escapeHtml(String(a.required))+'</td><td>'+escapeHtml(a.resolution)+'</td><td>'+
+           escapeHtml((a.flags||[]).join(', '))+'</td></tr>';
+    });
+    h += '</tbody></table>';
+    if ((ge.shared_with_major||[]).length)
+      h += '<p class="hint">Satisfied by major courses: '+
+           escapeHtml(ge.shared_with_major.map(s=>s.area+'→'+s.course).join(', '))+'</p>';
+    h += '</div>';
+    document.getElementById('live').insertAdjacentHTML('beforeend', h);
+  }
 }
 
 function badge(p){
