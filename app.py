@@ -8,6 +8,7 @@ optionally parses messy prerequisites and writes the admin explanation.
 Run (dev):   python app.py
 Package:     see BUILD.md  (PyInstaller -> single binary)
 """
+import datetime
 import os
 import sys
 import tempfile
@@ -17,6 +18,7 @@ import webview
 import build_live_workbook
 import engine
 import llm_assist
+import report_export
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 
@@ -221,6 +223,44 @@ class Api:
             return {"text": ("Could not summarize the analysis "
                              f"({type(e).__name__}: {e}). The full results are "
                              "still shown above.")}
+
+    # ---- export -------------------------------------------------------
+    def export_report(self, path=None):
+        """Write the last analysis as a self-contained, accessible HTML report.
+
+        Returns ``{"path": <written path>}`` on success, ``{"path": ""}`` if the
+        native Save dialog was cancelled, or ``{"error": ...}`` on any failure —
+        never raises into the JS bridge (mirrors fetch_live / analyze). The
+        optional ``path`` lets tests bypass the dialog (same injection style as
+        fetch_live's ``client``); JS calls it with no args so the user picks a
+        location. The plain-language briefing is generated the same way as
+        ``explain`` and embedded; a briefing failure degrades to an empty briefing
+        rather than blocking the export (the schedule is the point of the report).
+        """
+        if not self._last_results:
+            return {"error": "Run an analysis first."}
+        try:
+            try:
+                briefing = llm_assist.explain(self._last_results)
+            except Exception:
+                briefing = ""
+            if not path:
+                chosen = webview.windows[0].create_file_dialog(
+                    webview.SAVE_DIALOG,
+                    save_filename="schedule-report.html",
+                    file_types=("HTML file (*.html)", "All files (*.*)"))
+                if not chosen:
+                    return {"path": ""}
+                # pywebview returns a str or a 1-tuple depending on backend.
+                path = chosen[0] if isinstance(chosen, (list, tuple)) else chosen
+            html_doc = report_export.render_report(
+                self._last_results, briefing=briefing,
+                generated_at=datetime.datetime.now().strftime("%Y-%m-%d %H:%M"))
+            with open(path, "w", encoding="utf-8") as fh:
+                fh.write(html_doc)
+            return {"path": path}
+        except Exception as e:
+            return {"error": f"Could not export report: {type(e).__name__}: {e}"}
 
 
 def main():
