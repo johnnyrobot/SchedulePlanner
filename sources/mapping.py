@@ -140,16 +140,13 @@ def build_programs_df(program):
 
 
 def build_ge_requirements_df(program, pattern, ge_rows):
-    """One row per GE requirement. ``ge_rows`` are the resolver's output dicts.
-
-    Candidate ids are joined with a single space (course ids are already single-
-    spaced via _norm); the engine splits them back on whitespace runs of >=2 is
-    NOT safe, so candidates are stored semicolon-joined to survive multi-word
-    subjects (e.g. 'PHYS SC 1').
-    """
+    """One row per GE requirement. ``ge_rows`` are the resolver's output dicts. Candidate IDs are semicolon-joined to survive multi-word subjects (e.g. 'PHYS SC 1'); split on ';' to recover the list."""
     code = (program or {}).get("code", "")
     rows = []
     for r in ge_rows or []:
+        if "area" not in r:
+            raise SourceDataError(
+                f"{SOURCE}: ge_row missing required key 'area'; got keys {sorted(r)[:8]}.")
         rows.append({
             "Program Code": code,
             "Pattern": pattern or "",
@@ -159,7 +156,7 @@ def build_ge_requirements_df(program, pattern, ge_rows):
             "Resolution": r.get("resolution", "reserve"),
             "Candidate Course IDs": ";".join(_norm(c) for c in r.get("candidates", [])),
             "Recommended Course": _norm(r["recommended"]) if r.get("recommended") else "",
-            "Units": float(r.get("units", 3.0)),
+            "Units": _to_units(r.get("units"), default=3.0),
         })
     return pd.DataFrame(rows, columns=GE_REQUIREMENT_COLUMNS)
 

@@ -187,3 +187,11 @@ def test_write_workbook_without_ge_omits_sheet(tmp_path):
     mapping.write_workbook([{"term": 2268, "course": "ART 101"}],
                            {"code": "BIO", "title": "Biology", "courses": []}, str(out))
     assert "ge_requirements" not in pd.ExcelFile(out).sheet_names
+
+
+def test_ge_requirements_none_units_defaults(tmp_path):
+    df = mapping.build_ge_requirements_df(
+        {"code": "BIO", "title": "Biology", "courses": []}, "igetc",
+        [{"area": "1A", "area_title": "English", "required_count": 1,
+          "resolution": "reserve", "candidates": [], "recommended": "", "units": None}])
+    assert df.iloc[0]["Units"] == 3.0
