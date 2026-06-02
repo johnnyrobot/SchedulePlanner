@@ -218,6 +218,10 @@ numpy==2.4.6 \
     # via
     #   ortools
     #   pandas
+opendataloader-pdf==2.4.7 \
+    --hash=sha256:1c359183650f4c012875010c156f13b6d3477b00762b8e3fbd8479fa03feb628 \
+    --hash=sha256:a16e995f2f526d706045218d9e359a31f50371a0bc0e3bb1bc15abb467c08fb7
+    # via -r requirements.txt
 openpyxl==3.1.5 \
     --hash=sha256:5282c12b107bffeef825f4617dc029afaf41d0ea60823bbb665ef3079dc79de2 \
     --hash=sha256:cf0e3cf56142039133628b5acffe8ef0c12bc902d2aadd3e0fe5878dc08d1050

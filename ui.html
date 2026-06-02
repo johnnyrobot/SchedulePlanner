@@ -254,15 +254,16 @@
         <span>Include prerequisites from eLumen</span> <span class="xb">experimental</span>
         <span class="tip" tabindex="0" role="button" aria-label="What is the eLumen prerequisites option?">?<span class="tip-bub" role="tooltip">Fetches prerequisites from the public LACCD <b>eLumen</b> catalog so the solver can order courses (only <i>itemType = Prerequisite</i>; co-reqs/advisories excluded). <b>Experimental</b> — best-effort: the endpoint's ToU / rate-limit / approval review is pending.</span></span>
       </label>
-      <label class="liveopt"><span>Transfer GE goal</span>
-        <select id="liveTransferGoal">
+      <label class="liveopt"><span>GE goal</span>
+        <select id="liveTransferGoal" onchange="onTransferGoalChange()">
           <option value="none" selected>None — major only</option>
           <option value="cal-getc">Cal-GETC (CSU + UC)</option>
           <option value="igetc">IGETC</option>
           <option value="csu-ge">CSU GE-Breadth</option>
+          <option value="local">Local AA/AS GE (catalog PDF)</option>
         </select>
         <span class="xb">experimental</span>
-        <span class="tip" tabindex="0" role="button" aria-label="What is the transfer GE goal?">?<span class="tip-bub" role="tooltip">Adds lower-division <b>GE</b> to the plan, pulled live from <b>ASSIST</b>. Best-effort — ASSIST's terms-of-use review is pending. GE adds ~20–30 units, so the full-time plan may not fit four terms; check the part-time plan.</span></span>
+        <span class="tip" tabindex="0" role="button" aria-label="What is the GE goal?">?<span class="tip-bub" role="tooltip">Adds lower-division <b>GE</b> to the plan. The three transfer patterns come live from <b>ASSIST</b>; <b>Local AA/AS GE</b> reads your college's catalog PDF on-device (no upload, needs Java 11+). GE adds ~20–30 units, so the full-time plan may not fit four terms; check the part-time plan.</span></span>
       </label>
     </div>
     <div class="row mt liveopts">
@@ -270,6 +271,12 @@
       <span id="liveEnrollName" class="hint"></span>
       <span class="tip" tabindex="0" role="button" aria-label="What is the enrollment export option?">?<span class="tip-bub" role="tooltip">An IR / PeopleSoft enrollment export (<b>.xlsx</b>) with seat <b>Cap / Tot / Wait</b> counts. Adds capacity / fill-rate analysis on top of the live schedule. <b>Experimental</b> — joined to live sections by <i>term + CRN</i>; if none match, counts aren't applied and you'll see the join count.</span></span>
     </div>
+    <div class="row mt liveopts" id="catalogRow" style="display:none">
+      <button class="ghost" id="catalogBtn" type="button" onclick="pickCatalogPdf()">Choose catalog PDF</button>
+      <span id="catalogName" class="hint"></span>
+      <span class="tip" tabindex="0" role="button" aria-label="What is the catalog PDF option?">?<span class="tip-bub" role="tooltip">Your college <b>catalog PDF</b>. The app reads its Associate-degree <b>General Education</b> section <b>on-device</b> (OpenDataLoader) and schedules those areas. Needs <b>Java 11+</b>. The detected GE is a <b>draft</b> — review it below before building.</span></span>
+    </div>
+    <div id="catalogPreview"></div>
     <div class="row mt">
       <button id="liveBtn" onclick="fetchLive()">Build from live LACCD data</button>
       <span id="liveStatus" class="hint"></span>
@@ -530,6 +537,65 @@ function clearLiveEnrollment(){
   document.getElementById('liveEnrollName').textContent = '';
 }
 
+// ---- Local AA/AS GE (catalog PDF, OpenDataLoader on-device) -----------------
+// Selecting the "Local AA/AS GE" goal reveals a catalog-PDF picker; choosing a
+// PDF parses it on-device (needs Java 11+) and shows the detected GE as a DRAFT
+// to confirm before building. All rendered strings are escaped.
+let catalogPdfPath = "";
+function onTransferGoalChange(){
+  const local = document.getElementById('liveTransferGoal').value === 'local';
+  document.getElementById('catalogRow').style.display = local ? 'flex' : 'none';
+  if(!local) clearCatalogPdf();
+}
+function clearCatalogPreview(){ document.getElementById('catalogPreview').innerHTML=''; }
+function clearCatalogPdf(){
+  catalogPdfPath='';
+  document.getElementById('catalogName').textContent='';
+  clearCatalogPreview();
+}
+async function pickCatalogPdf(){
+  let r;
+  try{ r = await window.pywebview.api.choose_pdf(); }
+  catch(e){ r = {path:''}; }
+  if(r && r.path){
+    catalogPdfPath = r.path;
+    const name = r.path.split(/[\\/]/).pop();
+    document.getElementById('catalogName').innerHTML =
+      escapeHtml(name)+' <a href="#" onclick="clearCatalogPdf();return false;">✕ remove</a>';
+    previewCatalogGe();
+  }
+}
+async function previewCatalogGe(){
+  if(!catalogPdfPath) return;
+  const box=document.getElementById('catalogPreview');
+  box.innerHTML='<div class="card"><span class="spinner"></span> reading catalog…</div>';
+  let r;
+  try{ r = await window.pywebview.api.preview_local_ge(catalogPdfPath); }
+  catch(e){ r = {ok:false, error:String(e)}; }
+  if(r.needs_java){
+    box.innerHTML='<div class="card"><div class="ge-draft" role="alert">⚠️ '+
+      escapeHtml(r.error||'Java 11+ required.')+'</div></div>';
+    return;
+  }
+  if(!r.ok){
+    const msg = r.error || (r.section_found ? 'No GE areas detected in the catalog.'
+                                            : 'No General Education section found in this PDF.');
+    box.innerHTML='<div class="card"><p class="hint">'+escapeHtml(msg)+'</p></div>';
+    return;
+  }
+  const rows=(r.areas||[]).map(a=>'<tr><td class="area">'+escapeHtml(a.code)+'</td>'+
+    '<td>'+escapeHtml(a.title||'')+'</td>'+
+    '<td class="ge-need">'+escapeHtml(String(a.course_count))+'</td></tr>').join('');
+  box.innerHTML='<div class="card"><h3>Detected GE (draft)</h3>'+
+    '<div class="ge-draft" role="alert">⚠️ <b>Draft — unverified.</b> Parsed from your catalog PDF '+
+    'on-device; confirm the areas &amp; courses before relying on it.</div>'+
+    '<p class="hint">'+escapeHtml(String((r.areas||[]).length))+' area(s), '+
+    escapeHtml(String(r.total_courses||0))+' courses detected. Click '+
+    '<b>Build from live LACCD data</b> to schedule with these.</p>'+
+    '<table class="ge-table"><thead><tr><th>Area</th><th>Title</th><th>Courses</th></tr>'+
+    '</thead><tbody>'+rows+'</tbody></table></div>';
+}
+
 async function fetchLive(){
   const btn=document.getElementById('liveBtn');
   const campus=document.getElementById('liveCampus').value.trim();
@@ -537,6 +603,10 @@ async function fetchLive(){
   const program=document.getElementById('liveProgram').value.trim();
   const elumenLive=document.getElementById('liveElumen').checked;
   const transferGoal=document.getElementById('liveTransferGoal').value;
+  if(transferGoal==='local' && !catalogPdfPath){
+    document.getElementById('liveStatus').textContent='Choose a catalog PDF for the Local AA/AS GE option.';
+    return;
+  }
   btn.disabled=true; btn.textContent='Fetching…';
   // Live also auto-runs its own pipeline (no picked file involved), so clear
   // dataPath and hide the file-only "Generate schedules" button.
@@ -552,7 +622,8 @@ async function fetchLive(){
     // path (null when none chosen), the eLumen-prereqs toggle, and the transfer
     // GE goal (defaults to "none" = major only).
     res = await window.pywebview.api.fetch_live(
-      campus, terms, program, liveEnrollPath||null, elumenLive, transferGoal);
+      campus, terms, program, liveEnrollPath||null, elumenLive, transferGoal,
+      catalogPdfPath||null);
   }catch(e){
     res = {error:'Unexpected error talking to the app: '+String(e)};
   }
@@ -674,7 +745,7 @@ function renderLivePanel(res){
 
   const ge = (res && res.ge_coverage) || null;
   if (ge && ge.requested) {
-    const PNAME = {igetc:'IGETC', 'cal-getc':'Cal-GETC', 'csu-ge':'CSU GE'};
+    const PNAME = {igetc:'IGETC', 'cal-getc':'Cal-GETC', 'csu-ge':'CSU GE', local:'Local AA/AS GE'};
     const pname = PNAME[ge.pattern] || String(ge.pattern||'').toUpperCase();
     const FLAGLBL = {no_assist_data:'no ASSIST data', no_offering:'not offered this window',
                      unknown_area:'unknown area', pm_no_ge:'no program GE'};
@@ -686,7 +757,8 @@ function renderLivePanel(res){
     // mistaken for authoritative. Self-clears when reviewed_by is filled in.
     if (ge.draft_warning) h += '<div class="ge-draft" role="alert">⚠️ <b>Draft — unverified.</b> '+
          escapeHtml(ge.draft_warning.replace(/^Draft — unverified:\s*/,''))+'</div>';
-    h += '<div class="ge-sub">Live from ASSIST · status: '+escapeHtml(ge.assist_status||'')+
+    const geSrc = (ge.source==='catalog') ? 'From your catalog PDF (on-device)' : 'Live from ASSIST';
+    h += '<div class="ge-sub">'+geSrc+' · status: '+escapeHtml(ge.assist_status||'')+
          ' <span class="tip" tabindex="0" role="button" aria-label="About this GE data">?'+
          '<span class="tip-bub" role="tooltip">'+escapeHtml(ge.assist_caveat||'')+'</span></span></div>';
     if (ge.error) h += '<p class="hint">'+escapeHtml(ge.error)+'</p>';
