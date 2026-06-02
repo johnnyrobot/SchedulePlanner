@@ -226,7 +226,7 @@ class Api:
 def main():
     api = Api()
     webview.create_window(
-        "LAMC Schedule Planner",
+        "LACCD Schedule Planner",
         resource_path("ui.html"),
         js_api=api,
         width=1100, height=820, min_size=(900, 640),
