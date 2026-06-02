@@ -13,11 +13,14 @@ If the live APIs drift, we re-capture the fixtures and these assertions tell
 us whether the downstream contract still holds.
 """
 import json
+import pathlib
 
 import build_live_workbook
 import engine
 from conftest import STEM_GID, load_fixture
 from sources import mapping, program_mapper as pm, schedule
+
+FIX = pathlib.Path(__file__).parent / "fixtures"
 
 # The `lamc_routes` fixture (the shared live-fixture route map) and the
 # STEM_GID identifier now live in tests/conftest.py so the live-pipeline and
@@ -97,9 +100,12 @@ def test_build_live_workbook_emits_structured_report(lamc_routes, make_client,
     # inert-detector gaps surfaced as structured machine-readable fields
     inert = report["inert_detectors"]
     # under_supply is live-active now (fires from the schedule Waitlist status).
+    # ge_scheduling is always present (inert when no transfer_goal given).
     assert {d["detector"] for d in inert} == {
-        "modality_mismatch", "prerequisite_ordering"}
+        "modality_mismatch", "prerequisite_ordering", "ge_scheduling"}
     for d in inert:
+        if d["detector"] == "ge_scheduling":
+            continue  # ge_scheduling carries "reason" but no "remedy"
         assert d["reason"]            # human-readable why
         assert "remedy" in d          # what would un-inert it
 
@@ -117,3 +123,26 @@ def test_build_live_workbook_report_program_not_found(lamc_routes, make_client,
     assert report["program"] is None
     assert report["error"]
     assert "no program" in report["error"].lower()
+
+
+def test_analyze_live_with_ge(lamc_routes, make_client, tmp_path):
+    routes = dict(lamc_routes)
+    routes["/api/AcademicYears"] = json.loads((FIX / "assist_academic_years.json").read_text())
+    routes["/api/transferability/courses"] = json.loads(
+        (FIX / "assist_transferability_igetc_LAMC.json").read_text())
+    client = make_client(routes)
+    report = build_live_workbook.analyze_live(
+        "LAMC", [2268], "Biology", str(tmp_path / "ge_live_test.xlsx"),
+        client=client, transfer_goal="igetc", assist_year_id=77,
+        ge_pattern_path=str(FIX / "ge_pattern_test.json"))
+    assert report["ge_coverage"]["requested"] is True
+    assert report["ge_coverage"]["pattern"] == "igetc"
+    assert any(d["detector"] == "ge_scheduling" for d in report["inert_detectors"])
+    assert report["results"] is not None
+
+
+def test_analyze_live_ge_disabled_has_no_coverage(lamc_routes, make_client, tmp_path):
+    report = build_live_workbook.analyze_live(
+        "LAMC", [2268], "Biology", str(tmp_path / "no_ge_live.xlsx"),
+        client=make_client(lamc_routes), transfer_goal="none")
+    assert report.get("ge_coverage") is None

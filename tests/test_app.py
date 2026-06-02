@@ -115,10 +115,13 @@ def test_fetch_live_returns_results_plus_reconciliation_and_inert(
 
     # inert-detector notes surfaced for the live panel
     inert = res["inert_detectors"]
-    # under_supply is live-active now, so only these two remain inert.
+    # under_supply is live-active now; ge_scheduling is always present (inert when
+    # no transfer_goal is given).
     assert {d["detector"] for d in inert} == {
-        "modality_mismatch", "prerequisite_ordering"}
+        "modality_mismatch", "prerequisite_ordering", "ge_scheduling"}
     for d in inert:
+        if d["detector"] == "ge_scheduling":
+            continue  # ge_scheduling carries "reason" but no "remedy"
         assert d["reason"]
         assert d["remedy"]
 
@@ -357,4 +360,4 @@ def test_fetch_live_blank_enrollment_path_is_ignored(lamc_routes, make_client):
                                enrollment_path="   ", client=client)
     assert "error" not in res, res.get("error")
     assert {d["detector"] for d in res["inert_detectors"]} == {
-        "modality_mismatch", "prerequisite_ordering"}
+        "modality_mismatch", "prerequisite_ordering", "ge_scheduling"}
