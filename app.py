@@ -16,6 +16,7 @@ import threading
 import webview
 
 import build_live_workbook
+import chat_assist
 import engine
 import llm_assist
 import report_export
@@ -223,6 +224,35 @@ class Api:
             return {"text": ("Could not summarize the analysis "
                              f"({type(e).__name__}: {e}). The full results are "
                              "still shown above.")}
+
+    # ---- data chatbot -------------------------------------------------
+    def chat(self, question, history=None):
+        """Answer a question about the last analysis (grounded; optional live lookup).
+
+        Returns ``{"answer", "lookup", "needs_model"}`` on success or
+        ``{"error": ...}`` — never raises into the JS bridge. Gated on local-model
+        availability so the UI can offer the "get it" flow; the actual grounding,
+        routing, lookups, and answer live in chat_assist (network OUTSIDE
+        engine.run). ``history`` is the client-held list of ``{role, content}``
+        turns for multi-turn context.
+        """
+        if not self._last_results:
+            return {"answer": "Run an analysis first, then ask me about it.",
+                    "needs_model": False}
+        q = (question or "").strip()
+        if not q:
+            return {"answer": "Ask a question about the analysis above.",
+                    "needs_model": False}
+        if not llm_assist.available():
+            return {"answer": ("The assistant needs the local Gemma model. Turn it "
+                               "on from the AI status (top-right), then ask again."),
+                    "needs_model": True}
+        try:
+            r = chat_assist.chat(q, self._last_results, history=history or [])
+            return {"answer": r.get("answer", ""), "lookup": r.get("lookup"),
+                    "needs_model": False}
+        except Exception as e:
+            return {"error": f"Assistant error: {type(e).__name__}: {e}"}
 
     # ---- export -------------------------------------------------------
     def export_report(self, path=None):
