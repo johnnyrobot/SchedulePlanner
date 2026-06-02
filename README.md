@@ -57,6 +57,17 @@ with a dark toggle), is WCAG 2.1 A/AA compliant, responsive, and carries a built
 reader text-size control. Rendering lives in `report_export.render_report` (pure
 Python, stdlib only); the bridge is `Api.export_report` in `app.py`.
 
+The **Ask about this analysis** panel is a grounded assistant: it answers questions
+about the current build ("what's in term 2?", "which required courses aren't
+offered?") and can draft summaries/emails from it. It runs on the **local Gemma
+model** (via Ollama — nothing leaves the machine; degrades to an honest "enable
+Gemma" prompt when absent). When a question needs more than the current build, it
+performs a small set of **read-only live LACCD lookups** — course offerings,
+another program's pathway, eLumen prerequisites, or ASSIST GE areas — chosen via a
+validated JSON intent (`chat_assist.py`) so the deterministic `sources/` clients do
+the fetching, not the model. Network stays outside `engine.run`; the bridge is
+`Api.chat`.
+
 ### Build a workbook from live LACCD data
 
 ```bash
