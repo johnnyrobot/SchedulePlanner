@@ -168,7 +168,10 @@ def resolve(pattern, assist_areas, offered, program, *, concrete_threshold=3):
         # A rec is usable only if ASSIST says it satisfies THIS area AND it wasn't
         # already claimed by another area's disjoint set (so we never double-place it).
         rec_usable = bool(rec) and rec_canon in area_elig_canon and rec_offered_id in offered_cands
-        concrete = bool(offered_cands) and (
+        # Only go concrete if there are at least `required` OFFERED candidates to
+        # choose from; otherwise reserve the area (an infeasible sum(taken)==required
+        # would blank the whole cohort, not just this area).
+        concrete = (len(offered_cands) >= required) and (
             rec_usable or 0 < len(offered_cands) <= concrete_threshold)
         if not offered_cands:
             flags.append("no_offering")

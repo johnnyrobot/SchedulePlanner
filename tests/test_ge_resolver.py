@@ -100,3 +100,12 @@ def test_resolve_candidate_id_is_deterministic_on_canonical_collision():
     offered = {"MATH 0001", "MATH 1"}
     rows, _ = ge.resolve(pattern, assist, offered, {"courses": [], "ge_requirements": []})
     assert rows[0]["candidates"] == ["MATH 0001"]
+
+
+def test_resolve_reserves_when_offered_fewer_than_required():
+    pattern = {"areas": [{"code": "4", "title": "Social", "count": 2, "units_min": 6}]}
+    assist = {"4": {"title": "Social", "courses": ["PSYCH 1", "ANTHRO 1"]}}
+    offered = {"PSYCH 1"}  # only 1 offered, area needs 2
+    rows, _ = ge.resolve(pattern, assist, offered, {"courses": [], "ge_requirements": []})
+    assert rows[0]["resolution"] == "reserve"
+    assert rows[0]["required_count"] == 2

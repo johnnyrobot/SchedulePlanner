@@ -299,7 +299,6 @@ def solve_cohort(pcode, prog, course_seasons, units, prereqs, cohort, allow_fixe
         return None
 
     plan, fixes = {}, []
-    reserve_label = {iid: lbl for iid, lbl, _u in reserve_items}
     for c in courses + ge_candidates:
         for t in range(1, H + 1):
             if solver.Value(take[(c, t)]):
