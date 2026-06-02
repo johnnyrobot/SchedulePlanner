@@ -86,37 +86,28 @@ def _flatten_areas(pattern):
             yield {"area": code, "title": title, "count": remainder,
                    "units_min": float(area.get("units_min", 3)) / max(1, int(area.get("count", 1))),
                    "attributes": attrs,
-                   "member_codes": [s["code"] for s in subareas]}
+                   "member_codes": [s["code"] for s in subareas],
+                   "reserve_only": True}
 
 
 def resolve(pattern, assist_areas, offered, program, *, concrete_threshold=3):
-    """Resolve GE requirements for a program under a pattern.
+    """Resolve GE requirements for a program under a pattern. See module docstring.
 
-    Inputs:
-      - pattern: a loaded pattern dict (load_pattern).
-      - assist_areas: {area_code: {'title', 'courses': [normalized ids]}} (assist.fetch_ge_courses).
-      - offered: an iterable of course ids offered in the fetched terms (mapping._norm form).
-      - program: the Program Mapper program dict (courses + ge_requirements).
-      - concrete_threshold: max offered eligible courses for an area to go concrete.
-
-    Returns (rows, coverage):
-      - rows: list of GE requirement rows for the ge_requirements sheet, each
-        {area, area_title, required_count, resolution, candidates, recommended, units}.
-        Candidates are OFFERED course ids in the SAME (canonical-mapped) form as
-        the offered set, so the engine can schedule them.
-      - coverage: {areas: [...flags...], shared_with_major: [...], unknown_areas: [...]}.
+    Returns (rows, coverage). A subarea-bearing area whose required count exceeds
+    its subarea minimums emits a RESERVE-ONLY "remainder" requirement (an
+    additional course from that area) — it never goes concrete and is excluded
+    from the disjoint candidate sweep, so it cannot drain or mis-flag subareas.
     """
     offered_by_canon = {}
-    for cid in offered:
-        offered_by_canon.setdefault(_canon(cid), cid)  # first wins, deterministic if offered is sorted
+    for cid in sorted(offered):  # sorted -> deterministic first-wins on canonical collisions
+        offered_by_canon.setdefault(_canon(cid), cid)
 
     major_canon = {_canon(c["course_id"]) for c in program.get("courses", [])}
     recs = {g["area"]: g.get("recommended_course", "")
             for g in program.get("ge_requirements", [])}
 
-    # --- major<->GE sharing: which areas a fixed major course already covers ---
-    shared = []  # {area, course}
-    shared_areas = {}  # area_code -> count covered by major
+    shared = []
+    shared_areas = {}
     for area_code, info in assist_areas.items():
         eligible_canon = {_canon(c) for c in info.get("courses", [])}
         for c in program.get("courses", []):
@@ -124,12 +115,13 @@ def resolve(pattern, assist_areas, offered, program, *, concrete_threshold=3):
                 shared.append({"area": area_code, "course": c["course_id"]})
                 shared_areas[area_code] = shared_areas.get(area_code, 0) + 1
 
-    # --- disjoint candidate assignment (smallest offered set first -> GE<->GE off) ---
     requirements = sorted(_flatten_areas(pattern), key=lambda r: r["area"])
-    # Build per-requirement offered-eligible candidate lists, then strip duplicates
-    # so each offered course serves at most one requirement.
+
     offered_eligible = {}
     for req in requirements:
+        if req.get("reserve_only"):
+            offered_eligible[req["area"]] = []
+            continue
         cands = []
         for member in req["member_codes"]:
             for c in assist_areas.get(member, {}).get("courses", []):
@@ -140,12 +132,25 @@ def resolve(pattern, assist_areas, offered, program, *, concrete_threshold=3):
 
     used = set()
     for req in sorted(requirements, key=lambda r: (len(offered_eligible[r["area"]]), r["area"])):
+        if req.get("reserve_only"):
+            continue
         offered_eligible[req["area"]] = [c for c in offered_eligible[req["area"]] if c not in used]
         used.update(offered_eligible[req["area"]])
 
     rows, area_cov = [], []
     for req in requirements:
         area = req["area"]
+        if req.get("reserve_only"):
+            required = req["count"]
+            if required <= 0:
+                continue
+            rows.append({"area": area, "area_title": req["title"],
+                         "required_count": required, "resolution": "reserve",
+                         "candidates": [], "recommended": "", "units": req["units_min"]})
+            area_cov.append({"area": area, "title": req["title"], "required": required,
+                             "resolution": "reserve", "eligible_count": None,
+                             "offered_count": 0, "flags": []})
+            continue
         flags = []
         required = max(0, req["count"] - shared_areas.get(area, 0))
         eligible_any = bool(assist_areas.get(area, {}).get("courses"))
@@ -157,11 +162,14 @@ def resolve(pattern, assist_areas, offered, program, *, concrete_threshold=3):
                              "resolution": "shared", "flags": flags})
             continue
         rec = recs.get(area, "")
-        rec_offered = rec and _canon(rec) in offered_by_canon
+        area_elig_canon = {_canon(c) for c in assist_areas.get(area, {}).get("courses", [])}
+        rec_canon = _canon(rec) if rec else ""
+        rec_offered_id = offered_by_canon.get(rec_canon, "")
+        # A rec is usable only if ASSIST says it satisfies THIS area AND it wasn't
+        # already claimed by another area's disjoint set (so we never double-place it).
+        rec_usable = bool(rec) and rec_canon in area_elig_canon and rec_offered_id in offered_cands
         concrete = bool(offered_cands) and (
-            rec_offered or 0 < len(offered_cands) <= concrete_threshold)
-        if concrete and rec_offered and offered_by_canon[_canon(rec)] not in offered_cands:
-            offered_cands = sorted(set(offered_cands + [offered_by_canon[_canon(rec)]]))
+            rec_usable or 0 < len(offered_cands) <= concrete_threshold)
         if not offered_cands:
             flags.append("no_offering")
         resolution = "concrete" if concrete else "reserve"
@@ -169,12 +177,12 @@ def resolve(pattern, assist_areas, offered, program, *, concrete_threshold=3):
             "area": area, "area_title": req["title"], "required_count": required,
             "resolution": resolution,
             "candidates": offered_cands if resolution == "concrete" else [],
-            "recommended": offered_by_canon.get(_canon(rec), "") if rec_offered else "",
+            "recommended": rec_offered_id if rec_usable else "",
             "units": req["units_min"],
         })
         area_cov.append({"area": area, "title": req["title"], "required": required,
-                         "resolution": resolution, "eligible_count": len(
-                             assist_areas.get(area, {}).get("courses", [])),
+                         "resolution": resolution,
+                         "eligible_count": len(assist_areas.get(area, {}).get("courses", [])),
                          "offered_count": len(offered_cands), "flags": flags})
 
     unknown = sorted(set(assist_areas) - {a["code"] for a in pattern.get("areas", [])}

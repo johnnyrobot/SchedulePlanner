@@ -62,3 +62,41 @@ def test_resolve_disjoint_candidates_ge_to_ge_off():
                          concrete_threshold=3)
     placed = [c for r in rows for c in r["candidates"]]
     assert placed.count("X 1") == 1  # appears in exactly one area's candidate set
+
+
+def test_resolve_subarea_remainder_is_reserve_only():
+    pattern = {"areas": [{"code": "3", "title": "Arts & Hum", "count": 3, "units_min": 9,
+                          "subareas": [{"code": "3A", "min": 1}, {"code": "3B", "min": 1}]}]}
+    assist = {"3A": {"title": "Arts", "courses": ["ART 101", "ART 102"]},
+              "3B": {"title": "Hum", "courses": ["HIST 1", "HIST 2"]}}
+    offered = {"ART 101", "ART 102", "HIST 1", "HIST 2"}
+    rows, cov = ge.resolve(pattern, assist, offered, {"courses": [], "ge_requirements": []})
+    by_area = {r["area"]: r for r in rows}
+    assert by_area["3A"]["resolution"] == "concrete"
+    assert by_area["3B"]["resolution"] == "concrete"
+    # The parent remainder is a reserve-only "additional" slot — not concrete,
+    # no candidates, and NOT mis-flagged no_assist_data.
+    assert by_area["3"]["resolution"] == "reserve"
+    assert by_area["3"]["candidates"] == []
+    rem_cov = next(a for a in cov["areas"] if a["area"] == "3")
+    assert "no_assist_data" not in rem_cov["flags"]
+
+
+def test_resolve_recommended_must_be_area_eligible():
+    pattern = {"areas": [{"code": "3A", "title": "Arts", "count": 1, "units_min": 3}]}
+    assist = {"3A": {"title": "Arts", "courses": ["ART 101"]}}
+    offered = {"ART 101", "MUSIC 5"}
+    program = {"courses": [], "ge_requirements": [{"area": "3A", "recommended_course": "MUSIC 5"}]}
+    rows, _ = ge.resolve(pattern, assist, offered, program)
+    row = rows[0]
+    assert row["candidates"] == ["ART 101"]   # MUSIC 5 is offered but not 3A-eligible
+    assert row["recommended"] == ""           # area-ineligible rec is not used
+
+
+def test_resolve_candidate_id_is_deterministic_on_canonical_collision():
+    pattern = {"areas": [{"code": "3A", "title": "Arts", "count": 1, "units_min": 3}]}
+    assist = {"3A": {"title": "Arts", "courses": ["MATH 1"]}}
+    # Two raw spellings collide canonically; sorted() first-wins must pick "MATH 0001".
+    offered = {"MATH 0001", "MATH 1"}
+    rows, _ = ge.resolve(pattern, assist, offered, {"courses": [], "ge_requirements": []})
+    assert rows[0]["candidates"] == ["MATH 0001"]
