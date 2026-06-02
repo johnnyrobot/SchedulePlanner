@@ -43,7 +43,8 @@ def load_pattern(transfer_goal, *, path=None):
                 f"{sorted(_PATTERN_FILES)}.")
         path = os.path.join(_PATTERN_DIR, fname)
     try:
-        data = json.loads(open(path, encoding="utf-8").read())
+        with open(path, encoding="utf-8") as fh:
+            data = json.load(fh)
     except (OSError, ValueError) as exc:
         raise PatternError(f"cannot read GE pattern file {path!r}: {exc}") from exc
     if not isinstance(data, dict) or not data.get("areas"):
