@@ -15,7 +15,7 @@ API_BASE = "https://b.api.programmapper.com"
 SOURCE = "Program Mapper"
 
 # "Choose a course from Area 3A." / "... Area 4." -> the area code ("3A" / "4").
-_AREA_RE = re.compile(r"\bArea\s+([0-9]+[A-Z]?)\b", re.IGNORECASE)
+_AREA_RE = re.compile(r"\bArea\s+([0-9]+[A-Z]{0,2})\b", re.IGNORECASE)
 # "MATH 261 or MATH 247" / "MATH 261 / MATH 247" -> ["MATH 261", "MATH 247"].
 _CHOICE_SPLIT_RE = re.compile(r"\s+or\s+|\s*/\s*", re.IGNORECASE)
 
@@ -116,6 +116,7 @@ def get_program_courses(campus, program_id, *, client=None):
                     "units": opp.get("minUnits"),
                     "requirement_type": req_type,
                 })
+            # v1 captures only GE-area and MAJOR_CORE choices; other CHOICE requirementTypes are intentionally skipped.
             elif otype == "CHOICE" and req_type == "GENERAL_EDUCATION":
                 area = _area_code(element.get("shortDescription") or element.get("name"))
                 if not area:
