@@ -1,0 +1,21 @@
+{
+  "pattern": "igetc",
+  "display_name": "IGETC",
+  "effective_year": "2026-2027",
+  "source": "REPLACE WITH OFFICIAL Cal-GETC STANDARDS URL",
+  "reviewed_by": "", "reviewed_on": "",
+  "areas": [
+    {"code": "1A", "title": "English Composition", "count": 1, "units_min": 3},
+    {"code": "1B", "title": "Critical Thinking & Composition", "count": 1, "units_min": 3},
+    {"code": "1C", "title": "Oral Communication", "count": 1, "units_min": 3},
+    {"code": "2", "title": "Mathematical Concepts & Quantitative Reasoning", "count": 1, "units_min": 3},
+    {"code": "3", "title": "Arts & Humanities", "count": 3, "units_min": 9,
+     "subareas": [{"code": "3A", "min": 1}, {"code": "3B", "min": 1}]},
+    {"code": "4", "title": "Social & Behavioral Sciences", "count": 2, "units_min": 6,
+     "attributes": {"min_disciplines": 2}},
+    {"code": "5", "title": "Physical & Biological Sciences", "count": 2, "units_min": 7,
+     "subareas": [{"code": "5A", "min": 1}, {"code": "5B", "min": 1}],
+     "attributes": {"lab_required": true, "lab_area": "5C"}},
+    {"code": "6", "title": "Ethnic Studies", "count": 1, "units_min": 3}
+  ]
+}
