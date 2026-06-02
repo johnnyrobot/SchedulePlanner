@@ -1,0 +1,20 @@
+{
+  "listType": 3,
+  "institutionName": "Los Angeles Mission College",
+  "academicYear": {"id": 77, "description": "2026-2027"},
+  "courseInformationList": [
+    {"identifier": "BIOLOGY 007", "prefixCode": "BIOLOGY", "courseNumber": "007",
+     "courseTitle": "General Biology II", "minUnits": 5.0, "maxUnits": 5.0,
+     "endTermCode": "",
+     "transferAreas": [{"code": "5C", "codeDescription": "Science Laboratory", "areaType": 3},
+                       {"code": "5B", "codeDescription": "Biological Science", "areaType": 3}]},
+    {"identifier": "ART 101", "prefixCode": "ART", "courseNumber": "101",
+     "courseTitle": "Art Appreciation", "minUnits": 3.0, "maxUnits": 3.0,
+     "endTermCode": "",
+     "transferAreas": [{"code": "3A", "codeDescription": "Arts", "areaType": 3}]},
+    {"identifier": "ART 200", "prefixCode": "ART", "courseNumber": "200",
+     "courseTitle": "Retired Course", "minUnits": 3.0, "maxUnits": 3.0,
+     "endTermCode": "202008",
+     "transferAreas": [{"code": "3A", "codeDescription": "Arts", "areaType": 3}]}
+  ]
+}
