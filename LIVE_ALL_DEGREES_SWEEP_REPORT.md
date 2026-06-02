@@ -7,7 +7,8 @@ Comprehensive test of **“Build from live LACCD data”** across **every distin
 ## Executive summary
 
 - **161 distinct programs** (resolved by unique ID) × **3 GE goals** = **483 live builds**. **483/483 succeeded** (**161/161 programs** clean on all 3 goals; the 3 initial agent-echo parse failures were re-run directly and passed — no build failures).
-- **Live eLumen prerequisites on every program**: **142/161** programs had ≥1 hard prerequisite, for **4,781 distinct prerequisite constraints** (the 19 with none are certificates whose courses weren’t offered in term 2268 — honest, not failures).
+- **Live eLumen prerequisites on every program**: **142/161** programs had ≥1 hard prerequisite. Catalog-wide that is **732 distinct courses with a hard prerequisite** across the **66 subjects** these programs span (0 fallback/relaxed clauses). The 19 programs with none are certificates whose courses weren’t offered in term 2268 — honest, not failures.
+  - Note on the metric: per-program `prereq_exact` is **subject-level** — it counts every prereq’d course in a program’s *subjects*, not just its own courses (so e.g. each CS program reports the full 108 CIS+CS prereq’d courses). Summed across programs it is **~4,888**, a coverage-breadth figure that counts shared subjects once per program — NOT a distinct catalog count.
 - **Transfer GE resolved on all builds** (ASSIST `ok` for every goal of every program) and **100% draft-gated** — no unreviewed pattern was ever shown as authoritative.
 - **Cal-GETC fix (PR #34) validated at scale:** across **all 161 cal-getc runs**, `unknown_areas` = **[2]** and cross-system aliases ignored = **[25]** (**4,025** redundant CSU/IGETC alias codes correctly suppressed). No regressions.
 
@@ -31,17 +32,19 @@ Comprehensive test of **“Build from live LACCD data”** across **every distin
 
 ## Per-GE-goal results (across all 161 programs)
 
-| Goal | builds ok | programs w/ prereqs | exact prereqs | ASSIST ok | draft-gated | `unknown_areas` | cross-system ignored |
+| Goal | builds ok | programs w/ prereqs | subject prereqs (summed) | ASSIST ok | draft-gated | `unknown_areas` | cross-system ignored |
 |---|---|---|---|---|---|---|---|
 | IGETC | 161/161 | 142 | 4,781 | 161 | 161 | [3] | 0 |
 | CSU-GE | 161/161 | 142 | 4,842 | 161 | 161 | [2] | 0 |
 | Cal-GETC | 161/161 | 142 | 4,888 | 161 | 161 | [2] | 4,025 |
 
+The **subject prereqs (summed)** column adds up each program’s subject-level `prereq_exact`, so it counts shared subjects once per program — it is a breadth/coverage figure, NOT a distinct total. Catalog-wide the union of all 66 subjects holds **732 distinct prereq’d courses**. (The per-goal totals differ only because 2 prereq-dense programs hit the eLumen time cap on the goal that ran their crawl; cached goals filled the rest.)
+
 Cal-GETC is the only goal with cross-system aliases (ASSIST bundles the legacy CSU-GE letter codes into its Cal-GETC response); the resolver now ignores them (PR #34), so its `unknown_areas` matches IGETC/CSU-GE’s small residual.
 
 ## By pathway
 
-| Pathway | programs | all-3-goals ok | exact prereqs (sum) |
+| Pathway | programs | all-3-goals ok | subject prereqs (summed) |
 |---|---|---|---|
 | Arts, Media, and Performance | 21 | 21/21 | 879 |
 | Business, Law, and Public Safety | 25 | 25/25 | 475 |
@@ -53,7 +56,7 @@ Cal-GETC is the only goal with cross-system aliases (ASSIST bundles the legacy C
 ## Findings
 
 1. **Cal-GETC reconciliation holds across the whole catalog.** Every one of the 161 cal-getc builds shows `unknown_areas`=2 and 25 cross-system aliases ignored — the PR #34 fix generalizes perfectly; **0** programs regressed.
-2. **Prerequisite depth.** 4,781 distinct hard prerequisites across 142 programs. eLumen hit its time cap on **4** program(s) (coverage flagged partial, never silent):
+2. **Prerequisite depth.** **732 distinct courses** carry a hard prerequisite across the 66 subjects the catalog spans (0 fallback). The per-program metric is subject-level, so it sums to ~4,888 across the 142 prereq-bearing programs (shared subjects counted once per program — e.g. the 108 CIS+CS prereq’d courses are reported by every CS program). eLumen hit its time cap on **4** program(s) (coverage flagged partial, never silent):
    - *Elementary Teacher Education* — 64 prereqs returned before the cap.
    - *Social Media Strategist* — 60 prereqs returned before the cap.
    - *Engineering Drafting Technician* — 96 prereqs returned before the cap.
