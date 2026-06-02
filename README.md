@@ -190,10 +190,17 @@ a planning aid, not an official articulation.
 Extraction lives in `sources/pdf_loader.py` (the OpenDataLoader wrapper) and
 `sources/catalog_ge.py` (a generic heading/table/list → areas+courses parser);
 the result feeds the **same** `ge.resolve` → solver → GE-coverage path as the
-transfer patterns. **Requires Java 11+** at runtime (install from
-[Adoptium](https://adoptium.net/)); the feature is opt-in and gated, so the rest
-of the app — and CI — never need Java. Catalog formats vary, so areas/courses the
-parser can't read are reported honestly (and reserved), never hidden.
+transfer patterns. Catalog formats vary, so areas/courses the parser can't read
+are reported honestly (and reserved), never hidden.
+
+**Java runtime — zero-setup on macOS.** The feature needs a JVM. The packaged
+macOS `.app` **bundles a Temurin JRE** (under `Contents/Resources/jre`, staged by
+`scripts/fetch_jre.sh` during `scripts/build_macos.sh`), so users need **nothing
+installed** — `sources/pdf_loader.py` prefers the bundled runtime and only falls
+back to a system `java` in a dev/unbundled run. The JVM is spawned only on an
+actual catalog upload; if no Java is available at all the feature degrades to an
+honest "install Java 11+ ([Adoptium](https://adoptium.net/))" message, and the
+rest of the app — and CI — never need Java.
 
 ### Regenerate the bundled synthetic demo
 

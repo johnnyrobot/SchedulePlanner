@@ -125,6 +125,33 @@ future dependency bump breaks the build, these are the first things to add:
 ./scripts/build_macos.sh
 ```
 
+## Bundled JRE (zero-setup catalog-PDF parsing)
+
+The Local AA/AS GE feature parses a catalog PDF with OpenDataLoader, which needs a
+JVM. So the `.app` **bundles a pinned Eclipse Temurin 17 JRE** — users install
+nothing.
+
+- `scripts/build_macos.sh` first runs **`scripts/fetch_jre.sh`**, which downloads
+  the pinned Temurin JRE (version + sha256 pinned in the script; arch from
+  `uname -m`), checksum-verifies it, and stages it at **`build/jre/`** (gitignored;
+  idempotent). **Needs network at build time; no JDK required** (download, not
+  jlink). ~40 MB download → ~130 MB on disk.
+- After PyInstaller, the script **`ditto`s `build/jre` into
+  `Contents/Resources/jre`** (ditto preserves exec bits + symlinks; PyInstaller
+  `--add-data` does not, hence ditto).
+- At runtime, **`sources/pdf_loader.py`** prefers `…/Contents/Resources/jre/bin/java`
+  (also `$EDGESCHED_JRE`, `sys._MEIPASS/jre`, and a dev `build/jre`), falling back
+  to a system `java` only when unbundled.
+- **Signing:** the JRE's Mach-O (`bin/java`, `lib/server/libjvm.dylib`,
+  `jspawnhelper`, …) are signed by the existing "sign every Mach-O by content"
+  sweep in `scripts/sign_notarize_macos.sh`, with the JVM-ready entitlements
+  already in `packaging/entitlements.mac.plist` (`allow-jit`,
+  `allow-unsigned-executable-memory`, `disable-library-validation`,
+  `allow-dyld-environment-variables`). No sign-script or entitlements change is
+  needed. (Notarization itself remains gated on a Developer ID — unchanged.)
+- `scripts/verify_macos_build.sh` asserts `Contents/Resources/jre/bin/java -version`
+  runs in the built bundle.
+
 ## Verification
 
 ### Verified headlessly (automated, reproducible)
