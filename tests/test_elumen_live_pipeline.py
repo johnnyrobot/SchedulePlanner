@@ -208,6 +208,31 @@ def test_elumen_live_wins_over_fixture_with_warning(tmp_path):
     assert prereqs.get("ANATOMY 1") == "(BIOLOGY 3 OR BIOLOGY 5)", prereqs
 
 
+def test_elumen_cache_dedupes_fetch_across_calls(tmp_path):
+    """A shared elumen_cache makes a second analyze_live reuse the first call's
+    eLumen records — ZERO additional /public/courses GETs. This is the politeness
+    the all-degrees sweep relies on (same program across 3 goals -> 1 eLumen crawl)."""
+    client = FakeClient(_routes())
+    shared = {}
+    common = dict(campus="LAMC", terms=[2268], program_query="Biology",
+                  client=client, elumen_live=True, elumen_cache=shared)
+
+    r1 = build_live_workbook.analyze_live(out_path=str(tmp_path / "a.xlsx"), **common)
+    assert r1["error"] is None, r1["error"]
+    elumen_calls_first = sum(1 for c in client.calls if "/public/courses" in c["url"])
+    assert elumen_calls_first >= 1, "first call must hit the eLumen endpoint"
+    assert shared, "shared cache must be populated after the first call"
+
+    r2 = build_live_workbook.analyze_live(out_path=str(tmp_path / "b.xlsx"), **common)
+    assert r2["error"] is None, r2["error"]
+    elumen_calls_second = sum(1 for c in client.calls if "/public/courses" in c["url"])
+    assert elumen_calls_second == elumen_calls_first, (
+        "second call must reuse the shared cache — no new eLumen GETs "
+        f"(first={elumen_calls_first}, after second={elumen_calls_second})")
+    # The reused result is still real: the prereq still lands in the catalog.
+    assert _catalog_prereqs(str(tmp_path / "b.xlsx")).get("ANATOMY 1") == "(BIOLOGY 3 OR BIOLOGY 5)"
+
+
 def test_no_network_socket_used(tmp_path, monkeypatch):
     """The whole build must run with ONLY the FakeClient: assert no real socket is
     created (the build path opens httpx.Client only when client is None, which

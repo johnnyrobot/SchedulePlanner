@@ -75,21 +75,30 @@ from sources import (assist, elumen, elumen_client, enrollment, ge, mapping,
                      program_mapper, schedule)
 
 
-def build(campus, terms, program_query, *, client=None):
+def build(campus, terms, program_query, *, client=None,
+          program_id=None, program_title="", program_award=""):
     """Fetch sections + program from the live sources (or an injected client).
 
     Network IO lives HERE, outside engine.run(). The m7 enrichment (enrollment
     join + eLumen prereq map) is applied downstream in analyze_live on the raw
     records this returns, BEFORE the workbook write — never inside engine.run().
+
+    ``program_id`` resolves the program by its EXACT masterRecordId (passing the
+    known ``program_title``/``program_award`` as display metadata) instead of by
+    title query, so duplicate-titled programs are individually addressable.
     """
+    def _fetch_program(c):
+        if program_id is not None:
+            return program_mapper.fetch_program_by_id(
+                campus, program_id, title=program_title, award=program_award, client=c)
+        return program_mapper.fetch_program(campus, program_query, client=c)
+
     if client is not None:
         sections = schedule.fetch_sections(campus, terms, client=client)
-        program = program_mapper.fetch_program(campus, program_query, client=client)
-        return sections, program
+        return sections, _fetch_program(client)
     with httpx.Client(timeout=30.0) as owned:
         sections = schedule.fetch_sections(campus, terms, client=owned)
-        program = program_mapper.fetch_program(campus, program_query, client=owned)
-    return sections, program
+        return sections, _fetch_program(owned)
 
 
 # The schedule API ships no enrollment COUNTS and no prerequisites, so two
@@ -397,7 +406,9 @@ def _program_subjects(sections, program):
 def analyze_live(campus, terms, program_query, out_path, *, client=None,
                  enrollment_path=None, elumen_fixture=None, elumen_live=False,
                  enrollment_map=None, prereq_max_clauses=None,
-                 transfer_goal="none", assist_year_id=None, ge_pattern_path=None):
+                 transfer_goal="none", assist_year_id=None, ge_pattern_path=None,
+                 program_id=None, program_title="", program_award="",
+                 assist_areas=None, elumen_cache=None):
     """Run the full live pipeline and return a structured, JSON-serializable report.
 
     The report carries the reconciliation (matched/unmatched program courses)
@@ -441,7 +452,9 @@ def analyze_live(campus, terms, program_query, out_path, *, client=None,
         )
         elumen_fixture = None
 
-    sections, program = build(campus, terms, program_query, client=client)
+    sections, program = build(campus, terms, program_query, client=client,
+                              program_id=program_id, program_title=program_title,
+                              program_award=program_award)
 
     report = {
         "campus": campus,
@@ -505,7 +518,11 @@ def analyze_live(campus, terms, program_query, out_path, *, client=None,
         # repeated subjects; the client's throttle + bounded backoff retry apply
         # automatically (see sources.elumen_client guardrails). This fetch is
         # BOUNDED to the program's own subjects — never a broad background crawl.
-        elumen_cache = {}
+        # A caller may pass a shared elumen_cache so several analyze_live calls
+        # (e.g. the same program across multiple transfer goals) fetch each eLumen
+        # subject ONCE instead of re-crawling per goal — a deliberate kindness to
+        # the rate-limit-pending endpoint.
+        elumen_cache = elumen_cache if elumen_cache is not None else {}
         if client is not None:
             records, _fetched, fetch_status = elumen_client.fetch_prereq_records(
                 campus, subjects, client=client, cache=elumen_cache)
@@ -556,14 +573,31 @@ def analyze_live(campus, terms, program_query, out_path, *, client=None,
             if not ge_coverage["reviewed"]:
                 ge_coverage["draft_warning"] = _ge_draft_warning(pattern)
             offered = {mapping._norm(r["course"]) for r in sections}
-            try:
-                assist_areas, year_id = assist.fetch_ge_courses(
-                    campus, transfer_goal, academic_year_id=assist_year_id, client=client)
-                ge_coverage["assist_status"] = "ok"
-            except Exception as exc:  # noqa: BLE001 - ASSIST down -> full reserve, honest
-                assist_areas, year_id = {}, assist_year_id
-                ge_coverage["assist_status"] = "unavailable"
-                ge_coverage["error"] = f"ASSIST unavailable: {type(exc).__name__}: {exc}"
+            # A caller may inject a pre-fetched ASSIST area map (one fetch per goal
+            # reused across many programs) so a large sweep makes 3 ASSIST calls,
+            # not one per program — ASSIST's ToU note is "one call per pattern per
+            # college per year", so this honours it. None -> fetch live as usual.
+            if assist_areas is not None:
+                # Injected map: trust ONLY a non-empty dict. An empty or malformed
+                # injection is treated exactly like an ASSIST outage (honest
+                # "unavailable" -> every area reserves) — never silently labelled
+                # "ok" with no data, which would overclaim coverage.
+                if isinstance(assist_areas, dict) and assist_areas:
+                    year_id = assist_year_id
+                    ge_coverage["assist_status"] = "ok"
+                else:
+                    assist_areas, year_id = {}, assist_year_id
+                    ge_coverage["assist_status"] = "unavailable"
+                    ge_coverage["error"] = "injected ASSIST map was empty or malformed"
+            else:
+                try:
+                    assist_areas, year_id = assist.fetch_ge_courses(
+                        campus, transfer_goal, academic_year_id=assist_year_id, client=client)
+                    ge_coverage["assist_status"] = "ok"
+                except Exception as exc:  # noqa: BLE001 - ASSIST down -> full reserve, honest
+                    assist_areas, year_id = {}, assist_year_id
+                    ge_coverage["assist_status"] = "unavailable"
+                    ge_coverage["error"] = f"ASSIST unavailable: {type(exc).__name__}: {exc}"
             ge_coverage["academic_year"] = {"id": year_id}
             ge_rows, resolved = ge.resolve(pattern, assist_areas, offered, program)
             ge_coverage["areas"] = resolved["areas"]
