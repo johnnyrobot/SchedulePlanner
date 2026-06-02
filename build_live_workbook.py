@@ -225,9 +225,14 @@ def _enrollment_detector_entries(*, source, matched, total):
 def _prereq_detector_entry(*, source, results, live=False, coverage=None):
     """Build the prerequisite_ordering report entry.
 
-    Flips to "active" when a prereq map was threaded in (``results`` is not
-    None). Per-course it distinguishes exact-CNF courses from budget/fallback
-    courses (the latter labeled *conservative-permissive, not exact*).
+    Flips to "active" only when the threaded prereq map applies >=1 ACTUAL
+    ordering constraint — a course with a hard prerequisite, or a flagged
+    fallback. A map containing only advisory/co-requisite courses (every CNF
+    empty) reports INERT, because the solver has zero constraints. The
+    ``prereq_summary`` splits ``fetched_count`` (every requisite-bearing course
+    fetched, context only — many carry just advisories) from
+    ``with_hard_prereq_count`` (courses that actually have a hard prerequisite)
+    and ``fallback_count`` (budget-exceeded, conservative-permissive).
 
     Provenance label depends on ``live``:
       - live=False -> FIXTURE-ONLY (parsed from a committed self-defined fixture,
@@ -243,12 +248,20 @@ def _prereq_detector_entry(*, source, results, live=False, coverage=None):
         return dict(next(d for d in INERT_DETECTORS
                          if d["detector"] == "prerequisite_ordering"))
 
-    exact, fallback = [], []
+    # Split the threaded prereq map into honest buckets. A FETCHED course may
+    # carry only an advisory / co-requisite, which the itemType filter drops to an
+    # EMPTY CNF — requisite-bearing, but NOT a hard ordering constraint:
+    #   - hard:     exact CNF with a non-empty clause set (a real prerequisite)
+    #   - fallback: budget-exceeded -> a flagged conservative-permissive prereq
+    #   - (neither) exact but empty CNF -> fetched, no hard prereq (advisory only)
+    # Only hard + fallback are constraints the solver actually enforces.
+    fetched_count = len(results)
+    hard, fallback = [], []
     for cid, res in sorted(results.items()):
-        if res.exact:
-            exact.append(cid)
-        else:
+        if not res.exact:
             fallback.append({"course": cid, "reason": res.fallback_reason})
+        elif res.cnf_string:
+            hard.append(cid)
 
     # Did the live eLumen fetch hit its aggregate wall-clock cap? If so, coverage
     # may be partial — surface that honestly wherever this detector is described.
@@ -265,7 +278,7 @@ def _prereq_detector_entry(*, source, results, live=False, coverage=None):
     # IDENTICAL to having no prereq data at all, so report INERT honestly rather
     # than a misleading green "active" with zero constraints — mirroring the
     # enrollment panel's honest "joined 0 sections — counts not applied".
-    if not exact and not fallback:
+    if not hard and not fallback:
         provenance = "Live eLumen" if live else "The eLumen fixture"
         if ft.get("exceeded"):
             # Truncated before any hard prereq was collected: the honest reason is
@@ -273,11 +286,18 @@ def _prereq_detector_entry(*, source, results, live=False, coverage=None):
             reason = (f"the eLumen fetch {_truncation_phrase(ft)} before any hard "
                       "prerequisites were collected, so the solver ran without "
                       "prerequisite ordering")
+        elif fetched_count:
+            # Requisite-bearing courses WERE fetched, but none carry a hard
+            # prerequisite (advisories / co-requisites only) -- honest, specific.
+            reason = (f"{provenance} returned {fetched_count} requisite-bearing "
+                      "course(s) for this program's subjects but NONE carried a "
+                      "hard prerequisite (only advisories / co-requisites, which "
+                      "don't constrain ordering), so the solver ran without "
+                      "prerequisite ordering")
         else:
-            reason = (f"{provenance} returned no hard prerequisites for this "
-                      "program's courses (e.g. only advisories / co-requisites, "
-                      "which don't constrain ordering), so the solver ran "
-                      "without prerequisite ordering")
+            reason = (f"{provenance} returned no prerequisite records for this "
+                      "program's courses, so the solver ran without prerequisite "
+                      "ordering")
         entry = {
             "detector": "prerequisite_ordering",
             "status": "inert",
@@ -287,8 +307,9 @@ def _prereq_detector_entry(*, source, results, live=False, coverage=None):
             "remedy": ("none needed if these courses truly have no prerequisites; "
                        "otherwise check the eLumen coverage report for the "
                        "course-id join"),
-            "prereq_summary": {"exact_count": 0, "fallback_count": 0,
-                               "exact_courses": [], "fallback_courses": []},
+            "prereq_summary": {"fetched_count": fetched_count,
+                               "with_hard_prereq_count": 0, "fallback_count": 0,
+                               "with_hard_prereq_courses": [], "fallback_courses": []},
         }
         if coverage is not None:
             entry["coverage"] = coverage
@@ -313,9 +334,10 @@ def _prereq_detector_entry(*, source, results, live=False, coverage=None):
         "live": bool(live),
         "label": label,
         "prereq_summary": {
-            "exact_count": len(exact),
+            "fetched_count": fetched_count,
+            "with_hard_prereq_count": len(hard),
             "fallback_count": len(fallback),
-            "exact_courses": exact,
+            "with_hard_prereq_courses": hard,
             "fallback_courses": fallback,
             "fallback_label": ("budget/fallback courses are conservative-permissive "
                                "(an UNDER-approximate union clause), NOT exact — "
