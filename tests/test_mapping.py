@@ -159,3 +159,31 @@ def test_column_constants_match_engine_required_columns():
     assert mapping.SECTION_COLUMNS[:len(req)] == req
     assert mapping.SECTION_COLUMNS == req + ["Avail Status"]
     assert "Avail Status" not in req
+
+
+def test_ge_requirements_sheet_roundtrips(tmp_path):
+    sections = [{"term": 2268, "course": "ART 101", "units": "3"}]
+    program = {"code": "BIO", "title": "Biology", "courses": []}
+    ge_rows = [
+        {"area": "3A", "area_title": "Arts", "required_count": 1, "resolution": "concrete",
+         "candidates": ["ART 101"], "recommended": "ART 101", "units": 3.0},
+        {"area": "1A", "area_title": "English", "required_count": 1, "resolution": "reserve",
+         "candidates": [], "recommended": "", "units": 3.0},
+    ]
+    out = tmp_path / "wb.xlsx"
+    mapping.write_workbook(sections, program, str(out), pattern="igetc", ge_rows=ge_rows)
+    xl = pd.ExcelFile(out)
+    assert "ge_requirements" in xl.sheet_names
+    df = xl.parse("ge_requirements")
+    assert list(df.columns) == mapping.GE_REQUIREMENT_COLUMNS
+    arts = df[df["Area"] == "3A"].iloc[0]
+    assert arts["Pattern"] == "igetc"
+    assert arts["Resolution"] == "concrete"
+    assert arts["Candidate Course IDs"] == "ART 101"
+
+
+def test_write_workbook_without_ge_omits_sheet(tmp_path):
+    out = tmp_path / "wb.xlsx"
+    mapping.write_workbook([{"term": 2268, "course": "ART 101"}],
+                           {"code": "BIO", "title": "Biology", "courses": []}, str(out))
+    assert "ge_requirements" not in pd.ExcelFile(out).sheet_names

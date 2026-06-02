@@ -33,6 +33,9 @@ SECTION_COLUMNS = ["Term", "CLASS", "Class Status", "Cap Enrl", "Tot Enrl",
                    "Wait Tot", "Avail Status"]
 CATALOG_COLUMNS = ["Course ID", "Units", "Prerequisites (structured)"]
 PROGRAM_COLUMNS = ["Program Code", "Program Title", "Course ID", "Recommended Semester"]
+GE_REQUIREMENT_COLUMNS = ["Program Code", "Pattern", "Area", "Area Title",
+                          "Required Count", "Resolution", "Candidate Course IDs",
+                          "Recommended Course", "Units"]
 
 
 def _norm(code):
@@ -136,6 +139,31 @@ def build_programs_df(program):
     return pd.DataFrame(rows, columns=PROGRAM_COLUMNS)
 
 
+def build_ge_requirements_df(program, pattern, ge_rows):
+    """One row per GE requirement. ``ge_rows`` are the resolver's output dicts.
+
+    Candidate ids are joined with a single space (course ids are already single-
+    spaced via _norm); the engine splits them back on whitespace runs of >=2 is
+    NOT safe, so candidates are stored semicolon-joined to survive multi-word
+    subjects (e.g. 'PHYS SC 1').
+    """
+    code = (program or {}).get("code", "")
+    rows = []
+    for r in ge_rows or []:
+        rows.append({
+            "Program Code": code,
+            "Pattern": pattern or "",
+            "Area": r["area"],
+            "Area Title": r.get("area_title", ""),
+            "Required Count": int(r.get("required_count", 1)),
+            "Resolution": r.get("resolution", "reserve"),
+            "Candidate Course IDs": ";".join(_norm(c) for c in r.get("candidates", [])),
+            "Recommended Course": _norm(r["recommended"]) if r.get("recommended") else "",
+            "Units": float(r.get("units", 3.0)),
+        })
+    return pd.DataFrame(rows, columns=GE_REQUIREMENT_COLUMNS)
+
+
 def reconcile_courses(section_records, program):
     section_codes = {_norm(r["course"]) for r in section_records}
     program_codes = {_norm(c["course_id"]) for c in (program or {}).get("courses", [])}
@@ -144,12 +172,15 @@ def reconcile_courses(section_records, program):
     return matched, unmatched
 
 
-def write_workbook(section_records, program, path, *, prereqs=None):
+def write_workbook(section_records, program, path, *, prereqs=None,
+                   pattern=None, ge_rows=None):
     # `prereqs` is the optional course-id -> CNF-string map threaded into the
     # catalog sheet (m7). It is keyword-only and defaults to None so existing
     # positional callers stay byte-identical. Ownership note: write_workbook is
     # modified HERE (mapping.py owner); the build_live_workbook pipeline only
     # PASSES this kwarg, it does not touch mapping.py.
+    # `pattern` and `ge_rows` are the optional GE requirements enrichment (Task 5).
+    # Absent both -> no ge_requirements sheet -> byte-identical 3-sheet workbook.
     sections = build_sections_df(section_records)
     catalog = build_catalog_df(section_records, program, prereqs)
     programs = build_programs_df(program)
@@ -157,4 +188,7 @@ def write_workbook(section_records, program, path, *, prereqs=None):
         sections.to_excel(xl, sheet_name="sections", index=False)
         catalog.to_excel(xl, sheet_name="catalog", index=False)
         programs.to_excel(xl, sheet_name="programs", index=False)
+        if ge_rows:
+            build_ge_requirements_df(program, pattern, ge_rows).to_excel(
+                xl, sheet_name="ge_requirements", index=False)
     return path
