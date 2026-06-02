@@ -107,3 +107,27 @@ def test_llm_parser_does_not_change_the_plan():
     # so the equality above is non-vacuous rather than the parser being skipped.
     for text in ("(MATH 245)", "(CHEM 101 OR CHEM 102) AND MATH 245", "ENGL 101"):
         assert mirror_parser(text) == engine.parse_prereq(text, llm=None)
+
+
+def test_ge_plan_is_deterministic(tmp_path):
+    import pandas as pd
+    out = tmp_path / "ge_det.xlsx"
+    with pd.ExcelWriter(out, engine="openpyxl") as xl:
+        pd.DataFrame([{"Term": 20248, "CLASS": "ART 101", "Class Status": "Active",
+                       "Cap Enrl": 0, "Tot Enrl": 0, "Wait Tot": 0},
+                      {"Term": 20248, "CLASS": "ART 105", "Class Status": "Active",
+                       "Cap Enrl": 0, "Tot Enrl": 0, "Wait Tot": 0}]).to_excel(
+            xl, sheet_name="sections", index=False)
+        pd.DataFrame([{"Course ID": "ART 101", "Units": 3, "Prerequisites (structured)": ""},
+                      {"Course ID": "ART 105", "Units": 3, "Prerequisites (structured)": ""}]).to_excel(
+            xl, sheet_name="catalog", index=False)
+        pd.DataFrame([{"Program Code": "A", "Program Title": "A", "Course ID": "ART 101",
+                       "Recommended Semester": 1}]).to_excel(xl, sheet_name="programs", index=False)
+        pd.DataFrame([{"Program Code": "A", "Pattern": "igetc", "Area": "3A",
+                       "Area Title": "Arts", "Required Count": 1, "Resolution": "concrete",
+                       "Candidate Course IDs": "ART 101;ART 105", "Recommended Course": "",
+                       "Units": 3.0}]).to_excel(xl, sheet_name="ge_requirements", index=False)
+    import engine
+    a = engine.run(str(out))["programs"]["A"]["cohorts"]["full_time"]["plan"]
+    b = engine.run(str(out))["programs"]["A"]["cohorts"]["full_time"]["plan"]
+    assert a == b

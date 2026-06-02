@@ -1,0 +1,11 @@
+{
+  "pattern": "test-pattern", "display_name": "Test Pattern",
+  "effective_year": "2025-2026", "source": "test", "reviewed_by": "test", "reviewed_on": "2026-06-01",
+  "areas": [
+    {"code": "1A", "title": "English Composition", "count": 1, "units_min": 3},
+    {"code": "3A", "title": "Arts", "count": 1, "units_min": 3},
+    {"code": "4", "title": "Social Sciences", "count": 2, "units_min": 6},
+    {"code": "5", "title": "Sciences", "count": 1, "units_min": 4,
+     "attributes": {"lab_required": true, "lab_area": "5C"}}
+  ]
+}

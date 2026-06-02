@@ -14,6 +14,16 @@ from .http import SourceDataError, get_json
 API_BASE = "https://b.api.programmapper.com"
 SOURCE = "Program Mapper"
 
+# "Choose a course from Area 3A." / "... Area 4." -> the area code ("3A" / "4").
+_AREA_RE = re.compile(r"\bArea\s+([0-9]+[A-Z]{0,2})\b", re.IGNORECASE)
+# "MATH 261 or MATH 247" / "MATH 261 / MATH 247" -> ["MATH 261", "MATH 247"].
+_CHOICE_SPLIT_RE = re.compile(r"\s+or\s+|\s*/\s*", re.IGNORECASE)
+
+
+def _area_code(text):
+    m = _AREA_RE.search(str(text or ""))
+    return m.group(1).upper() if m else ""
+
 COLLEGE_CONFIGS = {
     "LAMC":  {"name": "Los Angeles Mission College",     "origin": "https://la-mission.programmapper.ws",        "site_content_id": "0055f609-1a83-4937-8356-c67ec89cb496"},
     "LAVC":  {"name": "Los Angeles Valley College",      "origin": "https://programmap.lavc.edu",                 "site_content_id": "b42b1741-63ac-4bcf-95b6-48288af8733d"},
@@ -79,7 +89,7 @@ def get_program_courses(campus, program_id, *, client=None):
     pathways = detail.get("pathways", []) if isinstance(detail, dict) else []
     chosen = next((p for p in pathways if p.get("defaultPathway")),
                   pathways[0] if pathways else None)
-    courses = []
+    courses, ge_requirements, major_choices = [], [], []
     if chosen and chosen.get("programMapId"):
         map_id = chosen["programMapId"]
         reqs = get_json(_site_url(campus, f"/program-maps/{map_id}"),
@@ -89,24 +99,42 @@ def get_program_courses(campus, program_id, *, client=None):
             raise SourceDataError(
                 f"{SOURCE} program-maps/{map_id} ({campus}): response missing "
                 f"'pathwayElements' key (got {type(reqs).__name__}). "
-                "The Program Mapper schema may have changed."
-            )
+                "The Program Mapper schema may have changed.")
         for element in reqs.get("pathwayElements", []):
             opp = element.get("recommendedOpportunity") or {}
-            if opp.get("type") != "COURSE":
-                continue
-            code = element.get("name") or opp.get("courseCode")
-            if not code:
-                continue
+            otype = opp.get("type")
+            req_type = (element.get("requirement") or {}).get("requirementType")
             term = opp.get("term") or {}
-            courses.append({
-                "course_id": code.strip(),
-                "title": element.get("shortDescription") or opp.get("courseName", ""),
-                "recommended_semester": term.get("termNumber"),
-                "units": opp.get("minUnits"),
-                "requirement_type": (element.get("requirement") or {}).get("requirementType"),
-            })
-    return courses
+            if otype == "COURSE":
+                code = element.get("name") or opp.get("courseCode")
+                if not code:
+                    continue
+                courses.append({
+                    "course_id": code.strip(),
+                    "title": element.get("shortDescription") or opp.get("courseName", ""),
+                    "recommended_semester": term.get("termNumber"),
+                    "units": opp.get("minUnits"),
+                    "requirement_type": req_type,
+                })
+            # v1 captures only GE-area and MAJOR_CORE choices; other CHOICE requirementTypes are intentionally skipped.
+            elif otype == "CHOICE" and req_type == "GENERAL_EDUCATION":
+                area = _area_code(element.get("shortDescription") or element.get("name"))
+                if not area:
+                    continue
+                ge_requirements.append({
+                    "area": area,
+                    "label": (element.get("name") or "").strip(),
+                    "recommended_course": (opp.get("courseCode") or "").strip(),
+                    "recommended_semester": term.get("termNumber"),
+                })
+            elif otype == "CHOICE" and req_type == "MAJOR_CORE":
+                options = [o.strip() for o in _CHOICE_SPLIT_RE.split(element.get("name") or "")
+                           if o.strip()]
+                if len(options) >= 2:
+                    major_choices.append({"options": options,
+                                          "recommended_semester": term.get("termNumber")})
+    return {"courses": courses, "ge_requirements": ge_requirements,
+            "major_choices": major_choices}
 
 
 def _slug(text):
@@ -126,12 +154,14 @@ def fetch_program(campus, query, *, client=None):
             "is missing 'masterRecordId'; cannot fetch its courses. "
             "The Program Mapper schema may have changed."
         )
-    courses = get_program_courses(campus, pid, client=client)
+    detail = get_program_courses(campus, pid, client=client)
     code = _slug(program.get("title", "")) or program["masterRecordId"][:8].upper()
     return {
         "code": code,
         "title": program.get("title", ""),
         "award": program.get("awardShortTitle", ""),
         "ge_pattern": "",
-        "courses": courses,
+        "courses": detail["courses"],
+        "ge_requirements": detail["ge_requirements"],
+        "major_choices": detail["major_choices"],
     }
