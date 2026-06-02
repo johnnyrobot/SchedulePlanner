@@ -139,6 +139,8 @@ def _areas_from_courses(data, *, source):
             continue  # non-empty endTermCode -> discontinued mapping
         prefix = str(course.get("prefixCode") or "").strip()
         number = str(course.get("courseNumber") or "").strip()
+        if not prefix or not number:
+            continue  # missing either component -> would yield a bare-subject id
         cid = normalize_course_code(f"{prefix}{number}")
         if not cid:
             continue

@@ -55,6 +55,31 @@ def test_fetch_ge_courses_schema_drift_raises(make_client):
     assert "courseInformationList" in str(ei.value)
 
 
+def test_fetch_ge_courses_skips_courses_missing_prefix_or_number(make_client):
+    # A course with prefixCode set but courseNumber empty must NOT become a
+    # bare-subject id like "ART"; it is skipped entirely.
+    routes = {
+        "/api/AcademicYears": json.loads((FIX / "assist_academic_years.json").read_text()),
+        "/api/transferability/courses": {
+            "courseInformationList": [
+                {"prefixCode": "ART", "courseNumber": "", "endTermCode": "",
+                 "transferAreas": [{"code": "3A", "codeDescription": "Arts"}]},
+                {"prefixCode": "", "courseNumber": "101", "endTermCode": "",
+                 "transferAreas": [{"code": "3A", "codeDescription": "Arts"}]},
+                {"prefixCode": "ENGL", "courseNumber": "101", "endTermCode": "",
+                 "transferAreas": [{"code": "1A", "codeDescription": "English"}]},
+            ]
+        },
+    }
+    client = make_client(routes)
+    areas, _ = assist.fetch_ge_courses("LAMC", "igetc", client=client)
+    # The bare-subject "ART" must not appear in any area's course list.
+    all_courses = [c for info in areas.values() for c in info["courses"]]
+    assert "ART" not in all_courses
+    assert "3A" not in areas              # both 3A entries were malformed -> no area
+    assert areas["1A"]["courses"] == ["ENGL 101"]  # the valid entry survives
+
+
 def test_400_refreshes_token_and_retries_once():
     # A purpose-built stateful client: first /transferability call 400s, second 200s.
     from tests.conftest import FakeResponse, load_fixture
