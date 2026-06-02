@@ -141,6 +141,34 @@ def _slug(text):
     return re.sub(r"[^A-Za-z0-9]+", "-", text.strip()).strip("-").upper()
 
 
+def fetch_program_by_id(campus, program_id, *, title="", award="", client=None):
+    """Fetch a program by its EXACT masterRecordId (no title search).
+
+    Mirrors fetch_program but targets a specific program id, so duplicate-titled
+    programs (e.g. an Interior Design certificate vs the A.A.) are individually
+    addressable -- title search can only ever reach the first match. ``title`` /
+    ``award`` are the display metadata the caller already holds from the program
+    listing; passing them avoids a redundant home-page crawl just to recover the
+    program's name. Returns the same dict shape fetch_program returns.
+
+    Contract note: an UNKNOWN id raises (the underlying /programs/{id} fetch
+    errors) rather than returning None — ids are expected to come from the
+    program listing (get_all_programs), unlike fetch_program which returns None
+    for an unknown title query.
+    """
+    detail = get_program_courses(campus, program_id, client=client)
+    code = _slug(title) or str(program_id)[:8].upper()
+    return {
+        "code": code,
+        "title": title,
+        "award": award,
+        "ge_pattern": "",
+        "courses": detail["courses"],
+        "ge_requirements": detail["ge_requirements"],
+        "major_choices": detail["major_choices"],
+    }
+
+
 def fetch_program(campus, query, *, client=None):
     program = search_program(campus, query, client=client)
     if program is None:

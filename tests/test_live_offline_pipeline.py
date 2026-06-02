@@ -15,6 +15,8 @@ us whether the downstream contract still holds.
 import json
 import pathlib
 
+import pytest
+
 import build_live_workbook
 import engine
 from conftest import STEM_GID, load_fixture
@@ -163,6 +165,71 @@ def test_analyze_live_unreviewed_pattern_emits_draft_warning(
     ge_det = next(d for d in report["inert_detectors"] if d["detector"] == "ge_scheduling")
     assert ge_det["reviewed"] is False
     assert ge_det["draft_warning"] == cov["draft_warning"]
+
+
+def test_fetch_program_by_id_matches_title_search(lamc_routes, make_client):
+    # Resolving by exact masterRecordId must yield the same program as the title
+    # search (the id path lets duplicate-titled programs be addressed uniquely).
+    rec = pm.search_program("LAMC", "Biology", client=make_client(lamc_routes))
+    by_id = pm.fetch_program_by_id(
+        "LAMC", rec["masterRecordId"], title=rec["title"],
+        award=rec.get("awardShortTitle", ""), client=make_client(lamc_routes))
+    by_query = pm.fetch_program("LAMC", "Biology", client=make_client(lamc_routes))
+    assert by_id["code"] == by_query["code"] == "BIOLOGY"
+    assert by_id["title"] == by_query["title"]
+    assert by_id["courses"] == by_query["courses"]
+
+
+def test_analyze_live_by_program_id_with_injected_assist(lamc_routes, make_client, tmp_path):
+    # The sweep path: resolve by id + inject a pre-fetched ASSIST map (so NO live
+    # ASSIST call is made) + share an eLumen cache dict. assist_status is "ok"
+    # from the injected map and the program resolves by id, not title.
+    rec = pm.search_program("LAMC", "Biology", client=make_client(lamc_routes))
+    injected_assist = {"5B": {"title": "Bio", "courses": ["BIOLOGY 7"]}}
+    shared_cache = {}
+    report = build_live_workbook.analyze_live(
+        "LAMC", [2268], "", str(tmp_path / "by_id.xlsx"),
+        client=make_client(lamc_routes),
+        program_id=rec["masterRecordId"], program_title=rec["title"],
+        program_award=rec.get("awardShortTitle", ""),
+        transfer_goal="igetc", assist_year_id=77, assist_areas=injected_assist,
+        elumen_cache=shared_cache, ge_pattern_path=str(FIX / "ge_pattern_test.json"))
+    assert report["program"]["code"] == "BIOLOGY"
+    assert report["ge_coverage"]["assist_status"] == "ok"
+    assert report["ge_coverage"]["academic_year"] == {"id": 77}
+    assert report["results"] is not None
+
+
+def test_fetch_program_by_id_empty_title_falls_back_to_id_code(lamc_routes, make_client):
+    # With no title supplied, the code falls back to the id prefix (uppercased).
+    rec = pm.search_program("LAMC", "Biology", client=make_client(lamc_routes))
+    prog = pm.fetch_program_by_id(
+        "LAMC", rec["masterRecordId"], title="", award="", client=make_client(lamc_routes))
+    assert prog["title"] == "" and prog["award"] == ""
+    assert prog["code"] == rec["masterRecordId"][:8].upper()
+    assert prog["courses"]  # still resolves the real course list by id
+
+
+def test_fetch_program_by_id_unknown_id_raises(make_client, error_resp):
+    # Unknown id is a programming error (ids come from the listing) -> it raises
+    # loudly rather than silently returning None like a bad title query does.
+    from sources.http import SourceError
+    routes = {"/programs/bad-id": error_resp(404)}
+    with pytest.raises(SourceError):
+        pm.fetch_program_by_id("LAMC", "bad-id", title="X", client=make_client(routes))
+
+
+def test_analyze_live_injected_empty_assist_is_unavailable(lamc_routes, make_client, tmp_path):
+    # An empty/malformed injected ASSIST map must be labelled "unavailable", never
+    # silently "ok" (no overclaiming coverage that isn't there).
+    rec = pm.search_program("LAMC", "Biology", client=make_client(lamc_routes))
+    report = build_live_workbook.analyze_live(
+        "LAMC", [2268], "", str(tmp_path / "empty_assist.xlsx"),
+        client=make_client(lamc_routes), program_id=rec["masterRecordId"],
+        program_title=rec["title"], transfer_goal="igetc", assist_areas={},
+        ge_pattern_path=str(FIX / "ge_pattern_test.json"))
+    assert report["ge_coverage"]["assist_status"] == "unavailable"
+    assert report["ge_coverage"]["error"]
 
 
 def test_analyze_live_ge_disabled_has_no_coverage(lamc_routes, make_client, tmp_path):
