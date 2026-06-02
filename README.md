@@ -49,6 +49,14 @@ Data-derived strings are HTML-escaped before render (`escapeHtml` in
 `ui.html`), and the optional AI status is probed without ever blocking
 analysis.
 
+After any build, **Export HTML report** saves the full analysis (every program,
+cohort plans, supply diagnostics, the live reconciliation / GE panels, and the
+admin briefing) as a single self-contained `.html` file — no external assets, so
+it opens offline in any browser. The export matches the app's look (light default
+with a dark toggle), is WCAG 2.1 A/AA compliant, responsive, and carries a built-in
+reader text-size control. Rendering lives in `report_export.render_report` (pure
+Python, stdlib only); the bridge is `Api.export_report` in `app.py`.
+
 ### Build a workbook from live LACCD data
 
 ```bash
