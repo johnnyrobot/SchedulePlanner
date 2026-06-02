@@ -183,8 +183,8 @@ def test_budget_fallback_course_labeled_conservative_permissive(lamc_routes,
     fb_blob = json.dumps(summary).lower()
     assert "conservative-permissive" in fb_blob
     assert "not exact" in fb_blob
-    # The exact courses are still distinguished from the fallback ones.
-    assert summary["exact_count"] >= 1
+    # The hard-prereq courses are still distinguished from the fallback ones.
+    assert summary["with_hard_prereq_count"] >= 1
     # eLumen path labeled fixture-only on the whole prereq slice.
     assert "fixture-only" in json.dumps(pre).lower()
 
@@ -354,9 +354,10 @@ def test_prereq_detector_zero_prereqs_reports_inert_not_active():
         source="eLumen live: tenant.example", results={}, live=True)
     assert entry["detector"] == "prerequisite_ordering"
     assert entry["status"] == "inert", entry
-    assert entry["reason"] and "no hard prerequisites" in entry["reason"].lower()
-    assert entry["prereq_summary"]["exact_count"] == 0
+    assert entry["reason"] and "no prerequisite records" in entry["reason"].lower()
+    assert entry["prereq_summary"]["with_hard_prereq_count"] == 0
     assert entry["prereq_summary"]["fallback_count"] == 0
+    assert entry["prereq_summary"]["fetched_count"] == 0
     assert entry["live"] is True            # provenance preserved while inert
 
 
@@ -368,8 +369,47 @@ def test_prereq_detector_nonzero_prereqs_stays_active():
     entry = build_live_workbook._prereq_detector_entry(
         source="eLumen live: tenant.example", results={"PHYS 102": res}, live=True)
     assert entry["status"] == "active", entry
-    assert (entry["prereq_summary"]["exact_count"]
+    assert (entry["prereq_summary"]["with_hard_prereq_count"]
             + entry["prereq_summary"]["fallback_count"]) >= 1
+
+
+def test_prereq_detector_fetched_but_no_hard_prereq_reports_inert():
+    """The real-world bug this guards: courses ARE fetched but carry only
+    advisories/co-requisites (empty CNF). prereq_exact used to count them as
+    "exact", flipping the detector ACTIVE with zero real constraints. Now a map
+    of only empty-CNF courses reports INERT, with fetched_count surfaced and
+    with_hard_prereq_count == 0."""
+    from sources.prereq_cnf import dnf_to_cnf
+    # Two advisory-only courses -> empty CNF, exact=True, no hard prereq.
+    results = {"CIS 192": dnf_to_cnf([], gated_course="CIS 192"),
+               "CIS 210": dnf_to_cnf([], gated_course="CIS 210")}
+    entry = build_live_workbook._prereq_detector_entry(
+        source="eLumen live: tenant.example", results=results, live=True)
+    assert entry["status"] == "inert", entry
+    ps = entry["prereq_summary"]
+    assert ps["fetched_count"] == 2          # both were fetched (requisite-bearing)
+    assert ps["with_hard_prereq_count"] == 0  # ...but neither has a hard prereq
+    assert ps["fallback_count"] == 0
+    assert "none carried a hard prerequisite" in entry["reason"].lower()
+    assert "2 requisite-bearing" in entry["reason"]
+
+
+def test_prereq_detector_splits_fetched_from_with_hard_prereq():
+    """A mixed map: one course with a hard prereq + one advisory-only. ACTIVE,
+    fetched_count counts BOTH, with_hard_prereq_count counts only the real one."""
+    from sources.prereq_cnf import dnf_to_cnf
+    results = {
+        "CIS 165": dnf_to_cnf([["CIS 101"], ["CS 101"]], gated_course="CIS 165"),  # hard
+        "CIS 192": dnf_to_cnf([], gated_course="CIS 192"),                          # advisory-only
+    }
+    entry = build_live_workbook._prereq_detector_entry(
+        source="eLumen live: tenant.example", results=results, live=True)
+    assert entry["status"] == "active", entry
+    ps = entry["prereq_summary"]
+    assert ps["fetched_count"] == 2
+    assert ps["with_hard_prereq_count"] == 1
+    assert ps["with_hard_prereq_courses"] == ["CIS 165"]
+    assert ps["fallback_count"] == 0
 
 
 # ---------------------------------------------------------------------------

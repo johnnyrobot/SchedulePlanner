@@ -617,7 +617,7 @@ function renderLivePanel(res){
       // For an ACTIVE prerequisite entry, surface how many prereqs actually
       // landed (parity with the enrollment join count) so "on" is never opaque.
       if(active && d.prereq_summary){
-        const n=(d.prereq_summary.exact_count||0)+(d.prereq_summary.fallback_count||0);
+        const n=(d.prereq_summary.with_hard_prereq_count||0)+(d.prereq_summary.fallback_count||0);
         join+='<div class="join">'+escapeHtml(String(n))+' prerequisite'+(n===1?'':'s')+
           ' applied'+(d.prereq_summary.fallback_count?
             ' ('+escapeHtml(String(d.prereq_summary.fallback_count))+' relaxed)':'')+'</div>';
