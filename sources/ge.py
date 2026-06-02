@@ -113,6 +113,25 @@ def _pattern_codes(pattern):
     return codes
 
 
+def _code_system(code):
+    """Which GE coding system a code belongs to: 'numeric' (IGETC / Cal-GETC,
+    e.g. '1A', '2', '5C') or 'alpha' (CSU GE-Breadth, e.g. 'A2', 'B4', 'D0')."""
+    return "numeric" if str(code)[:1].isdigit() else "alpha"
+
+
+def _pattern_system(pattern):
+    """The pattern's single coding system, or None if mixed/empty.
+
+    IGETC and Cal-GETC NUMBER their areas ('1A','2','3A'); CSU GE-Breadth LETTERS
+    them ('A2','B4','D'). ASSIST's Cal-GETC ``listType`` bundles BOTH systems'
+    codes for the same courses, so a single-system pattern must ignore codes from
+    the OTHER system (see _assist_courses_by_area) instead of mis-reporting them
+    as unknown areas. Returns None for a mixed/empty pattern so the caller falls
+    back to no cross-system filtering (safe default)."""
+    systems = {_code_system(c) for c in _pattern_codes(pattern)}
+    return next(iter(systems)) if len(systems) == 1 else None
+
+
 def _assist_courses_by_area(assist_areas, pattern):
     """Reconcile ASSIST's subarea-grained codes onto the pattern's area codes.
 
@@ -125,24 +144,42 @@ def _assist_courses_by_area(assist_areas, pattern):
     '5' -> 5A/5B) matches exactly, so a reserve parent never swallows its own
     subareas or an unrelated lab code ('5C'). Exact matches always win.
 
-    Returns (by_area, unknown): ``by_area`` maps each pattern code to its merged
-    ASSIST course list; ``unknown`` lists ASSIST codes that matched no pattern
-    code (kept for honest ``unknown_areas`` reporting).
+    ASSIST's Cal-GETC ``listType`` also bundles the legacy IGETC + CSU GE-Breadth
+    alias codes for the SAME courses (e.g. a math course is tagged '2' AND '2A'
+    AND 'B4'). A single-system pattern IGNORES codes from the OTHER system: those
+    are returned in ``cross_system`` (honestly "ignored", never matched, never
+    counted as unknown), because every real course is already credited via the
+    pattern's own-system code — so this is coverage-neutral, it only stops the
+    bundled aliases from inflating ``unknown`` (the live Cal-GETC 27-unknown bug).
+    Same-system codes that match no pattern area remain ``unknown``.
+
+    Returns (by_area, unknown, cross_system): ``by_area`` maps each pattern code
+    to its merged ASSIST course list; ``unknown`` lists same-system ASSIST codes
+    that matched no pattern code; ``cross_system`` lists the other-system codes
+    that were ignored.
     """
     all_codes = _pattern_codes(pattern)
     # Only subarea-free ("leaf") areas absorb ASSIST's finer codes.
     absorbing = {a["code"] for a in pattern.get("areas", []) if not a.get("subareas")}
+    psys = _pattern_system(pattern)
     by_area = {code: [] for code in all_codes}
-    matched = set()
+    matched, cross_system = set(), []
     for acode, info in assist_areas.items():
+        # Codes from a different GE coding system than the pattern are bundled
+        # aliases of the same courses — ignore them (never match, never unknown).
+        if psys is not None and _code_system(acode) != psys:
+            cross_system.append(acode)
+            continue
         for code in all_codes:
             absorb = (code in absorbing and acode != code
                       and acode.startswith(code) and acode not in all_codes)
             if acode == code or absorb:
                 by_area[code].extend(info.get("courses", []))
                 matched.add(acode)
-    unknown = sorted(set(assist_areas) - matched)
-    return by_area, unknown
+    in_system = ({a for a in assist_areas if _code_system(a) == psys}
+                 if psys is not None else set(assist_areas))
+    unknown = sorted(in_system - matched)
+    return by_area, unknown, sorted(cross_system)
 
 
 def resolve(pattern, assist_areas, offered, program, *, concrete_threshold=3):
@@ -164,7 +201,7 @@ def resolve(pattern, assist_areas, offered, program, *, concrete_threshold=3):
     # Reconcile ASSIST's subarea-grained codes onto the pattern's area codes so a
     # parent-coded area ('2'/'6') sees ASSIST's '2A'/'6A' courses (else it would
     # mis-flag no_assist_data). by_area is keyed by PATTERN code throughout.
-    by_area, unknown = _assist_courses_by_area(assist_areas, pattern)
+    by_area, unknown, cross_system = _assist_courses_by_area(assist_areas, pattern)
 
     shared = []
     shared_areas = {}
@@ -248,5 +285,6 @@ def resolve(pattern, assist_areas, offered, program, *, concrete_threshold=3):
                          "eligible_count": len(by_area.get(area, [])),
                          "offered_count": len(offered_cands), "flags": flags})
 
-    coverage = {"areas": area_cov, "shared_with_major": shared, "unknown_areas": unknown}
+    coverage = {"areas": area_cov, "shared_with_major": shared,
+                "unknown_areas": unknown, "cross_system_areas": cross_system}
     return rows, coverage

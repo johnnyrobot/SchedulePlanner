@@ -569,6 +569,10 @@ def analyze_live(campus, terms, program_query, out_path, *, client=None,
             ge_coverage["areas"] = resolved["areas"]
             ge_coverage["shared_with_major"] = resolved["shared_with_major"]
             ge_coverage["unknown_areas"] = resolved["unknown_areas"]
+            # Other-GE-system alias codes ASSIST bundled in and the resolver
+            # ignored (e.g. CSU letter codes inside a Cal-GETC response) — surfaced
+            # honestly so the drop in unknown_areas is explained, not hidden.
+            ge_coverage["cross_system_areas"] = resolved.get("cross_system_areas", [])
     if ge_coverage is not None:
         report["ge_coverage"] = ge_coverage
 
