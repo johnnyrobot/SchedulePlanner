@@ -93,6 +93,56 @@ in `tests/test_live_offline_pipeline.py`, which replays real API responses
 captured once into `tests/fixtures/` — so the most fragile dependency is
 testable without a network and fails loudly on schema drift.
 
+### Transfer GE (Cal-GETC / IGETC / CSU GE)
+
+Add a lower-division **transfer GE pattern** to the plan with `--transfer-goal`
+(also a dropdown in the desktop app's live form):
+
+```bash
+python3 build_live_workbook.py --campus LAMC --program "Biology" \
+    --terms 2264,2266,2268 --transfer-goal igetc --out data/live_LAMC.xlsx
+```
+
+Choices: `none` (default, major courses only), `cal-getc`, `igetc`, `csu-ge`.
+The pattern's per-area requirements are intersected with the live sections and
+with ASSIST's transferable-course lists
+(`/api/transferability/courses`, public + unauthenticated) for the campus, so
+each GE area resolves to a concrete offered course, a "pick one from this area"
+reserve, or — honestly — a flag (`no ASSIST data` / `not offered this window`).
+Areas already satisfied by a major requirement are shown as **met by your
+major**, not double-scheduled.
+
+> [!IMPORTANT]
+> **The shipped GE patterns are DRAFTS pending a content review.** The
+> per-area counts/units in `data/ge_patterns/*.json` are best-effort
+> placeholders, **not** verified policy — so every build prints a *“Draft —
+> unverified”* notice (CLI banner and the desktop GE panel) until a qualified
+> reviewer signs each file off. The banner self-clears the moment a pattern's
+> `reviewed_by` field is filled in. **Three things a qualified reviewer (e.g. an
+> LACCD articulation officer / counselor) must address before these plans can be
+> trusted as authoritative:**
+>
+> 1. **Fill in the sign-off fields.** Each file ships with
+>    `"source": "REPLACE WITH OFFICIAL … STANDARDS URL"` and blank
+>    `"reviewed_by"` / `"reviewed_on"`. A blank `reviewed_by` is the gate flag
+>    meaning *no human has verified this pattern*. The review fills in the real
+>    standards URL, the reviewer's name, and the date.
+> 2. **Verify the area rules against the official standard.** The counts, unit
+>    minimums, subarea splits, and lab/discipline attributes (e.g. IGETC Area 3
+>    = 3 courses / 9 units, 3A & 3B each ≥ 1; Area 5 lab required in 5C; Area 4
+>    ≥ 2 disciplines) are plausible but must match the official
+>    IGETC / CSU GE-Breadth / Cal-GETC policy exactly. Note that **Cal-GETC
+>    (2025-26) is replacing IGETC + CSU GE-Breadth** for most students — part of
+>    the review is deciding which patterns are still valid for the target catalog
+>    year vs. legacy (e.g. IGETC Area 6 is *Languages Other Than English*, while
+>    Cal-GETC Area 6 is *Ethnic Studies* — don't conflate them).
+> 3. **Confirm the area codes still match ASSIST.** ASSIST tags courses at
+>    *subarea* granularity (`2A`, `4B`, `6A`, `5C`), so the resolver reconciles a
+>    pattern's parent code (`2`, `6`) onto ASSIST's finer codes automatically
+>    (see `sources/ge.py:_assist_courses_by_area`). If a future ASSIST coding
+>    change breaks that mapping, an area will surface `no ASSIST data` — the
+>    signal to re-check the codes.
+
 ### Regenerate the bundled synthetic demo
 
 ```bash

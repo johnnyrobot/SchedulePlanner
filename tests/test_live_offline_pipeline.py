@@ -139,6 +139,30 @@ def test_analyze_live_with_ge(lamc_routes, make_client, tmp_path):
     assert report["ge_coverage"]["pattern"] == "igetc"
     assert any(d["detector"] == "ge_scheduling" for d in report["inert_detectors"])
     assert report["results"] is not None
+    # ge_pattern_test.json carries reviewed_by="test" -> reviewed, no draft notice.
+    assert report["ge_coverage"]["reviewed"] is True
+    assert "draft_warning" not in report["ge_coverage"]
+    ge_det = next(d for d in report["inert_detectors"] if d["detector"] == "ge_scheduling")
+    assert ge_det["reviewed"] is True and ge_det["draft_warning"] == ""
+
+
+def test_analyze_live_unreviewed_pattern_emits_draft_warning(
+        lamc_routes, make_client, tmp_path):
+    # A shipped pattern (blank reviewed_by) must mark the coverage as a DRAFT so
+    # the UI/CLI never present its placeholder counts as authoritative.
+    routes = dict(lamc_routes)
+    routes["/api/AcademicYears"] = json.loads((FIX / "assist_academic_years.json").read_text())
+    routes["/api/transferability/courses"] = json.loads(
+        (FIX / "assist_transferability_igetc_LAMC.json").read_text())
+    report = build_live_workbook.analyze_live(
+        "LAMC", [2268], "Biology", str(tmp_path / "ge_draft.xlsx"),
+        client=make_client(routes), transfer_goal="igetc", assist_year_id=77)
+    cov = report["ge_coverage"]
+    assert cov["reviewed"] is False
+    assert cov["draft_warning"].startswith("Draft — unverified:")
+    ge_det = next(d for d in report["inert_detectors"] if d["detector"] == "ge_scheduling")
+    assert ge_det["reviewed"] is False
+    assert ge_det["draft_warning"] == cov["draft_warning"]
 
 
 def test_analyze_live_ge_disabled_has_no_coverage(lamc_routes, make_client, tmp_path):

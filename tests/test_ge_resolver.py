@@ -109,3 +109,61 @@ def test_resolve_reserves_when_offered_fewer_than_required():
     rows, _ = ge.resolve(pattern, assist, offered, {"courses": [], "ge_requirements": []})
     assert rows[0]["resolution"] == "reserve"
     assert rows[0]["required_count"] == 2
+
+
+def test_resolve_reconciles_parent_area_to_assist_subarea_codes():
+    # ASSIST tags Math as '2A'; a pattern stating the parent '2' must still see
+    # those courses instead of mis-reporting no_assist_data (the live-run bug).
+    pattern = {"areas": [{"code": "2", "title": "Math", "count": 1, "units_min": 3}]}
+    assist = {"2A": {"title": "Math", "courses": ["MATH 261"]}}
+    offered = {"MATH 261"}
+    rows, cov = ge.resolve(pattern, assist, offered, {"courses": [], "ge_requirements": []})
+    area = next(a for a in cov["areas"] if a["area"] == "2")
+    assert "no_assist_data" not in area["flags"]
+    assert rows[0]["candidates"] == ["MATH 261"]
+    assert cov["unknown_areas"] == []   # '2A' folded into '2', not reported unknown
+
+
+def test_resolve_parent_with_subareas_does_not_steal_subarea_codes():
+    # '5' declares explicit subareas, so it must NOT absorb '5C' (a lab code):
+    # the subareas match exactly and 5C stays an unknown area, as before.
+    pattern = {"areas": [{"code": "5", "title": "Sci", "count": 2, "units_min": 7,
+                          "subareas": [{"code": "5A", "min": 1}, {"code": "5B", "min": 1}]}]}
+    assist = {"5A": {"title": "Phys", "courses": ["PHYS 1"]},
+              "5B": {"title": "Bio", "courses": ["BIOL 3"]},
+              "5C": {"title": "Lab", "courses": ["BIOL 3"]}}
+    offered = {"PHYS 1", "BIOL 3"}
+    rows, cov = ge.resolve(pattern, assist, offered, {"courses": [], "ge_requirements": []})
+    by_area = {r["area"]: r for r in rows}
+    assert by_area["5A"]["resolution"] == "concrete"
+    assert by_area["5B"]["resolution"] == "concrete"
+    assert "5C" in cov["unknown_areas"]   # not folded into the reserve parent '5'
+
+
+def test_resolve_parent_area_credits_major_via_subarea_code():
+    # A major course ASSIST tags '6A' must satisfy the parent area '6' (shared),
+    # not leave it stranded under a code mismatch.
+    pattern = {"areas": [{"code": "6", "title": "Ethnic Studies", "count": 1, "units_min": 3}]}
+    assist = {"6A": {"title": "Ethnic Studies", "courses": ["CHICANO 7"]}}
+    program = {"courses": [{"course_id": "CHICANO 7"}], "ge_requirements": []}
+    rows, cov = ge.resolve(pattern, assist, set(), program)
+    assert {"area": "6", "course": "CHICANO 7"} in cov["shared_with_major"]
+    assert not any(r["area"] == "6" for r in rows)   # required drops to 0 -> no row
+
+
+def test_is_reviewed_false_when_reviewer_blank():
+    assert ge.is_reviewed({"reviewed_by": ""}) is False
+    assert ge.is_reviewed({"reviewed_by": "   "}) is False
+    assert ge.is_reviewed({}) is False
+    assert ge.is_reviewed(None) is False
+
+
+def test_is_reviewed_true_when_reviewer_present():
+    assert ge.is_reviewed({"reviewed_by": "A. Counselor"}) is True
+
+
+def test_shipped_patterns_are_unreviewed_by_design():
+    # The committed pattern files ship with a blank reviewed_by — the
+    # content-review gate. If a reviewer signs one off, update this deliberately.
+    for goal in ("igetc", "csu-ge", "cal-getc"):
+        assert ge.is_reviewed(ge.load_pattern(goal)) is False

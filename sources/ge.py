@@ -52,6 +52,19 @@ def load_pattern(transfer_goal, *, path=None):
     return data
 
 
+def is_reviewed(pattern):
+    """True only when a human reviewer signed off (``reviewed_by`` is non-empty).
+
+    The shipped data/ge_patterns/*.json files leave ``reviewed_by`` /
+    ``reviewed_on`` blank BY DESIGN — a blank reviewer is the gate flag meaning
+    the per-area COUNTS/units are UNVERIFIED placeholders, not authoritative
+    policy. Consumers MUST surface a draft warning while this is False so an
+    unreviewed pattern is never mistaken for a signed-off transfer plan; the
+    warning self-clears the moment a qualified reviewer fills the field in.
+    """
+    return bool(str((pattern or {}).get("reviewed_by", "")).strip())
+
+
 def _canon(course_id):
     """Canonical join key (leading zeros stripped), matching the eLumen join."""
     return normalize_course_code(course_id)
@@ -90,6 +103,48 @@ def _flatten_areas(pattern):
                    "reserve_only": True}
 
 
+def _pattern_codes(pattern):
+    """Every area + subarea code the pattern names (the codes resolve() owns)."""
+    codes = set()
+    for area in pattern.get("areas", []):
+        codes.add(area["code"])
+        for sub in area.get("subareas") or []:
+            codes.add(sub["code"])
+    return codes
+
+
+def _assist_courses_by_area(assist_areas, pattern):
+    """Reconcile ASSIST's subarea-grained codes onto the pattern's area codes.
+
+    ASSIST tags transferability at SUBAREA granularity — it emits '2A', '4B',
+    '6A', never a bare '2'/'4'/'6'. A pattern that states a PARENT area would
+    therefore find nothing under that bare code and mis-report ``no_assist_data``
+    even though ASSIST has the courses. So a parent code absorbs every finer
+    ASSIST code beneath it (``startswith``), but ONLY when the pattern declares no
+    explicit subareas for that area — an area WITH subareas ('3' -> 3A/3B,
+    '5' -> 5A/5B) matches exactly, so a reserve parent never swallows its own
+    subareas or an unrelated lab code ('5C'). Exact matches always win.
+
+    Returns (by_area, unknown): ``by_area`` maps each pattern code to its merged
+    ASSIST course list; ``unknown`` lists ASSIST codes that matched no pattern
+    code (kept for honest ``unknown_areas`` reporting).
+    """
+    all_codes = _pattern_codes(pattern)
+    # Only subarea-free ("leaf") areas absorb ASSIST's finer codes.
+    absorbing = {a["code"] for a in pattern.get("areas", []) if not a.get("subareas")}
+    by_area = {code: [] for code in all_codes}
+    matched = set()
+    for acode, info in assist_areas.items():
+        for code in all_codes:
+            absorb = (code in absorbing and acode != code
+                      and acode.startswith(code) and acode not in all_codes)
+            if acode == code or absorb:
+                by_area[code].extend(info.get("courses", []))
+                matched.add(acode)
+    unknown = sorted(set(assist_areas) - matched)
+    return by_area, unknown
+
+
 def resolve(pattern, assist_areas, offered, program, *, concrete_threshold=3):
     """Resolve GE requirements for a program under a pattern. See module docstring.
 
@@ -106,10 +161,15 @@ def resolve(pattern, assist_areas, offered, program, *, concrete_threshold=3):
     recs = {g["area"]: g.get("recommended_course", "")
             for g in program.get("ge_requirements", [])}
 
+    # Reconcile ASSIST's subarea-grained codes onto the pattern's area codes so a
+    # parent-coded area ('2'/'6') sees ASSIST's '2A'/'6A' courses (else it would
+    # mis-flag no_assist_data). by_area is keyed by PATTERN code throughout.
+    by_area, unknown = _assist_courses_by_area(assist_areas, pattern)
+
     shared = []
     shared_areas = {}
-    for area_code, info in assist_areas.items():
-        eligible_canon = {_canon(c) for c in info.get("courses", [])}
+    for area_code in sorted(by_area):  # sorted -> deterministic shared-list order
+        eligible_canon = {_canon(c) for c in by_area[area_code]}
         for c in program.get("courses", []):
             if _canon(c["course_id"]) in eligible_canon:
                 shared.append({"area": area_code, "course": c["course_id"]})
@@ -124,7 +184,7 @@ def resolve(pattern, assist_areas, offered, program, *, concrete_threshold=3):
             continue
         cands = []
         for member in req["member_codes"]:
-            for c in assist_areas.get(member, {}).get("courses", []):
+            for c in by_area.get(member, []):
                 ca = _canon(c)
                 if ca in offered_by_canon and ca not in major_canon:
                     cands.append(offered_by_canon[ca])
@@ -153,7 +213,7 @@ def resolve(pattern, assist_areas, offered, program, *, concrete_threshold=3):
             continue
         flags = []
         required = max(0, req["count"] - shared_areas.get(area, 0))
-        eligible_any = bool(assist_areas.get(area, {}).get("courses"))
+        eligible_any = bool(by_area.get(area))
         offered_cands = offered_eligible[area]
         if not eligible_any:
             flags.append("no_assist_data")
@@ -162,7 +222,7 @@ def resolve(pattern, assist_areas, offered, program, *, concrete_threshold=3):
                              "resolution": "shared", "flags": flags})
             continue
         rec = recs.get(area, "")
-        area_elig_canon = {_canon(c) for c in assist_areas.get(area, {}).get("courses", [])}
+        area_elig_canon = {_canon(c) for c in by_area.get(area, [])}
         rec_canon = _canon(rec) if rec else ""
         rec_offered_id = offered_by_canon.get(rec_canon, "")
         # A rec is usable only if ASSIST says it satisfies THIS area AND it wasn't
@@ -185,11 +245,8 @@ def resolve(pattern, assist_areas, offered, program, *, concrete_threshold=3):
         })
         area_cov.append({"area": area, "title": req["title"], "required": required,
                          "resolution": resolution,
-                         "eligible_count": len(assist_areas.get(area, {}).get("courses", [])),
+                         "eligible_count": len(by_area.get(area, [])),
                          "offered_count": len(offered_cands), "flags": flags})
 
-    unknown = sorted(set(assist_areas) - {a["code"] for a in pattern.get("areas", [])}
-                     - {m for a in pattern.get("areas", []) for m in
-                        [s["code"] for s in a.get("subareas", []) or []]})
     coverage = {"areas": area_cov, "shared_with_major": shared, "unknown_areas": unknown}
     return rows, coverage
