@@ -185,6 +185,20 @@
   .spinner{display:inline-block;width:12px;height:12px;border:2px solid var(--hair);
            border-top-color:var(--amber);border-radius:50%;animation:spin .7s linear infinite}
   @keyframes spin{to{transform:rotate(360deg)}}
+  /* Data chatbot: grounded assistant panel (local Gemma; optional live lookups). */
+  .chatlog{display:flex;flex-direction:column;gap:8px;margin:12px 0;max-height:340px;overflow-y:auto}
+  .msg{font-size:13px;line-height:1.5;padding:8px 11px;border-radius:8px;max-width:85%;
+       white-space:pre-wrap;overflow-wrap:anywhere}
+  .msg.user{align-self:flex-end;background:var(--ok-bg);color:var(--ink)}
+  .msg.bot{align-self:flex-start;background:var(--bg);border:1px solid var(--line);color:var(--ink)}
+  .msg .who{display:block;font-family:var(--mono);font-size:10px;text-transform:uppercase;
+            letter-spacing:.1em;color:var(--dim);margin-bottom:3px}
+  .msg .live{display:block;font-family:var(--mono);font-size:10px;color:var(--blue);margin-top:5px}
+  .chatform{display:flex;gap:8px;align-items:center;margin-top:4px}
+  .chatform input{flex:1;font-family:var(--sans);font-size:13px;background:var(--input-bg);
+       color:var(--ink);border:1px solid var(--line);border-radius:3px;padding:9px 11px;min-width:0}
+  .chatform input:focus{outline:none;border-color:var(--amber)}
+  .vh{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
 </style>
 </head>
 <body>
@@ -277,6 +291,20 @@
   <div id="out"></div>
   <div id="live"></div>
   <div id="explainBox"></div>
+
+  <div class="card" id="chatCard" style="display:none">
+    <h3>Ask about this analysis
+      <span class="tip" tabindex="0" role="button" aria-label="What is the assistant?">?<span class="tip-bub" role="tooltip">A local assistant grounded in the analysis above. It runs on the on-device <b>Gemma</b> model (nothing leaves your machine) and can pull live LACCD data — a course's offering, another program's pathway, prerequisites, or GE areas — when a question needs it.</span></span>
+    </h3>
+    <p class="hint">Grounded in the build above. Runs on the local Gemma model; pulls live LACCD data when a question needs it.</p>
+    <div id="chatLog" class="chatlog" role="log" aria-live="polite" aria-label="Assistant conversation"></div>
+    <form id="chatForm" class="chatform" onsubmit="doChat(event)">
+      <label class="vh" for="chatInput">Your question</label>
+      <input id="chatInput" type="text" autocomplete="off" spellcheck="false"
+             placeholder="e.g. What's in term 2? · Is BIOLOGY 6 offered in 2268? · Draft an email to the dean">
+      <button type="submit" id="chatSend">Send</button>
+    </form>
+  </div>
 </main>
 
 <!-- ===================== How-this-works guide (full in-app view) ===================== -->
@@ -544,6 +572,7 @@ function showResult(res){
     document.getElementById('out').innerHTML='<div class="card" style="color:var(--red)">'+escapeHtml(res.error)+'</div>';
     document.getElementById('explainBtn').style.display='none';
     document.getElementById('exportBtn').style.display='none';
+    document.getElementById('chatCard').style.display='none';
     document.getElementById('explainBox').innerHTML='';
     return;
   }
@@ -560,6 +589,9 @@ function showResult(res){
   if(res.reconciliation || res.inert_detectors) renderLivePanel(res);
   document.getElementById('explainBtn').style.display='inline-block';
   document.getElementById('exportBtn').style.display='inline-block';
+  // A fresh analysis is a new context — reset the assistant and reveal its panel.
+  resetChat();
+  document.getElementById('chatCard').style.display='block';
   // Results render below the input cards (often below the fold); bring them
   // into view so a successful run never looks like nothing happened.
   document.getElementById('out').scrollIntoView({behavior:'smooth', block:'start'});
@@ -772,6 +804,59 @@ async function doExport(){
   btn.disabled=false;
   if(r.error){ s.textContent='Export failed: '+r.error; }
   else if(r.path){ s.textContent='Report saved to '+r.path; }
+}
+
+// ---- Data chatbot: grounded assistant (local Gemma + optional live lookups) ----
+// History is client-held ({role,content}); each fresh analysis resets it. All
+// rendering uses textContent (DOM-escaped) — model output + user text are untrusted.
+let chatHistory=[];
+function resetChat(){
+  chatHistory=[];
+  const log=document.getElementById('chatLog');
+  if(log) log.innerHTML='';
+}
+function addMsg(who, text, pending){
+  const log=document.getElementById('chatLog');
+  const m=document.createElement('div');
+  m.className='msg '+(who==='user'?'user':'bot');
+  const w=document.createElement('span'); w.className='who';
+  w.textContent = who==='user' ? 'You' : 'Assistant';
+  const t=document.createElement('span'); t.className='txt';
+  if(pending){ t.innerHTML='<span class="spinner"></span> thinking…'; }
+  else { t.textContent=text; }
+  m.appendChild(w); m.appendChild(t);
+  log.appendChild(m); log.scrollTop=log.scrollHeight;
+  return m;
+}
+async function doChat(e){
+  if(e) e.preventDefault();
+  const input=document.getElementById('chatInput');
+  const send=document.getElementById('chatSend');
+  const q=input.value.trim();
+  if(!q) return;
+  addMsg('user', q);
+  chatHistory.push({role:'user', content:q});
+  input.value=''; send.disabled=true; input.disabled=true;
+  const pending=addMsg('bot', '', true);
+  let r;
+  // Cap history sent across the bridge to bound the prompt (server also caps).
+  try{ r=await window.pywebview.api.chat(q, chatHistory.slice(-12)); }
+  catch(err){ r={error:String(err)}; }
+  send.disabled=false; input.disabled=false; input.focus();
+  const text = r.error ? ('Error: '+r.error) : (r.answer||'');
+  const t=pending.querySelector('.txt'); t.innerHTML=''; t.textContent=text;
+  if(r.lookup){
+    const l=document.createElement('span'); l.className='live';
+    l.textContent='checked live: '+r.lookup; pending.appendChild(l);
+  }
+  if(r.needs_model){
+    const l=document.createElement('span'); l.className='live';
+    const a=document.createElement('a'); a.href='#'; a.textContent='enable Gemma';
+    a.onclick=function(ev){ setupAI(ev); return false; };
+    l.appendChild(a); pending.appendChild(l);
+  }
+  if(!r.error){ chatHistory.push({role:'assistant', content:text}); }
+  document.getElementById('chatLog').scrollTop=document.getElementById('chatLog').scrollHeight;
 }
 
 // ---- Theme (light is the default; dark is opt-in and remembered) ----------
