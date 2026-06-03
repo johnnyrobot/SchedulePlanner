@@ -104,10 +104,11 @@ def test_build_live_workbook_emits_structured_report(lamc_routes, make_client,
     # under_supply is live-active now (fires from the schedule Waitlist status).
     # ge_scheduling is always present (inert when no transfer_goal given).
     assert {d["detector"] for d in inert} == {
-        "modality_mismatch", "prerequisite_ordering", "ge_scheduling"}
+        "modality_mismatch", "prerequisite_ordering", "ge_scheduling",
+        "time_block_conflict"}
     for d in inert:
-        if d["detector"] == "ge_scheduling":
-            continue  # ge_scheduling carries "reason" but no "remedy"
+        if d["detector"] == "ge_scheduling" or d.get("status") == "active":
+            continue  # ge_scheduling / active detectors carry "reason" but no "remedy"
         assert d["reason"]            # human-readable why
         assert "remedy" in d          # what would un-inert it
 
@@ -269,3 +270,57 @@ def test_analyze_live_local_ge_no_section_degrades(lamc_routes, make_client, tmp
     assert cov["pattern"] == "local" and cov["areas"] == []
     assert cov.get("error")
     assert report["results"] is not None
+
+
+# --- time-block collision detector (Workstream C) -----------------------------
+def test_time_block_collisions_detects_hard_pair():
+    """Two required courses whose only sections overlap are flagged as a hard pair,
+    and the redundant term-level finding for that pair is suppressed."""
+    sections = [
+        {"course": "CHEM 101", "days": "MW", "times": "9:00 AM - 10:00 AM"},
+        {"course": "MATH 245", "days": "MW", "times": "9:30 AM - 10:30 AM"},
+        {"course": "ENGL 101", "days": "T Th", "times": "9:00 AM - 10:00 AM"},
+    ]
+    program = {"code": "X", "title": "X", "courses": [
+        {"course_id": "CHEM 101"}, {"course_id": "MATH 245"}, {"course_id": "ENGL 101"}]}
+    results = {"programs": {"X": {"cohorts": {
+        "full_time": {"plan": {1: ["CHEM 101", "MATH 245", "ENGL 101"]}}}}}}
+    findings = build_live_workbook._time_block_collisions(sections, program, results)
+    assert any(f["kind"] == "pair" and set(f["courses"]) == {"CHEM 101", "MATH 245"}
+               for f in findings)
+    assert all(f["kind"] != "term" for f in findings)   # pair already covers it
+
+
+def test_time_block_collisions_none_when_no_overlap():
+    sections = [
+        {"course": "CHEM 101", "days": "MW", "times": "9:00 AM - 10:00 AM"},
+        {"course": "MATH 245", "days": "MW", "times": "10:00 AM - 11:00 AM"},
+    ]
+    program = {"code": "X", "title": "X",
+               "courses": [{"course_id": "CHEM 101"}, {"course_id": "MATH 245"}]}
+    results = {"programs": {"X": {"cohorts": {
+        "full_time": {"plan": {1: ["CHEM 101", "MATH 245"]}}}}}}
+    assert build_live_workbook._time_block_collisions(sections, program, results) == []
+
+
+def test_time_block_collisions_joint_three_way():
+    """Three courses with only two non-overlapping slots can't all fit a term, with
+    no single hard pair -> a term-level (joint) finding, not a pair finding."""
+    sections = []
+    for c in ("A 1", "B 1", "C 1"):
+        sections.append({"course": c, "days": "M", "times": "9:00 AM - 10:00 AM"})
+        sections.append({"course": c, "days": "M", "times": "10:00 AM - 11:00 AM"})
+    program = {"code": "X", "title": "X", "courses": [
+        {"course_id": "A 1"}, {"course_id": "B 1"}, {"course_id": "C 1"}]}
+    results = {"programs": {"X": {"cohorts": {
+        "full_time": {"plan": {1: ["A 1", "B 1", "C 1"]}}}}}}
+    findings = build_live_workbook._time_block_collisions(sections, program, results)
+    assert any(f["kind"] == "term" for f in findings)
+    assert all(f["kind"] != "pair" for f in findings)
+
+
+def test_time_block_detector_entry_active_vs_inert():
+    live = [{"course": "CHEM 101", "days": "MW", "times": "9:00 AM - 10:00 AM"}]
+    async_only = [{"course": "X 1", "days": "", "times": ""}]
+    assert build_live_workbook._time_block_detector_entry(live, [])["status"] == "active"
+    assert build_live_workbook._time_block_detector_entry(async_only, [])["status"] == "inert"

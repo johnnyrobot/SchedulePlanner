@@ -110,3 +110,22 @@ def test_export_report_before_analysis_returns_error(tmp_path):
     r = app.Api().export_report(str(tmp_path / "never.html"))
     assert "error" in r
     assert not (tmp_path / "never.html").exists()
+
+
+def test_report_renders_time_conflicts_block():
+    """A time_block_collisions finding in analysis renders in the Supply-diagnostics card."""
+    results = {
+        "terms_in_data": 4,
+        "analysis": {
+            "rotation_gaps": [], "single_section": [],
+            "modality_mismatch": [], "under_supply": [],
+            "time_block_collisions": [
+                {"kind": "pair", "courses": ["CHEM 101", "MATH 245"],
+                 "summary": "CHEM 101 & MATH 245 — every offered section overlaps"}],
+        },
+        "programs": {},
+    }
+    doc = report_export.render_report(results)
+    assert "Time conflicts" in doc
+    assert "every offered section overlaps" in doc
+    assert "CHEM 101 &amp; MATH 245" in doc   # & is HTML-escaped

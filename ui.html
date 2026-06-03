@@ -368,6 +368,10 @@
     <li><b>Under-supply</b> — demand exceeds the seats offered. On live data this shows as how many of a
       course's sections are <b>waitlisted</b> (at capacity); with the enrollment export it sharpens to the
       exact waitlist headcount.</li>
+    <li><b>Time conflicts</b> — two (or more) required courses whose meeting times collide, so a student
+      can't take them together and falls a term behind. Computed live from each section's days/times:
+      flags pairs whose <i>every</i> section overlaps, plus terms whose required load has no
+      conflict-free combination.</li>
   </ul>
 
   <h3>6 · Live-data extras (Option 2)</h3>
@@ -704,6 +708,7 @@ function renderLivePanel(res){
   const DET_LABELS={
     modality_mismatch:'Capacity / fill-rate analysis',
     prerequisite_ordering:'Prerequisite ordering',
+    time_block_conflict:'Time-block conflicts',
   };
   const inert=res.inert_detectors||[];
   if(inert.length){
@@ -848,6 +853,7 @@ function render(res){
     mk('Single-section risk',a.single_section,x=>'<li>'+escapeHtml(x.course)+'</li>')+
     mk('Modality mismatch',a.modality_mismatch,x=>'<li>'+escapeHtml(x.course)+' — '+x.fill_pct+'% fill</li>')+
     mk('Under-supply',a.under_supply,x=>'<li>'+escapeHtml(x.course)+' — '+(x.waitlisted>0?x.waitlisted+' waitlisted':(x.sections_waitlisted!=null?x.sections_waitlisted+'/'+x.sections_total+' sections waitlisted':'waitlisted'))+'</li>')+
+    mk('Time conflicts',a.time_block_collisions||[],x=>'<li>'+escapeHtml(x.summary)+'</li>')+
     '</div></div>';
   document.getElementById('out').innerHTML=html;
 }

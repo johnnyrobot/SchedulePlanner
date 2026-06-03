@@ -163,6 +163,11 @@ def _context(results: dict) -> str:
             line += " Not offered: " + ", ".join(rec["unmatched"]) + "."
         extra += ["", "LIVE RECONCILIATION", line]
 
+    tbc = (results.get("analysis") or {}).get("time_block_collisions") or []
+    if tbc:
+        extra += ["", "TIME CONFLICTS (required courses that clash by meeting time)",
+                  *[f"- {f.get('summary')}" for f in tbc]]
+
     return base + ("\n" + "\n".join(extra) if extra else "")
 
 
