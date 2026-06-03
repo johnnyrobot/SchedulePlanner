@@ -75,6 +75,9 @@ import engine
 from sources import (assist, catalog_ge, elumen, elumen_client, enrollment,
                      enrollment_ir, ge, mapping, pdf_loader, program_mapper,
                      schedule, timeblocks)
+# Imported under an alias so the module name does not shadow the loaded ``facility``
+# room-map that analyze_live / analyze_import pass around as a local variable.
+from sources import facility as facilities
 
 
 def build(campus, terms, program_query, *, client=None,
@@ -600,13 +603,183 @@ def _off_grid_sections(sections):
     return findings
 
 
+def _room_collisions(sections):
+    """Physical room double-bookings: two DIFFERENT sections placed in the same
+    room + term at overlapping meeting times.
+
+    Like ``_time_block_collisions``, this reads only the raw section days/times/room
+    (which the workbook schema drops) and runs OUTSIDE engine.run. It joins on
+    ``Facil ID`` when present (imported exports) and falls back to the room label
+    (the live fetch exposes a label, not an id). Async/TBA and online sections (no
+    physical slot) never collide; combined cross-lists sharing a ``Comb Sects ID``
+    are the SAME physical meeting under multiple course numbers, so they are
+    excluded; two rows of the same section (an undeduped meeting pattern) are too.
+    """
+    by_room = {}
+    for r in sections:
+        meeting = timeblocks.parse_meeting(r.get("days", ""), r.get("times", ""))
+        if not meeting:
+            continue  # async / TBA: no physical time slot to clash over
+        if facilities.is_physical_room(r.get("facil_id", "")):
+            room_key = facilities.norm_facil(r.get("facil_id", ""))
+        else:
+            label = mapping._norm(str(r.get("room", "") or ""))
+            if not label or "ONLINE" in label or label == "TBA":
+                continue
+            room_key = label
+        by_room.setdefault((r.get("term"), room_key), []).append({
+            "course": mapping._norm(r.get("course", "")),
+            "class_nbr": str(r.get("class_nbr", "") or ""),
+            "comb": str(r.get("Comb Sects ID", "") or "").strip(),
+            "meeting": meeting,
+        })
+
+    findings, seen = [], set()
+    for (term, room_key), secs in sorted(
+            by_room.items(), key=lambda kv: (str(kv[0][0]), kv[0][1])):
+        for i in range(len(secs)):
+            for j in range(i + 1, len(secs)):
+                a, b = secs[i], secs[j]
+                if a["class_nbr"] and a["class_nbr"] == b["class_nbr"]:
+                    continue  # same physical section (undeduped meeting-pattern row)
+                if a["comb"] and a["comb"] == b["comb"]:
+                    continue  # combined cross-list shares one physical room slot
+                if not timeblocks.meetings_overlap(a["meeting"], b["meeting"]):
+                    continue
+                cls = tuple(sorted((a["class_nbr"], b["class_nbr"])))
+                key = (str(term), room_key, cls)
+                if key in seen:
+                    continue
+                seen.add(key)
+                pair = sorted({a["course"], b["course"]})
+                who = " & ".join(pair) if len(pair) > 1 else pair[0]
+                findings.append({
+                    "kind": "double_book",
+                    "term": int(term) if term not in (None, "") else None,
+                    "room": room_key,
+                    "courses": pair,
+                    "class_nbrs": list(cls),
+                    "summary": (f"Room {room_key}"
+                                + (f" (term {term})" if term not in (None, "") else "")
+                                + f": {who} booked into the same room at overlapping "
+                                f"times (classes {', '.join(cls)})"),
+                })
+    return findings
+
+
+def _room_capacity_findings(sections, facility):
+    """Sections enrolled beyond their assigned room's seat capacity.
+
+    Meaningful only with BOTH a facility map (Facil ID -> capacity) AND per-section
+    ``Tot Enrl`` (an enrollment-bearing export). Returns ``[]`` when either is
+    absent — not an error, just nothing to say. Deterministic order.
+    """
+    if not facility:
+        return []
+    findings, seen = [], set()
+    for r in sections:
+        meta = facility.get(facilities.norm_facil(r.get("facil_id", "")))
+        if not meta or meta.get("capacity") is None:
+            continue
+        cap = meta["capacity"]
+        try:
+            tot = int(r.get("Tot Enrl"))
+        except (TypeError, ValueError):
+            continue
+        if tot <= cap:
+            continue
+        course = mapping._norm(r.get("course", ""))
+        cls = str(r.get("class_nbr", "") or "")
+        facil = facilities.norm_facil(r.get("facil_id", ""))
+        key = (str(r.get("term")), facil, cls)
+        if key in seen:
+            continue
+        seen.add(key)
+        findings.append({
+            "kind": "over_capacity", "course": course, "class_nbr": cls,
+            "term": int(r["term"]) if r.get("term") not in (None, "") else None,
+            "room": facil, "capacity": cap, "enrolled": tot,
+            "summary": (f"{course} (class {cls}) has {tot} enrolled in room {facil} "
+                        f"(seats {cap}) — over capacity by {tot - cap}"),
+        })
+    findings.sort(key=lambda f: (str(f["term"]), f["room"], f["course"], f["class_nbr"]))
+    return findings
+
+
+def _lab_pool_stats(sections, facility):
+    """Descriptive lab-pool use: how many scarce lab rooms (LAB/CMLB) the sections
+    actually occupy, of the total in the facility table. Honest context for the
+    detector entry, NOT an alarm. ``None`` when no facility table / no labs."""
+    if not facility:
+        return None
+    total_labs = sum(1 for m in facility.values() if facilities.is_lab(m))
+    if not total_labs:
+        return None
+    in_use = {facilities.norm_facil(r.get("facil_id", "")) for r in sections
+              if facilities.is_lab(facility.get(facilities.norm_facil(r.get("facil_id", ""))))}
+    return {"total_labs": total_labs, "labs_in_use": len(in_use)}
+
+
+def _room_detector_entry(sections, collisions, *, facility_used, capacity=None,
+                         lab_stats=None):
+    """Honest active/inert entry for the room detector (mirrors
+    ``_time_block_detector_entry``).
+
+    Active when >=1 section has both a meeting time and a physical room key (Facil
+    ID or a non-online room label); inert when every section is
+    online/roomless/async. The capacity sub-analysis reports active only when a
+    facility table was supplied.
+    """
+    has_room = False
+    for r in sections:
+        if not timeblocks.parse_meeting(r.get("days", ""), r.get("times", "")):
+            continue
+        if facilities.is_physical_room(r.get("facil_id", "")):
+            has_room = True
+            break
+        label = mapping._norm(str(r.get("room", "") or ""))
+        if label and "ONLINE" not in label and label != "TBA":
+            has_room = True
+            break
+    if not has_room:
+        return {
+            "detector": "room_conflict", "status": "inert",
+            "reason": ("no fetched section has both a meeting time and a physical "
+                       "room (all online/async/TBA), so room double-bookings cannot "
+                       "be computed"),
+        }
+    entry = {
+        "detector": "room_conflict", "status": "active", "found": len(collisions),
+        "reason": ("checks whether two different sections are booked into the same "
+                   "room at overlapping times (combined cross-lists excluded), from "
+                   "the section room + days/times"),
+    }
+    if facility_used:
+        entry["capacity"] = {
+            "status": "active", "over_capacity_found": len(capacity or []),
+            "note": ("sections enrolled beyond their assigned room's seat capacity, "
+                     "joined on Facil ID against the facility table"),
+        }
+        if lab_stats:
+            entry["capacity"]["lab_pool"] = lab_stats
+    else:
+        entry["capacity"] = {
+            "status": "inert",
+            "reason": ("no facility table supplied, so room capacity / lab-pool use "
+                       "was not computed (the live fetch exposes a room label, not a "
+                       "Facil ID + seats — supply the facility export on the offline "
+                       "import path)"),
+        }
+    return entry
+
+
 def analyze_live(campus, terms, program_query, out_path, *, client=None,
                  enrollment_path=None, elumen_fixture=None, elumen_live=False,
                  enrollment_map=None, prereq_max_clauses=None,
                  transfer_goal="none", assist_year_id=None, ge_pattern_path=None,
                  program_id=None, program_title="", program_award="",
                  assist_areas=None, elumen_cache=None,
-                 catalog_pdf=None, odl_json=None):
+                 catalog_pdf=None, odl_json=None, facility=None):
     """Run the full live pipeline and return a structured, JSON-serializable report.
 
     The report carries the reconciliation (matched/unmatched program courses)
@@ -859,10 +1032,21 @@ def analyze_live(campus, terms, program_query, out_path, *, client=None,
     # days/times — which the workbook schema drops — joined with the engine's cohort
     # plans, then injected into results["analysis"] alongside the other diagnostics.
     collisions = _time_block_collisions(sections, program, report["results"])
+    room_conflicts = _room_collisions(sections)
+    room_capacity = _room_capacity_findings(sections, facility) if facility else []
     if isinstance(report["results"], dict) and isinstance(report["results"].get("analysis"), dict):
-        report["results"]["analysis"]["time_block_collisions"] = collisions
-        report["results"]["analysis"]["off_grid_sections"] = _off_grid_sections(sections)
+        analysis = report["results"]["analysis"]
+        analysis["time_block_collisions"] = collisions
+        analysis["off_grid_sections"] = _off_grid_sections(sections)
+        # Room double-bookings (and, when a facility table is supplied, over-capacity)
+        # are computed HERE from the raw section room/days/times the workbook drops.
+        analysis["room_conflicts"] = room_conflicts
+        if facility:
+            analysis["room_capacity"] = room_capacity
     report["inert_detectors"].append(_time_block_detector_entry(sections, collisions))
+    report["inert_detectors"].append(_room_detector_entry(
+        sections, room_conflicts, facility_used=bool(facility),
+        capacity=room_capacity, lab_stats=_lab_pool_stats(sections, facility)))
     return report
 
 

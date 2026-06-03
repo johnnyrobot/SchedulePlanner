@@ -713,6 +713,7 @@ function renderLivePanel(res){
     modality_mismatch:'Capacity / fill-rate analysis',
     prerequisite_ordering:'Prerequisite ordering',
     time_block_conflict:'Time-block conflicts',
+    room_conflict:'Room conflicts & capacity',
   };
   const inert=res.inert_detectors||[];
   if(inert.length){
@@ -859,6 +860,8 @@ function render(res){
     mk('Under-supply',a.under_supply,x=>'<li>'+escapeHtml(x.course)+' — '+(x.waitlisted>0?x.waitlisted+' waitlisted':(x.sections_waitlisted!=null?x.sections_waitlisted+'/'+x.sections_total+' sections waitlisted':'waitlisted'))+'</li>')+
     mk('Time conflicts',a.time_block_collisions||[],x=>'<li>'+escapeHtml(x.summary)+'</li>')+
     mk('Off-grid sections',a.off_grid_sections||[],x=>'<li>'+escapeHtml(x.summary)+'</li>')+
+    mk('Room double-bookings',a.room_conflicts||[],x=>'<li>'+escapeHtml(x.summary)+'</li>')+
+    mk('Room over capacity',a.room_capacity||[],x=>'<li>'+escapeHtml(x.summary)+'</li>')+
     '</div></div>';
   document.getElementById('out').innerHTML=html;
 }

@@ -88,6 +88,11 @@ def fetch_sections(campus, terms=None, *, client=None):
                         "days": meeting.get("days", ""),
                         "times": meeting.get("times", ""),
                         "room": meeting.get("room", ""),
+                        # Physical facility id when the API exposes one (tolerant
+                        # default ""): lets the room-capacity detector join the
+                        # facility table. The schedule-export importer populates it
+                        # from the export's "Facil ID" column.
+                        "facil_id": meeting.get("facilityId", "") or meeting.get("facilId", ""),
                         "instructor": meeting.get("instr", ""),
                     })
     return records
