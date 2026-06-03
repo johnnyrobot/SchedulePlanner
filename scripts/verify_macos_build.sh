@@ -104,6 +104,64 @@ main() {
     exit 1
   fi
 
+  # Check 5: the OpenDataLoader Java CLI jar (catalog-PDF / Local AA/AS GE) is
+  # bundled. It ships via `--collect-data opendataloader_pdf`; this asserts the
+  # trim (collect-data, not collect-all) still includes the jar the feature runs.
+  echo "--- catalog jar check ---"
+  local odl_jar
+  odl_jar="$(find "${app}" -name 'opendataloader-pdf-cli.jar' -print 2>/dev/null | head -n 1)"
+  if [ -n "${odl_jar}" ]; then
+    echo "PASS: OpenDataLoader CLI jar bundled (${odl_jar##*/})"
+  else
+    echo "FAIL: opendataloader-pdf-cli.jar not found under ${app}" >&2
+    echo "      (build_macos.sh must keep --collect-data opendataloader_pdf)" >&2
+    exit 1
+  fi
+
+  # Check 6: NO hybrid-mode ML bloat. The catalog feature runs the bundled jar in
+  # a JVM subprocess, so the Python side never needs torch/docling. A stray
+  # `--collect-all opendataloader_pdf` would drag ~300+ MB of those in via the
+  # optional hybrid_server submodule; assert they're absent so the trim can't
+  # silently regress.
+  echo "--- no-bloat regression guard ---"
+  local bloat=""
+  local hit
+  for pat in 'libtorch*.dylib' 'libtorch*.so'; do
+    hit="$(find "${app}" -name "${pat}" -print 2>/dev/null | head -n 1)"
+    [ -n "${hit}" ] && bloat="${bloat} ${hit}"
+  done
+  for d in torch docling; do
+    hit="$(find "${app}" -type d -name "${d}" -print 2>/dev/null | head -n 1)"
+    [ -n "${hit}" ] && bloat="${bloat} ${hit}"
+  done
+  if [ -n "${bloat}" ]; then
+    echo "FAIL: unexpected ML/hybrid bloat in bundle:${bloat}" >&2
+    echo "      (build scripts must use --collect-data opendataloader_pdf, not --collect-all)" >&2
+    exit 1
+  fi
+  echo "PASS: no torch/docling hybrid-mode bloat in bundle"
+
+  # Check 7: release metadata — a reverse-DNS bundle identifier and a real
+  # version string (PyInstaller leaves these at 'SchedulePlanner' / 0.0.0 unless
+  # build_macos.sh stamps them). Guards a distributable bundle's identity.
+  echo "--- release metadata check ---"
+  local plist="${app}/Contents/Info.plist"
+  local bid ver
+  bid="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "${plist}" 2>/dev/null || echo '')"
+  ver="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "${plist}" 2>/dev/null || echo '')"
+  if [[ "${bid}" == *.* ]] && [ "${bid}" != "SchedulePlanner" ]; then
+    echo "PASS: CFBundleIdentifier is reverse-DNS (${bid})"
+  else
+    echo "FAIL: CFBundleIdentifier should be reverse-DNS, got '${bid}'" >&2
+    exit 1
+  fi
+  if [ -n "${ver}" ] && [ "${ver}" != "0.0.0" ]; then
+    echo "PASS: CFBundleShortVersionString set (${ver})"
+  else
+    echo "FAIL: CFBundleShortVersionString is unset/0.0.0 ('${ver}')" >&2
+    exit 1
+  fi
+
   # Negative control: prove the resource check bites.
   echo "--- negative control ---"
   negative_control
