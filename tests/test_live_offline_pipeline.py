@@ -105,7 +105,7 @@ def test_build_live_workbook_emits_structured_report(lamc_routes, make_client,
     # ge_scheduling is always present (inert when no transfer_goal given).
     assert {d["detector"] for d in inert} == {
         "modality_mismatch", "prerequisite_ordering", "ge_scheduling",
-        "time_block_conflict"}
+        "time_block_conflict", "room_conflict"}
     for d in inert:
         if d["detector"] == "ge_scheduling" or d.get("status") == "active":
             continue  # ge_scheduling / active detectors carry "reason" but no "remedy"
