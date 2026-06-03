@@ -165,6 +165,37 @@ nothing.
 - `scripts/verify_macos_build.sh` asserts `Contents/Resources/jre/bin/java -version`
   runs in the built bundle.
 
+## DMG installer (signed + notarized)
+
+For public distribution, `scripts/package_dmg_macos.sh` wraps the already
+signed+notarized+stapled `dist/SchedulePlanner.app` into a drag-to-Applications
+`.dmg`, then signs + notarizes + staples the **disk image itself** (so the
+downloaded `.dmg` also clears Gatekeeper, not just the app inside). It uses ONLY
+built-in tools (`hdiutil` + `osascript`) — **no Homebrew / `create-dmg`**.
+
+```bash
+# After build_macos.sh + sign_notarize_macos.sh have produced a notarized .app:
+export MAC_SIGN_IDENTITY="Developer ID Application: NAME (TEAMID)"
+export MAC_NOTARY_PROFILE="your-notarytool-keychain-profile"
+./scripts/package_dmg_macos.sh
+# -> dist/release/SchedulePlanner-<version>-macos-<arch>.dmg (+ SHA256SUMS)
+```
+
+Two non-obvious points baked into the script:
+
+- The Finder window layout (positioned app icon + Applications alias) is applied
+  by mounting the staging image **without `-nobrowse`** — with `-nobrowse`,
+  `osascript`'s `tell disk "<vol>"` fails with `-1728` (can't get disk). The
+  styling is best-effort and **non-fatal**: if it can't run, the DMG still ships
+  with the app + an Applications alias so drag-to-install works; only the icon
+  arrangement is skipped.
+- Gatekeeper-assess a **disk image** with `spctl -a -t install`, **not**
+  `-t open`. For a notarized DMG, `-t open` returns a spurious
+  `rejected / source=Insufficient Context`, whereas `-t install` correctly
+  reports `accepted / source=Notarized Developer ID`. The authoritative proof is
+  `xcrun stapler validate` + a notary `Accepted`; the script cross-checks with
+  `-t install`.
+
 ## Verification
 
 ### Verified headlessly (automated, reproducible)
