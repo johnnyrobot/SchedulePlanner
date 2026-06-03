@@ -559,6 +559,29 @@ def _time_block_detector_entry(sections, collisions):
     }
 
 
+def _off_grid_sections(sections):
+    """Sections whose start time is off the college's standardized time-block grid
+    (deduped by course + days + times + term). Async/TBA sections and term lengths
+    without a known grid are skipped (timeblocks.on_grid fails open)."""
+    findings, seen = [], set()
+    for r in sections:
+        meeting = timeblocks.parse_meeting(r.get("days", ""), r.get("times", ""))
+        if not meeting or timeblocks.on_grid(r.get("term"), meeting):
+            continue
+        cid = mapping._norm(r.get("course", ""))
+        key = (cid, r.get("days", ""), r.get("times", ""), r.get("term"))
+        if key in seen:
+            continue
+        seen.add(key)
+        findings.append({
+            "course": cid, "term": r.get("term"),
+            "days": r.get("days", ""), "times": r.get("times", ""),
+            "summary": (f"{cid} ({r.get('days', '')} {r.get('times', '')}) starts off the "
+                        "standard time-block grid"),
+        })
+    return findings
+
+
 def analyze_live(campus, terms, program_query, out_path, *, client=None,
                  enrollment_path=None, elumen_fixture=None, elumen_live=False,
                  enrollment_map=None, prereq_max_clauses=None,
@@ -814,6 +837,7 @@ def analyze_live(campus, terms, program_query, out_path, *, client=None,
     collisions = _time_block_collisions(sections, program, report["results"])
     if isinstance(report["results"], dict) and isinstance(report["results"].get("analysis"), dict):
         report["results"]["analysis"]["time_block_collisions"] = collisions
+        report["results"]["analysis"]["off_grid_sections"] = _off_grid_sections(sections)
     report["inert_detectors"].append(_time_block_detector_entry(sections, collisions))
     return report
 

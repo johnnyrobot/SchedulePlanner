@@ -372,6 +372,10 @@
       can't take them together and falls a term behind. Computed live from each section's days/times:
       flags pairs whose <i>every</i> section overlaps, plus terms whose required load has no
       conflict-free combination.</li>
+    <li><b>Off-grid sections</b> — a section whose start time isn't on the college's standardized
+      time-block grid (e.g. a 9:00 start where the grid is 8:55), checked against the published
+      Fall / Spring / Winter / Summer time blocks. Off-grid starts are a common source of avoidable
+      conflicts.</li>
   </ul>
 
   <h3>6 · Live-data extras (Option 2)</h3>
@@ -854,6 +858,7 @@ function render(res){
     mk('Modality mismatch',a.modality_mismatch,x=>'<li>'+escapeHtml(x.course)+' — '+x.fill_pct+'% fill</li>')+
     mk('Under-supply',a.under_supply,x=>'<li>'+escapeHtml(x.course)+' — '+(x.waitlisted>0?x.waitlisted+' waitlisted':(x.sections_waitlisted!=null?x.sections_waitlisted+'/'+x.sections_total+' sections waitlisted':'waitlisted'))+'</li>')+
     mk('Time conflicts',a.time_block_collisions||[],x=>'<li>'+escapeHtml(x.summary)+'</li>')+
+    mk('Off-grid sections',a.off_grid_sections||[],x=>'<li>'+escapeHtml(x.summary)+'</li>')+
     '</div></div>';
   document.getElementById('out').innerHTML=html;
 }

@@ -17,6 +17,8 @@ and therefore never conflicts with anything.
 """
 from __future__ import annotations
 
+import json
+import os
 import re
 
 # Canonical weekday tokens, ordered longest-first so the tokenizer consumes the
@@ -154,3 +156,59 @@ def feasible_selection(course_to_sections):
                 culprits.add(items[i][0])
                 culprits.add(items[j][0])
     return False, (sorted(culprits) or sorted(course_to_sections))
+
+
+# --- standardized time-block grid (conformance) -------------------------------
+_GRID_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                          "data", "time_blocks", "lamc_blocks.json")
+_GRID_CACHE = None
+
+
+def _clock_to_min(s):
+    """'7:15 AM' -> minutes since midnight, else None."""
+    m = _TIME_RE.search(str(s))
+    return _to_min(*m.groups()) if m else None
+
+
+def term_length(term_code):
+    """Map a LACCD term code to a grid key. Last digit: 8/2 -> '16-week' (Fall/
+    Spring), 1 -> 'winter', 6 -> 'summer'. Unknown -> '16-week' (dominant default).
+    """
+    d = str(term_code).strip()[-1:] if term_code is not None else ""
+    return {"8": "16-week", "2": "16-week", "1": "winter", "6": "summer"}.get(d, "16-week")
+
+
+def load_grid(path=None):
+    """Load standardized START times (as minute-sets) per term length. Cached.
+
+    Returns {} on any read/parse failure so callers fail OPEN (never flag when we
+    cannot load the grid)."""
+    global _GRID_CACHE
+    if _GRID_CACHE is not None and path is None:
+        return _GRID_CACHE
+    try:
+        with open(path or _GRID_PATH, encoding="utf-8") as fh:
+            raw = json.load(fh)
+    except Exception:
+        return {}
+    grid = {}
+    for key, val in raw.items():
+        if isinstance(val, dict) and "starts" in val:
+            grid[key] = {m for m in (_clock_to_min(s) for s in val["starts"]) if m is not None}
+    if path is None:
+        _GRID_CACHE = grid
+    return grid
+
+
+def on_grid(term_code, meeting, *, tolerance_min=5, grid=None):
+    """True if a section's start time is on the standard grid for its term length
+    (within ``tolerance_min``). No meeting (async/TBA) is vacuously on-grid. Fails
+    OPEN: returns True when no grid exists for the term length (never a false flag).
+    """
+    if not meeting:
+        return True
+    starts = (grid if grid is not None else load_grid()).get(term_length(term_code))
+    if not starts:
+        return True
+    sec_start = min(b[1] for b in meeting)
+    return any(abs(sec_start - s) <= tolerance_min for s in starts)
