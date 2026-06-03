@@ -269,7 +269,7 @@
     <div class="row mt liveopts">
       <button class="ghost" id="liveEnrollBtn" type="button" onclick="pickLiveEnrollment()">Add enrollment export (optional)</button>
       <span id="liveEnrollName" class="hint"></span>
-      <span class="tip" tabindex="0" role="button" aria-label="What is the enrollment export option?">?<span class="tip-bub" role="tooltip">An IR / PeopleSoft enrollment export (<b>.xlsx</b>) with seat <b>Cap / Tot / Wait</b> counts. Adds capacity / fill-rate analysis on top of the live schedule. <b>Experimental</b> — joined to live sections by <i>term + CRN</i>; if none match, counts aren't applied and you'll see the join count.</span></span>
+      <span class="tip" tabindex="0" role="button" aria-label="What is the enrollment export option?">?<span class="tip-bub" role="tooltip">A real IR / PeopleSoft enrollment export (<b>.csv or .xlsx</b>) with seat <b>Cap / Tot / Wait</b> counts — the term is auto-normalized (e.g. &ldquo;2024 Fall&rdquo; or 2248). Adds capacity / fill-rate analysis on top of the live schedule. <b>Experimental</b> — joined to live sections by <i>term + CRN</i>, so use a <i>current-term</i> export; if none match, counts aren't applied and you'll see the join count.</span></span>
     </div>
     <div class="row mt liveopts" id="catalogRow" style="display:none">
       <button class="ghost" id="catalogBtn" type="button" onclick="pickCatalogPdf()">Choose catalog PDF</button>
@@ -525,13 +525,13 @@ async function loadDemo(){
 // markup is a static HTML literal; the user-entered campus/program are echoed
 // into #picked via .textContent (the browser escapes it, so no escapeHtml()
 // is needed here). The live-panel fields ARE escaped in renderLivePanel().
-// Optional enrollment-export picker for the live form. Reuses choose_file()
-// (xlsx-filtered) and stores the path in liveEnrollPath; the filename + a remove
-// link render beside the button. This file only ENRICHES a live fetch (it is
-// passed as enrollment_path), never used as a standalone workbook.
+// Optional enrollment-export picker for the live form. Uses choose_enrollment_file()
+// (accepts .csv + .xlsx real IR exports) and stores the path in liveEnrollPath; the
+// filename + a remove link render beside the button. This file only ENRICHES a live
+// fetch (it is passed as enrollment_path), never used as a standalone workbook.
 async function pickLiveEnrollment(){
   let r;
-  try{ r = await window.pywebview.api.choose_file(); }
+  try{ r = await window.pywebview.api.choose_enrollment_file(); }
   catch(e){ r = {path:''}; }
   if(r && r.path){
     liveEnrollPath = r.path;

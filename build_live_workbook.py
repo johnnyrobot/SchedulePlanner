@@ -24,10 +24,11 @@ LIVE REALITY (what one run actually produces):
     --elumen-fixture / --elumen-live (a DNF->CNF prereq map threaded into the
     catalog) can FLIP modality_mismatch / prerequisite_ordering to active and
     sharpen under_supply; that enrichment runs OUTSIDE engine.run, before write.
-    These paths carry honest caveats: the enrollment join is fixture-scoped (the
-    live-schedule <-> IR (term, CRN) join is not validated on real data, and
-    today's committed fixtures match zero sections so a real --enrollment run
-    stays inert); the --elumen-fixture prereq slice is fixture-only (not
+    These paths carry honest caveats: the enrollment export is read by the
+    tolerant enrollment_ir adapter (real LACCD CSV/xlsx, term auto-normalized) and
+    its (term, CRN) join is validated end-to-end, but it lands only when the
+    export's term overlaps the fetched term (the live API serves only current
+    terms); the --elumen-fixture prereq slice is fixture-only (not
     validated on real eLumen data); and --elumen-live (below) is best-effort
     against a real-but-unreviewed endpoint.
 
@@ -71,8 +72,9 @@ import os
 import httpx
 
 import engine
-from sources import (assist, catalog_ge, elumen, elumen_client, enrollment, ge,
-                     mapping, pdf_loader, program_mapper, schedule, timeblocks)
+from sources import (assist, catalog_ge, elumen, elumen_client, enrollment,
+                     enrollment_ir, ge, mapping, pdf_loader, program_mapper,
+                     schedule, timeblocks)
 
 
 def build(campus, terms, program_query, *, client=None,
@@ -162,9 +164,11 @@ def _enrollment_detector_entries(*, source, matched, total):
 
     It flips to "active" ONLY when an enrollment export was joined AND the join
     matched >=1 section. Absent enrollment, or a zero-match join, keeps the
-    honest inert reason. The activation is LABELED fixture-scoped — the
-    live-schedule <-> IR (term, CRN) join is NOT validated on real data (no
-    committed schedule (2268) + enrollment ({2248,2252}) fixture pair overlaps).
+    honest inert reason. The IR adapter (sources/enrollment_ir) now ingests real
+    LACCD/PeopleSoft exports (CSV + xlsx, term auto-normalized) and the join is
+    validated end-to-end; the remaining real-world caveat is that the live
+    schedule API serves only CURRENT terms, so an uploaded export matches a live
+    fetch only when its term equals the fetched term.
 
     under_supply is NOT built here: it fires live from the schedule's Waitlist
     status (engine.analyze + mapping's "Avail Status"), so it is no longer
@@ -183,9 +187,22 @@ def _enrollment_detector_entries(*, source, matched, total):
                 if d["detector"] == "modality_mismatch"]
 
     if matched >= 1:
-        active_note = ("FIXTURE-SCOPED: the live-schedule <-> IR (term, CRN) join "
-                       "is NOT validated on real data; activated here via a "
-                       "self-consistent / hand-keyed enrollment map.")
+        # The inline-map path (offline tests) is a hand-keyed SYNTHETIC join, so
+        # it stays honestly fixture-scoped; a real uploaded file goes through the
+        # enrollment_ir adapter and is a validated real-export join.
+        synthetic = "synthetic" in str(source).lower()
+        if synthetic:
+            active_note = ("FIXTURE-SCOPED: activated via a self-consistent / "
+                           "hand-keyed enrollment map (synthetic key) — NOT "
+                           "validated on real data; a real upload uses the "
+                           "enrollment_ir adapter joined on (term, CRN).")
+        else:
+            active_note = ("the enrollment export was ingested by the IR adapter "
+                           "(real LACCD/PeopleSoft CSV or xlsx; term "
+                           "auto-normalized) and joined to the fetched schedule on "
+                           "(term, CRN). Caveat: combined-section caps may "
+                           "overstate, and under_supply stays a demand proxy — "
+                           "never completion causation.")
         return [
             {
                 "detector": "modality_mismatch",
@@ -201,10 +218,11 @@ def _enrollment_detector_entries(*, source, matched, total):
 
     # Enrollment present but the join matched ZERO rows: stay INERT, honestly.
     zero_reason = (
-        f"enrollment export {source!r} was loaded but the (term, CRN) join "
-        f"matched 0 sections (live-schedule <-> IR fixtures disjoint: schedule "
-        f"term 2268 vs enrollment terms {{2248, 2252}}, CRN sets disjoint), so "
-        f"Cap/Tot stay 0 and the detector cannot fire")
+        f"enrollment export {source!r} was ingested but the (term, CRN) join "
+        f"matched 0 sections — the export's term(s) do not overlap the fetched "
+        f"schedule term(s) (the live schedule API serves only CURRENT terms, so a "
+        f"historical IR export will not match a live fetch), so Cap/Tot stay 0 and "
+        f"the detector cannot fire")
     return [
         {
             "detector": "modality_mismatch",
@@ -215,9 +233,9 @@ def _enrollment_detector_entries(*, source, matched, total):
             "match_ratio": 0.0 if total else None,
             "matched_sections_note": "join matched 0 sections",
             "reason": zero_reason,
-            "remedy": ("supply an enrollment export whose (term, CRN) keys overlap "
-                       "the fetched schedule (validated end-to-end only on a "
-                       "self-consistent fixture set)"),
+            "remedy": ("supply an enrollment export whose term matches the fetched "
+                       "term (a current-term IR export for a live build), or use "
+                       "Option 1 with a workbook that already carries Cap/Tot/Wait"),
         },
     ]
 
@@ -596,11 +614,13 @@ def analyze_live(campus, terms, program_query, out_path, *, client=None,
     them, in addition to the human banner main() prints.
 
     m7 enrichment (ALL outside engine.run, on the raw records, before the write):
-      - ``enrollment_path`` loads an IR PeopleSoft export and joins counts onto
-        the fetched sections via enrollment.enrich_sections; ``enrollment_map``
-        supplies a ready-made join dict instead (used by offline tests with a
-        hand-keyed synthetic key, since no committed schedule+enrollment fixture
-        pair overlaps — the live<->IR join is fixture-only / not validated live).
+      - ``enrollment_path`` loads an IR PeopleSoft export via the tolerant
+        ``enrollment_ir.load_ir_export`` adapter (real LACCD CSV/xlsx shapes, term
+        auto-normalized, meeting-pattern deduped) and joins its counts onto the
+        fetched sections via enrollment.enrich_sections; ``enrollment_map``
+        supplies a ready-made join dict instead (offline tests). The join lands
+        when the export's term overlaps the fetched term (the live API serves only
+        current terms).
       - ``elumen_fixture`` loads the FIXTURE-ONLY eLumen DNF records and builds a
         course-id -> CNF-string prereq map (elumen.build_prereq_map), threaded
         into the catalog sheet. ``prereq_max_clauses`` overrides the DNF->CNF
@@ -666,7 +686,11 @@ def analyze_live(campus, terms, program_query, out_path, *, client=None,
         matched_sections = sum(1 for r in sections if "Cap Enrl" in r)
     elif enrollment_path is not None:
         enrollment_source = enrollment_path
-        enrollment_data = enrollment.load_enrollment(enrollment_path)
+        # Tolerant real-export adapter (CSV/xlsx, aliased columns, "2024 Fall"
+        # term crosswalk, meeting-pattern dedup, cancelled/combined handling);
+        # emits the same (term, CRN) -> counts map the strict reader does, so the
+        # enrich_sections join below is unchanged.
+        enrollment_data = enrollment_ir.load_ir_export(enrollment_path)
         sections = enrollment.enrich_sections(sections, enrollment_data)
         matched_sections = sum(1 for r in sections if "Cap Enrl" in r)
 
