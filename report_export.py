@@ -186,6 +186,7 @@ JS = """
 _DET_LABELS = {
     "modality_mismatch": "Capacity / fill-rate analysis",
     "prerequisite_ordering": "Prerequisite ordering",
+    "time_block_conflict": "Time-block conflicts",
 }
 _PLAN_LABELS = {"shared": "met by major", "concrete": "concrete", "reserve": "reserve"}
 _GE_PATTERN_NAMES = {"igetc": "IGETC", "cal-getc": "Cal-GETC", "csu-ge": "CSU GE"}
@@ -277,7 +278,9 @@ def _diagnostics(results: dict) -> str:
                 lambda x: _esc(x.get("course")))
         + block("Modality mismatch", a.get("modality_mismatch", []),
                 lambda x: f'{_esc(x.get("course"))} — {_esc(x.get("fill_pct"))}% fill')
-        + block("Under-supply", a.get("under_supply", []), under))
+        + block("Under-supply", a.get("under_supply", []), under)
+        + block("Time conflicts", a.get("time_block_collisions", []),
+                lambda x: _esc(x.get("summary"))))
     n = _esc(results.get("terms_in_data"))
     return (f'<section class="card" aria-labelledby="diag"><h2 id="diag">Supply diagnostics '
             f'({n} terms)</h2><div class="analysis">{body}</div></section>')

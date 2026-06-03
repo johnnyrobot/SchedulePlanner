@@ -72,7 +72,7 @@ import httpx
 
 import engine
 from sources import (assist, catalog_ge, elumen, elumen_client, enrollment, ge,
-                     mapping, pdf_loader, program_mapper, schedule)
+                     mapping, pdf_loader, program_mapper, schedule, timeblocks)
 
 
 def build(campus, terms, program_query, *, client=None,
@@ -469,6 +469,96 @@ def _program_subjects(sections, program):
     })
 
 
+def _section_meetings_by_course(sections):
+    """Map normalized course id -> list of meeting-blocks (one entry per offered section)."""
+    by_course = {}
+    for r in sections:
+        cid = mapping._norm(r.get("course", ""))
+        if not cid:
+            continue
+        by_course.setdefault(cid, []).append(
+            timeblocks.parse_meeting(r.get("days", ""), r.get("times", "")))
+    return by_course
+
+
+def _time_block_collisions(sections, program, results):
+    """Detect class-meeting-time conflicts among a program's required courses.
+
+    Two non-redundant levels (uses only data already fetched — section days/times):
+      - PAIRWISE HARD: two required courses whose EVERY section overlaps, so a student
+        literally cannot take both as scheduled (program-wide, plan-independent).
+      - JOINT TERM: the courses the solver placed together in one cohort-term have no
+        conflict-free section combination AND it is not reducible to a single hard pair
+        (a genuine 3+-way clash); reported only when no pair in that term is already hard,
+        so findings never double-count.
+
+    Returns a JSON-serializable list of finding dicts, each with a human ``summary``.
+    """
+    by_course = _section_meetings_by_course(sections)
+    required = [mapping._norm(c["course_id"]) for c in (program or {}).get("courses", [])]
+    required = [c for c in required if c in by_course]  # only courses actually offered
+
+    findings, hard_pairs = [], set()
+    for i in range(len(required)):
+        for j in range(i + 1, len(required)):
+            a, b = required[i], required[j]
+            if timeblocks.pairwise_hard_conflict(by_course[a], by_course[b]):
+                key = tuple(sorted((a, b)))
+                if key not in hard_pairs:
+                    hard_pairs.add(key)
+                    findings.append({
+                        "kind": "pair", "courses": list(key),
+                        "summary": (f"{key[0]} & {key[1]} — every offered section overlaps; "
+                                    "a student cannot take both as scheduled"),
+                    })
+
+    for _pcode, entry in (results or {}).get("programs", {}).items():
+        for ck, res in (entry.get("cohorts") or {}).items():
+            if not res or not res.get("plan"):
+                continue
+            label = engine.COHORTS.get(ck, {}).get("label", ck)
+            for term, items in res["plan"].items():
+                cts = {cid: by_course[cid] for cid in (mapping._norm(it) for it in items)
+                       if cid in by_course}
+                if len(cts) < 2:
+                    continue
+                term_ids = sorted(cts)
+                # skip terms already explained by a reported hard pair (no dup noise)
+                if any(tuple(sorted((x, y))) in hard_pairs
+                       for k, x in enumerate(term_ids) for y in term_ids[k + 1:]):
+                    continue
+                feasible, culprits = timeblocks.feasible_selection(cts)
+                if not feasible:
+                    findings.append({
+                        "kind": "term", "cohort": ck, "term": int(term),
+                        "courses": culprits,
+                        "summary": (f"{label} term {term}: {', '.join(culprits)} can't all be "
+                                    "scheduled together without a time conflict"),
+                    })
+    return findings
+
+
+def _time_block_detector_entry(sections, collisions):
+    """Honest active/inert entry for the time-block conflict detector.
+
+    Active whenever any fetched section carries a parseable meeting time (the live schedule
+    does); inert only if no meeting data is present (e.g. an all-async/TBA fetch).
+    """
+    has_meeting = any(timeblocks.parse_meeting(r.get("days", ""), r.get("times", ""))
+                      for r in sections)
+    if not has_meeting:
+        return {
+            "detector": "time_block_conflict", "status": "inert",
+            "reason": ("no section in the fetched terms has a scheduled meeting time "
+                       "(all async/TBA), so time-of-day conflicts cannot be computed"),
+        }
+    return {
+        "detector": "time_block_conflict", "status": "active", "found": len(collisions),
+        "reason": ("checks whether a program's required courses have a conflict-free set of "
+                   "meeting times each term, using the live schedule's days/times"),
+    }
+
+
 def analyze_live(campus, terms, program_query, out_path, *, client=None,
                  enrollment_path=None, elumen_fixture=None, elumen_live=False,
                  enrollment_map=None, prereq_max_clauses=None,
@@ -717,6 +807,14 @@ def analyze_live(campus, terms, program_query, out_path, *, client=None,
                            ge_rows=ge_rows)
     report["workbook"] = out_path
     report["results"] = engine.run(out_path)
+
+    # Time-block collisions: computed HERE (outside engine.run) from the raw section
+    # days/times — which the workbook schema drops — joined with the engine's cohort
+    # plans, then injected into results["analysis"] alongside the other diagnostics.
+    collisions = _time_block_collisions(sections, program, report["results"])
+    if isinstance(report["results"], dict) and isinstance(report["results"].get("analysis"), dict):
+        report["results"]["analysis"]["time_block_collisions"] = collisions
+    report["inert_detectors"].append(_time_block_detector_entry(sections, collisions))
     return report
 
 
