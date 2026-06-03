@@ -58,6 +58,17 @@ class Api:
             return {"path": ""}
         return {"path": result[0]}
 
+    def choose_enrollment_file(self):
+        """Pick a real IR/PeopleSoft enrollment export for the live form. Wider than
+        choose_file (xlsx-only, for engine workbooks): the enrollment_ir adapter
+        ingests BOTH .csv and .xlsx exports, so list both by default."""
+        result = webview.windows[0].create_file_dialog(
+            webview.OPEN_DIALOG,
+            file_types=("Enrollment export (*.xlsx;*.xls;*.csv)", "All files (*.*)"))
+        if not result:
+            return {"path": ""}
+        return {"path": result[0]}
+
     # ---- bundled demo data -------------------------------------------
     def _demo_path(self):
         """Absolute path to the bundled synthetic demo workbook.
