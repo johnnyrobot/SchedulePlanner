@@ -30,7 +30,7 @@ from .http import SourceDataError
 SOURCE = "live-source mapping"
 
 SECTION_COLUMNS = ["Term", "CLASS", "Class Status", "Cap Enrl", "Tot Enrl",
-                   "Wait Tot", "Avail Status"]
+                   "Wait Tot", "Avail Status", "Days", "Times"]
 CATALOG_COLUMNS = ["Course ID", "Units", "Prerequisites (structured)"]
 PROGRAM_COLUMNS = ["Program Code", "Program Title", "Course ID", "Recommended Semester"]
 GE_REQUIREMENT_COLUMNS = ["Program Code", "Pattern", "Area", "Area Title",
@@ -85,6 +85,11 @@ def build_sections_df(section_records):
             # Closed). Carried through so engine.analyze can read a live waitlist
             # signal (Waitlist => section at capacity) without the IR counts.
             "Avail Status": str(r.get("status", "") or ""),
+            # Per-section meeting pattern (days + clock times). Additive optional
+            # columns (default ""): engine reads them for time-block conflict
+            # avoidance when present; absent them the engine is byte-identical.
+            "Days": str(r.get("days", "") or ""),
+            "Times": str(r.get("times", "") or ""),
         })
     return pd.DataFrame(rows, columns=SECTION_COLUMNS)
 

@@ -145,6 +145,32 @@ def build_model(sec, cat, prog, llm=None):
     return active, course_seasons, units, prereqs
 
 
+def _hard_conflict_pairs(sec):
+    """Course pairs that can NEVER be co-scheduled — every section of one overlaps
+    every section of the other — derived from the OPTIONAL Days/Times columns.
+
+    Returns a set of ``frozenset({course_a, course_b})``. Empty when the workbook
+    carries no meeting data (no Days/Times columns), so the solver stays
+    byte-identical to the pre-feature behavior.
+    """
+    if "Days" not in sec.columns or "Times" not in sec.columns:
+        return set()
+    from sources import timeblocks
+    active = sec[sec["Class Status"] == "Active"]
+    by_course = {}
+    for _, r in active.iterrows():
+        by_course.setdefault(str(r["CLASS"]), []).append(
+            timeblocks.parse_meeting(r.get("Days", ""), r.get("Times", "")))
+    courses = sorted(by_course)
+    pairs = set()
+    for i in range(len(courses)):
+        for j in range(i + 1, len(courses)):
+            if timeblocks.pairwise_hard_conflict(by_course[courses[i]],
+                                                 by_course[courses[j]]):
+                pairs.add(frozenset((courses[i], courses[j])))
+    return pairs
+
+
 def closure(required, prereqs):
     need, stack = set(required), list(required)
     while stack:
@@ -202,7 +228,7 @@ def analyze(active, prog, n_terms):
 
 # ----------------------------------------------------------------- solver
 def solve_cohort(pcode, prog, course_seasons, units, prereqs, cohort, allow_fixes,
-                 ge_rows=None):
+                 ge_rows=None, hard_conflicts=None):
     H, maxu = cohort["horizon"], cohort["max_units"]
     courses = sorted(closure(list(prog[prog["Program Code"] == pcode]["Course ID"]),
                              prereqs))
@@ -258,6 +284,17 @@ def solve_cohort(pcode, prog, course_seasons, units, prereqs, cohort, allow_fixe
             for t in range(1, H + 1):
                 m.Add(sum(take[(p, tp)] for p in grp for tp in range(1, t)) >= 1)\
                     .OnlyEnforceIf(take[(c, t)])
+
+    # Time-block conflicts (D): two courses whose every section overlaps cannot be
+    # taken together, so the solver must place them in DIFFERENT terms. Additive and
+    # a no-op when the workbook has no meeting data (hard_conflicts empty) ->
+    # byte-identical to the pre-feature solve. Only real items with take vars apply.
+    item_ids = set(courses) | set(ge_candidates)
+    for pair in (hard_conflicts or ()):
+        a, b = tuple(pair)
+        if a in item_ids and b in item_ids:
+            for t in range(1, H + 1):
+                m.Add(take[(a, t)] + take[(b, t)] <= 1)
 
     # Choose-from-set selection: exactly required_count of an area's candidates.
     rec_misses = []
@@ -345,6 +382,8 @@ def run(path: str, llm=None) -> dict:
     active, course_seasons, units, prereqs = build_model(sec, cat, prog, llm)
     ge_rows = _load_ge(path)
     n_terms = sec["Term"].nunique()
+    # Empty unless the workbook carries Days/Times columns -> solver byte-identical.
+    hard_conflicts = _hard_conflict_pairs(sec)
 
     results = {"terms_in_data": int(n_terms),
                "analysis": analyze(active, prog, n_terms),
@@ -357,10 +396,12 @@ def run(path: str, llm=None) -> dict:
                  "cohorts": {}}
         for ck, cohort in COHORTS.items():
             res = solve_cohort(pcode, prog, course_seasons, units, prereqs,
-                               cohort, allow_fixes=False, ge_rows=ge_rows)
+                               cohort, allow_fixes=False, ge_rows=ge_rows,
+                               hard_conflicts=hard_conflicts)
             if res is None:
                 res = solve_cohort(pcode, prog, course_seasons, units, prereqs,
-                                   cohort, allow_fixes=True, ge_rows=ge_rows)
+                                   cohort, allow_fixes=True, ge_rows=ge_rows,
+                                   hard_conflicts=hard_conflicts)
                 if res:
                     res["needs_fix"] = True
             entry["cohorts"][ck] = res
