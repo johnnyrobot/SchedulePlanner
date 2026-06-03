@@ -414,3 +414,54 @@ def test_no_ge_sheet_is_byte_identical(tmp_path):
         programs.to_excel(xl, sheet_name="programs", index=False)
     res = engine.run(str(out))
     assert "ge" not in res["programs"]["BIO"]["cohorts"]["full_time"]
+
+
+# ---- D: time-block slot avoidance in the solver -----------------------------
+def _write_wb(path, sections_rows):
+    """Tiny 3-sheet workbook: program P requires courses A 1 + B 1."""
+    catalog = pd.DataFrame([
+        {"Course ID": "A 1", "Units": 3, "Prerequisites (structured)": ""},
+        {"Course ID": "B 1", "Units": 3, "Prerequisites (structured)": ""}])
+    programs = pd.DataFrame([
+        {"Program Code": "P", "Program Title": "P", "Course ID": "A 1",
+         "Recommended Semester": ""},
+        {"Program Code": "P", "Program Title": "P", "Course ID": "B 1",
+         "Recommended Semester": ""}])
+    with pd.ExcelWriter(path) as xl:
+        pd.DataFrame(sections_rows).to_excel(xl, sheet_name="sections", index=False)
+        catalog.to_excel(xl, sheet_name="catalog", index=False)
+        programs.to_excel(xl, sheet_name="programs", index=False)
+
+
+def test_solver_separates_hard_time_conflict(tmp_path):
+    """Two required courses whose every section overlaps in time are placed in
+    DIFFERENT terms by the solver. Both are offered Fall(2248)+Spring(2252) so
+    season never forces the separation — only the time-block constraint does."""
+    rows = []
+    for cls in ("A 1", "B 1"):
+        for term in (2248, 2252):
+            rows.append({"Term": term, "CLASS": cls, "Class Status": "Active",
+                         "Cap Enrl": 0, "Tot Enrl": 0, "Wait Tot": 0,
+                         "Days": "MW", "Times": "9:00 AM - 10:00 AM"})
+    wb = tmp_path / "conflict.xlsx"
+    _write_wb(str(wb), rows)
+    plan = engine.run(str(wb))["programs"]["P"]["cohorts"]["full_time"]["plan"]
+    term_of = {c: t for t, cs in plan.items() for c in cs}
+    assert term_of["A 1"] != term_of["B 1"]
+
+
+def test_solver_byte_identical_without_meeting_data(tmp_path):
+    """Non-conflicting Days/Times produce the SAME plan as omitting the columns
+    entirely — the additive no-op contract that protects determinism."""
+    base = [{"Term": 2248, "CLASS": c, "Class Status": "Active",
+             "Cap Enrl": 0, "Tot Enrl": 0, "Wait Tot": 0} for c in ("A 1", "B 1")]
+    no_times = tmp_path / "no.xlsx"
+    with_times = tmp_path / "yes.xlsx"
+    _write_wb(str(no_times), base)
+    timed = [dict(r) for r in base]
+    timed[0].update({"Days": "MW", "Times": "9:00 AM - 10:00 AM"})
+    timed[1].update({"Days": "MW", "Times": "10:00 AM - 11:00 AM"})  # no overlap
+    _write_wb(str(with_times), timed)
+    a = engine.run(str(no_times))["programs"]["P"]["cohorts"]
+    b = engine.run(str(with_times))["programs"]["P"]["cohorts"]
+    assert a == b

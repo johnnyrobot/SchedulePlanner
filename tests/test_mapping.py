@@ -30,7 +30,8 @@ def test_to_units_coercion():
 def test_build_sections_df_schema_and_zero_enrollment():
     df = mapping.build_sections_df(SECTIONS)
     assert list(df.columns) == ["Term", "CLASS", "Class Status",
-                                "Cap Enrl", "Tot Enrl", "Wait Tot", "Avail Status"]
+                                "Cap Enrl", "Tot Enrl", "Wait Tot", "Avail Status",
+                                "Days", "Times"]
     assert (df["Class Status"] == "Active").all()
     assert (df[["Cap Enrl", "Tot Enrl", "Wait Tot"]] == 0).all().all()
     # these synthetic records carry no live 'status' -> Avail Status blank
@@ -151,14 +152,16 @@ def test_column_constants_match_engine_required_columns():
     # Drift guard. catalog/programs equal engine's contract exactly.
     assert mapping.CATALOG_COLUMNS == engine.REQUIRED_COLUMNS["catalog"]
     assert mapping.PROGRAM_COLUMNS == engine.REQUIRED_COLUMNS["programs"]
-    # Sections carries every REQUIRED column (as a prefix) plus ONE optional
-    # additive column the engine reads optionally — "Avail Status" (the live
-    # waitlist signal) — intentionally NOT in REQUIRED_COLUMNS so demo / IR
-    # workbooks without it still validate.
+    # Sections carries every REQUIRED column (as a prefix) plus OPTIONAL additive
+    # columns the engine reads optionally — "Avail Status" (live waitlist signal)
+    # and "Days"/"Times" (meeting times for time-block conflict avoidance) —
+    # intentionally NOT in REQUIRED_COLUMNS so demo / IR workbooks without them
+    # still validate.
     req = engine.REQUIRED_COLUMNS["sections"]
     assert mapping.SECTION_COLUMNS[:len(req)] == req
-    assert mapping.SECTION_COLUMNS == req + ["Avail Status"]
-    assert "Avail Status" not in req
+    assert mapping.SECTION_COLUMNS == req + ["Avail Status", "Days", "Times"]
+    for opt in ("Avail Status", "Days", "Times"):
+        assert opt not in req
 
 
 def test_ge_requirements_sheet_roundtrips(tmp_path):
