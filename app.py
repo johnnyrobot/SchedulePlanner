@@ -69,6 +69,17 @@ class Api:
             return {"path": ""}
         return {"path": result[0]}
 
+    def choose_schedule_file(self):
+        """Pick a real LACCD schedule export (.xlsx/.csv) for the offline historical
+        audit (Option 1). Like choose_enrollment_file, both containers are accepted
+        — the schedule_import adapter normalizes either shape."""
+        result = webview.windows[0].create_file_dialog(
+            webview.OPEN_DIALOG,
+            file_types=("Schedule export (*.xlsx;*.xls;*.csv)", "All files (*.*)"))
+        if not result:
+            return {"path": ""}
+        return {"path": result[0]}
+
     # ---- bundled demo data -------------------------------------------
     def _demo_path(self):
         """Absolute path to the bundled synthetic demo workbook.
@@ -225,6 +236,58 @@ class Api:
         out["ge_coverage"] = report.get("ge_coverage")
         # Live data has no prerequisite/LLM parse step; mark accordingly so the
         # status line does not falsely claim a Gemma 4 parse.
+        out["ai_used"] = False
+        self._last_results = out
+        return out
+
+    # ---- offline historical schedule import (Option 1) ----------------
+    def analyze_schedule_import(self, path, program_path=None, facility_path=None,
+                                course_master_path=None):
+        """Audit a real LACCD schedule export OFFLINE (no network).
+
+        Converts the export -> engine workbook -> the SAME analysis fetch_live
+        returns (so showResult()/renderLivePanel render it), adding room
+        double-booking + over-capacity diagnostics. By default the WHOLE schedule
+        is audited (an all-offered-courses pseudo-program); the optional files
+        refine it:
+          - program_path: an engine workbook whose 'programs' sheet narrows the
+            audit to one degree path;
+          - facility_path: the LAC_SRC_FACILITY_DATA export -> room capacity;
+          - course_master_path: real units (else every course defaults to 3).
+
+        Schedule exports usually carry Cap/Tot/Wait, so modality_mismatch /
+        under_supply light up from the export itself. Returns {'error': ...} on any
+        failure so the UI shows a readable card.
+        """
+        p = (path or "").strip()
+        if not p or not os.path.exists(p):
+            return {"error": "Schedule export not found. Choose an .xlsx or .csv export."}
+        prog = (program_path or "").strip() or None
+        fac = (facility_path or "").strip() or None
+        cm = (course_master_path or "").strip() or None
+        for label, fp in (("Program file", prog), ("Facility file", fac),
+                          ("Course master", cm)):
+            if fp and not os.path.exists(fp):
+                return {"error": f"{label} not found: {fp}"}
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                out_path = os.path.join(tmp, "import_workbook.xlsx")
+                report = build_live_workbook.analyze_import(
+                    p, out_path, program_path=prog, facility_path=fac,
+                    course_master_path=cm)
+        except Exception as e:
+            return {"error": (f"Could not import the schedule export: "
+                              f"{type(e).__name__}: {e}")}
+        if report.get("error"):
+            return {"error": report["error"]}
+        results = report.get("results")
+        if not isinstance(results, dict):
+            return {"error": "Import produced no analysis results."}
+        out = dict(results)
+        out["reconciliation"] = report.get("reconciliation")
+        out["inert_detectors"] = report.get("inert_detectors")
+        out["import_summary"] = report.get("import_summary")
+        out["program_info"] = report.get("program")
         out["ai_used"] = False
         self._last_results = out
         return out

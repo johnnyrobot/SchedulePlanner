@@ -1,0 +1,7 @@
+Term,Subject,Catalog,Class Nbr,Class Status,DAYS,Mtg Start,Mtg End,Facil ID,Room Descr,Cap Enrl,Tot Enrl,Wait Tot,Comb Sects ID,Name,Emails
+2258,ACCTG,001,30001,Active,MW ,09:00:00,10:25:00,MINST1006,Mission-INST 1006,40,45,0,,"DOE,JANE",jane@example.invalid
+2258,ACCTG,001,30001,Active,F ,09:00:00,10:25:00,MINST1006,Mission-INST 1006,40,45,0,,"DOE,JANE",jane@example.invalid
+2258,ENGL,101,30002,Active,MW ,09:00:00,10:25:00,MINST1006,Mission-INST 1006,40,30,18,,"ROE,RICH",rich@example.invalid
+2258,MATH,227,30003,Active,TR ,11:00:00,12:25:00,MINST1010,Mission-INST 1010,35,33,3,,"POE,PAT",pat@example.invalid
+2258,HIST,011,30004,Cancelled,MW ,09:00:00,10:25:00,MINST1006,Mission-INST 1006,40,0,0,,X,x@example.invalid
+2258,BIOLOGY,003,30005,Active,TBA,,,MONLINE,Mission-Online,40,20,0,,Y,y@example.invalid
