@@ -72,12 +72,13 @@ import os
 import httpx
 
 import engine
-from sources import (assist, catalog_ge, elumen, elumen_client, enrollment,
-                     enrollment_ir, ge, mapping, pdf_loader, program_mapper,
-                     schedule, timeblocks)
+from sources import (assist, catalog_ge, course_master, elumen, elumen_client,
+                     enrollment, enrollment_ir, ge, mapping, pdf_loader,
+                     program_mapper, schedule, schedule_import, timeblocks)
 # Imported under an alias so the module name does not shadow the loaded ``facility``
 # room-map that analyze_live / analyze_import pass around as a local variable.
 from sources import facility as facilities
+from sources.http import SourceDataError
 
 
 def build(campus, terms, program_query, *, client=None,
@@ -162,7 +163,7 @@ def _truncation_phrase(ft):
     return f"hit its {cap}s time cap {where}"
 
 
-def _enrollment_detector_entries(*, source, matched, total):
+def _enrollment_detector_entries(*, source, matched, total, inline=False):
     """Build the enrollment-gated detector's report entry (modality_mismatch).
 
     It flips to "active" ONLY when an enrollment export was joined AND the join
@@ -192,9 +193,16 @@ def _enrollment_detector_entries(*, source, matched, total):
     if matched >= 1:
         # The inline-map path (offline tests) is a hand-keyed SYNTHETIC join, so
         # it stays honestly fixture-scoped; a real uploaded file goes through the
-        # enrollment_ir adapter and is a validated real-export join.
+        # enrollment_ir adapter and is a validated real-export join; the offline
+        # schedule-import path carries Cap/Tot/Wait in the export ITSELF (no join).
         synthetic = "synthetic" in str(source).lower()
-        if synthetic:
+        if inline:
+            active_note = ("the schedule export carries Cap/Tot/Wait enrollment "
+                           "columns directly (no join needed), so the fill ratio is "
+                           "computed from the export's own counts. Caveat: "
+                           "combined-section caps may overstate, and under_supply "
+                           "stays a demand proxy — never completion causation.")
+        elif synthetic:
             active_note = ("FIXTURE-SCOPED: activated via a self-consistent / "
                            "hand-keyed enrollment map (synthetic key) — NOT "
                            "validated on real data; a real upload uses the "
@@ -679,8 +687,8 @@ def _room_capacity_findings(sections, facility):
     findings, seen = [], set()
     for r in sections:
         meta = facility.get(facilities.norm_facil(r.get("facil_id", "")))
-        if not meta or meta.get("capacity") is None:
-            continue
+        if not meta or not meta.get("capacity"):
+            continue  # capacity None / 0 = unset seat count, not a real over-enroll
         cap = meta["capacity"]
         try:
             tot = int(r.get("Tot Enrl"))
@@ -779,7 +787,8 @@ def analyze_live(campus, terms, program_query, out_path, *, client=None,
                  transfer_goal="none", assist_year_id=None, ge_pattern_path=None,
                  program_id=None, program_title="", program_award="",
                  assist_areas=None, elumen_cache=None,
-                 catalog_pdf=None, odl_json=None, facility=None):
+                 catalog_pdf=None, odl_json=None, facility=None,
+                 sections_override=None, program_override=None):
     """Run the full live pipeline and return a structured, JSON-serializable report.
 
     The report carries the reconciliation (matched/unmatched program courses)
@@ -825,9 +834,17 @@ def analyze_live(campus, terms, program_query, out_path, *, client=None,
         )
         elumen_fixture = None
 
-    sections, program = build(campus, terms, program_query, client=client,
-                              program_id=program_id, program_title=program_title,
-                              program_award=program_award)
+    # OFFLINE IMPORT path: a caller (analyze_import) may inject pre-read section
+    # records + a program instead of fetching live, so the ENTIRE downstream
+    # (enrollment join, GE, reconcile, write_workbook, engine.run, time-block /
+    # room detectors) is reused byte-for-byte with zero network. sections_override
+    # is None on the live path, so build() runs exactly as before.
+    if sections_override is not None:
+        sections, program = sections_override, program_override
+    else:
+        sections, program = build(campus, terms, program_query, client=client,
+                                  program_id=program_id, program_title=program_title,
+                                  program_award=program_award)
 
     report = {
         "campus": campus,
@@ -866,6 +883,17 @@ def analyze_live(campus, terms, program_query, out_path, *, client=None,
         enrollment_data = enrollment_ir.load_ir_export(enrollment_path)
         sections = enrollment.enrich_sections(sections, enrollment_data)
         matched_sections = sum(1 for r in sections if "Cap Enrl" in r)
+
+    # OFFLINE IMPORT: the schedule export itself carries Cap/Tot/Wait columns, so
+    # the counts arrive inline on the records (no enrollment join). Reflect that
+    # honestly so modality_mismatch reports ACTIVE-from-export, not "no counts".
+    inline_counts = False
+    if (enrollment_source is None and sections_override is not None):
+        n_inline = sum(1 for r in sections if "Cap Enrl" in r)
+        if n_inline:
+            enrollment_source = "schedule export (counts in file)"
+            matched_sections = n_inline
+            inline_counts = True
 
     # --- eLumen prereq map (outside engine.run) ------------------------------
     # Two mutually-exclusive sources feed the SAME elumen.build_prereq_map
@@ -1012,7 +1040,7 @@ def analyze_live(campus, terms, program_query, out_path, *, client=None,
     report["inert_detectors"] = (
         _enrollment_detector_entries(source=enrollment_source,
                                      matched=matched_sections,
-                                     total=len(sections))
+                                     total=len(sections), inline=inline_counts)
         + [_prereq_detector_entry(source=elumen_source, results=prereq_results,
                                   live=elumen_live_active,
                                   coverage=elumen_coverage)]
@@ -1047,6 +1075,113 @@ def analyze_live(campus, terms, program_query, out_path, *, client=None,
     report["inert_detectors"].append(_room_detector_entry(
         sections, room_conflicts, facility_used=bool(facility),
         capacity=room_capacity, lab_stats=_lab_pool_stats(sections, facility)))
+    return report
+
+
+def _pseudo_program(sections, course_units=None, *, terms=None):
+    """An 'all offered courses' program so the WHOLE imported schedule is audited
+    (rotation / fill / under-supply / time + room conflicts) with no Program Mapper.
+
+    Each distinct offered course becomes a required course; units come from a course
+    master map when supplied, else the catalog's default. Deterministic ordering."""
+    course_units = course_units or {}
+    seen, courses = set(), []
+    for r in sections:
+        cid = mapping._norm(r.get("course", ""))
+        if not cid or cid in seen:
+            continue
+        seen.add(cid)
+        c = {"course_id": cid}
+        if cid in course_units:
+            c["units"] = course_units[cid]
+        courses.append(c)
+    courses.sort(key=lambda c: c["course_id"])
+    label = "All offered courses"
+    if terms:
+        label += f" ({', '.join(str(t) for t in terms)})"
+    return {"code": "ALL", "title": label, "award": "", "courses": courses}
+
+
+def _program_from_workbook(path, course_units=None):
+    """Build a program dict from the 'programs' sheet of an engine workbook (the
+    optional 'narrow to one degree path' choice). Takes the first Program Code."""
+    import pandas as pd
+
+    course_units = course_units or {}
+    try:
+        xl = pd.ExcelFile(path)
+    except Exception as exc:  # noqa: BLE001 - surface a clear, named error
+        raise SourceDataError(
+            f"{mapping.SOURCE}: cannot open program file {path!r} as an .xlsx "
+            "workbook with a 'programs' sheet.") from exc
+    if "programs" not in xl.sheet_names:
+        raise SourceDataError(
+            f"{mapping.SOURCE}: program file {path!r} has no 'programs' sheet "
+            f"(sheets: {xl.sheet_names}). Provide an engine workbook's programs "
+            "sheet (Program Code / Program Title / Course ID).")
+    df = xl.parse("programs")
+    for col in ("Program Code", "Course ID"):
+        if col not in df.columns:
+            raise SourceDataError(
+                f"{mapping.SOURCE}: programs sheet in {path!r} missing column {col!r}.")
+    code = str(df["Program Code"].iloc[0])
+    g = df[df["Program Code"].astype(str) == code]
+    title = (str(g["Program Title"].iloc[0])
+             if "Program Title" in g.columns and len(g) else code)
+    courses = []
+    for _, r in g.iterrows():
+        cid = mapping._norm(r["Course ID"])
+        c = {"course_id": cid,
+             "recommended_semester": r.get("Recommended Semester")}
+        if cid in course_units:
+            c["units"] = course_units[cid]
+        courses.append(c)
+    return {"code": code, "title": title, "award": "", "courses": courses}
+
+
+def analyze_import(schedule_path, out_path, *, program=None, program_path=None,
+                   facility_path=None, course_master_path=None, sheet=None,
+                   transfer_goal="none"):
+    """Offline historical audit: convert a real LACCD schedule export into engine
+    records and run the SAME pipeline ``analyze_live`` runs — with NO network.
+
+    Program (the 'Both' choice): an explicit ``program`` dict, or a ``program_path``
+    (an engine workbook whose 'programs' sheet names one degree path), narrows the
+    audit; absent both, an all-offered-courses pseudo-program audits the WHOLE
+    schedule. Optional ``facility_path`` enables the room-capacity detector;
+    ``course_master_path`` supplies real units (else every course defaults to 3).
+
+    The schedule export typically carries Cap/Tot/Wait columns, so modality_mismatch
+    / under_supply light up from the export itself (no separate IR upload). Returns
+    the same report shape ``analyze_live`` does, plus an ``import_summary``.
+    """
+    records, summary = schedule_import.load_schedule_export(schedule_path, sheet=sheet)
+    if not records:
+        return {"campus": "LAMC", "terms": [], "section_count": 0, "program": None,
+                "reconciliation": None, "inert_detectors": list(INERT_DETECTORS),
+                "results": None, "import_summary": summary,
+                "error": f"No active sections found in {schedule_path!r}."}
+
+    terms = summary["terms"]
+    course_units = course_master.load_units(course_master_path) if course_master_path else {}
+    if course_units:
+        for r in records:
+            cid = mapping._norm(r.get("course", ""))
+            if cid in course_units and "units" not in r:
+                r["units"] = course_units[cid]
+
+    if program is None and program_path:
+        program = _program_from_workbook(program_path, course_units)
+    if program is None:
+        program = _pseudo_program(records, course_units, terms=terms)
+
+    facility = facilities.load_facility(facility_path) if facility_path else None
+
+    report = analyze_live(
+        "LAMC", terms, "(historical import)", out_path,
+        sections_override=records, program_override=program,
+        facility=facility, elumen_live=False, transfer_goal=transfer_goal)
+    report["import_summary"] = summary
     return report
 
 

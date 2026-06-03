@@ -229,6 +229,27 @@
     <p id="picked"></p>
   </div>
 
+  <div class="card" id="importCard" style="margin-top:12px">
+    <p class="hint"><b>Or audit a historical schedule export (offline).</b> Analyze a
+      real LACCD schedule export (<b>.xlsx/.csv</b>) — any past or current term — for
+      rotation, fill, time conflicts, and <b>room double-bookings + over-capacity</b>.
+      No network; the whole schedule is audited unless you add a program file.</p>
+    <div class="row mt">
+      <button class="ghost" id="importSchedBtn" type="button" onclick="pickScheduleImport()">Choose schedule export</button>
+      <span id="importSchedName" class="hint"></span>
+      <span class="tip" tabindex="0" role="button" aria-label="What schedule export does this expect?">?<span class="tip-bub" role="tooltip">A LACCD / PeopleSoft <b>schedule export</b> (.xlsx or .csv) — one row per meeting pattern. The term is auto-normalized (e.g. &ldquo;2024 Spring&rdquo; or 2242), and the export's <b>Cap / Tot / Wait</b> counts (if present) power the fill-rate analysis with no separate upload.</span></span>
+    </div>
+    <div class="row mt liveopts">
+      <button class="ghost" id="importFacBtn" type="button" onclick="pickImportFacility()">Add facility data (optional)</button>
+      <span id="importFacName" class="hint"></span>
+      <span class="tip" tabindex="0" role="button" aria-label="What is the facility data option?">?<span class="tip-bub" role="tooltip">The LACCD <b>LAC_SRC_FACILITY_DATA</b> export (room → seats). Enables room <b>over-capacity</b> + lab-pool analysis, joined on <i>Facil ID</i>. Optional — double-bookings are detected without it.</span></span>
+    </div>
+    <div class="row mt">
+      <button id="importBtn" onclick="runScheduleImport()">Audit schedule export</button>
+      <span id="importStatus" class="hint"></span>
+    </div>
+  </div>
+
   <div class="orsep"><hr><span>OR</span><hr></div>
 
   <div class="optnum">Option 2</div>
@@ -543,6 +564,69 @@ async function pickLiveEnrollment(){
 function clearLiveEnrollment(){
   liveEnrollPath = '';
   document.getElementById('liveEnrollName').textContent = '';
+}
+
+// ---- Offline historical schedule import (Option 1) -------------------------
+// Convert a real LACCD schedule export -> engine workbook -> the SAME analysis
+// the live path produces (no network), adding room double-booking + over-capacity
+// diagnostics. The optional facility export enables the capacity join.
+let importSchedPath = '', importFacPath = '';
+async function pickScheduleImport(){
+  let r;
+  try{ r = await window.pywebview.api.choose_schedule_file(); }
+  catch(e){ r = {path:''}; }
+  if(r && r.path){
+    importSchedPath = r.path;
+    const name = r.path.split(/[\\/]/).pop();
+    document.getElementById('importSchedName').innerHTML =
+      escapeHtml(name)+' <a href="#" onclick="clearScheduleImport();return false;">✕ remove</a>';
+  }
+}
+function clearScheduleImport(){
+  importSchedPath='';
+  document.getElementById('importSchedName').textContent='';
+}
+async function pickImportFacility(){
+  let r;
+  try{ r = await window.pywebview.api.choose_enrollment_file(); }
+  catch(e){ r = {path:''}; }
+  if(r && r.path){
+    importFacPath = r.path;
+    const name = r.path.split(/[\\/]/).pop();
+    document.getElementById('importFacName').innerHTML =
+      escapeHtml(name)+' <a href="#" onclick="clearImportFacility();return false;">✕ remove</a>';
+  }
+}
+function clearImportFacility(){
+  importFacPath='';
+  document.getElementById('importFacName').textContent='';
+}
+async function runScheduleImport(){
+  if(!importSchedPath){
+    document.getElementById('importStatus').textContent='Choose a schedule export first.';
+    return;
+  }
+  const btn=document.getElementById('importBtn');
+  btn.disabled=true; btn.textContent='Auditing…';
+  // This is a file-based analysis, not a live fetch: clear the workbook path and
+  // hide the file-only "Generate schedules" button (the live panel renders the
+  // reconciliation + detector fields the import report carries).
+  dataPath='';
+  document.getElementById('runBtn').style.display='none';
+  document.getElementById('importStatus').innerHTML='<span class="spinner"></span> converting + auditing';
+  document.getElementById('actions').style.display='flex';
+  document.getElementById('picked').textContent='historical schedule export · '+importSchedPath.split(/[\\/]/).pop();
+  document.getElementById('status').innerHTML='<span class="spinner"></span> converting + solving';
+  let res;
+  try{
+    res = await window.pywebview.api.analyze_schedule_import(
+      importSchedPath, null, importFacPath||null, null);
+  }catch(e){
+    res = {error:'Unexpected error talking to the app: '+String(e)};
+  }
+  btn.disabled=false; btn.textContent='Audit schedule export';
+  document.getElementById('importStatus').textContent='';
+  showResult(res);
 }
 
 // ---- Local AA/AS GE (catalog PDF, OpenDataLoader on-device) -----------------
