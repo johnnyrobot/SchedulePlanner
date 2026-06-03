@@ -465,3 +465,39 @@ def test_solver_byte_identical_without_meeting_data(tmp_path):
     a = engine.run(str(no_times))["programs"]["P"]["cohorts"]
     b = engine.run(str(with_times))["programs"]["P"]["cohorts"]
     assert a == b
+
+
+# ---- F: Summer/Winter + year term model -------------------------------------
+def test_season_and_year_decode():
+    assert engine.season_of_code(2248) == "Fall"
+    assert engine.season_of_code(2252) == "Spring"
+    assert engine.season_of_code(2256) == "Summer"
+    assert engine.season_of_code(2251) == "Winter"
+    assert engine.year_of_code(2248) == 2024
+    assert engine.year_of_code(2252) == 2025
+
+
+def test_cadence_fallback_and_extension():
+    assert engine._cadence({"Fall", "Spring"}) == ["Fall", "Spring"]
+    assert engine._cadence(set()) == ["Fall", "Spring"]            # determinism default
+    assert engine._cadence({"Fall", "Summer"}) == ["Fall", "Summer"]
+    assert engine._cadence({"Summer", "Winter", "Spring", "Fall"}) == [
+        "Fall", "Winter", "Spring", "Summer"]                      # academic order
+
+
+def test_solver_schedules_summer_only_course(tmp_path):
+    """When Summer is offered in the data, the cadence includes it and a summer-only
+    course is scheduled into a Summer term (not mislabeled/blocked)."""
+    rows = [
+        {"Term": 2248, "CLASS": "A 1", "Class Status": "Active",   # Fall
+         "Cap Enrl": 0, "Tot Enrl": 0, "Wait Tot": 0},
+        {"Term": 2256, "CLASS": "B 1", "Class Status": "Active",   # Summer
+         "Cap Enrl": 0, "Tot Enrl": 0, "Wait Tot": 0},
+    ]
+    wb = tmp_path / "summer.xlsx"
+    _write_wb(str(wb), rows)
+    plan = engine.run(str(wb))["programs"]["P"]["cohorts"]["full_time"]["plan"]
+    term_of = {c: t for t, cs in plan.items() for c in cs}
+    cadence = engine._cadence({"Fall", "Summer"})
+    assert engine.term_season(term_of["B 1"], cadence) == "Summer"
+    assert engine.term_season(term_of["A 1"], cadence) == "Fall"

@@ -29,8 +29,43 @@ COHORTS = {
     "full_time": {"max_units": 18, "horizon": 4, "label": "Full-time"},
     "part_time": {"max_units": 9,  "horizon": 8, "label": "Part-time"},
 }
-term_season = lambda t: "Fall" if t % 2 == 1 else "Spring"
-season_of_code = lambda t: "Fall" if str(t).endswith("8") else "Spring"
+# Academic-year order of terms. The planning CADENCE is the subsequence of these
+# that the data actually offers (see _cadence); the default 2-season cadence
+# reproduces the historical Fall/Spring behavior byte-identically.
+SEASON_ORDER = ["Fall", "Winter", "Spring", "Summer"]
+_TERM_DIGIT_SEASON = {"8": "Fall", "1": "Winter", "2": "Spring", "6": "Summer"}
+
+
+def season_of_code(t):
+    """LACCD term code -> season. Last digit: 8=Fall, 1=Winter, 2=Spring, 6=Summer
+    (confirmed from real data; see generate_synthetic.py header). Unknown -> Spring.
+    For Fall/Spring-only data this matches the legacy 'endswith 8 -> Fall' rule."""
+    return _TERM_DIGIT_SEASON.get(str(t).strip()[-1:], "Spring")
+
+
+def year_of_code(t):
+    """LACCD term code '2'+YY+digit -> calendar year (2000+YY), else None."""
+    s = str(t).strip()
+    try:
+        return 2000 + int(s[1:3])
+    except (ValueError, IndexError):
+        return None
+
+
+def _cadence(seasons_present):
+    """Academic-order planning cadence = the seasons actually offered in the data.
+    Falls back to the historical ['Fall', 'Spring'] when the data is Fall/Spring only
+    (or empty), so existing plans stay byte-identical (the determinism contract)."""
+    present = {s for s in seasons_present if s in SEASON_ORDER}
+    if not present or present <= {"Fall", "Spring"}:
+        return ["Fall", "Spring"]
+    return [s for s in SEASON_ORDER if s in present]
+
+
+def term_season(t, cadence=("Fall", "Spring")):
+    """Season of abstract term ``t`` (1-based) under a cadence. The default 2-season
+    cadence reproduces the legacy 't odd -> Fall, even -> Spring' mapping exactly."""
+    return cadence[(t - 1) % len(cadence)]
 
 
 # ----------------------------------------------------------------- data load
@@ -229,7 +264,14 @@ def analyze(active, prog, n_terms):
 # ----------------------------------------------------------------- solver
 def solve_cohort(pcode, prog, course_seasons, units, prereqs, cohort, allow_fixes,
                  ge_rows=None, hard_conflicts=None):
-    H, maxu = cohort["horizon"], cohort["max_units"]
+    maxu = cohort["max_units"]
+    # Planning cadence from the seasons actually offered. Scale the horizon by
+    # terms-per-year so "2 years full-time / 4 years part-time" holds for any
+    # cadence; the 2-season (Fall/Spring) case yields the legacy horizon exactly
+    # (round((4/2)*2)=4, round((8/2)*2)=8) -> byte-identical.
+    seasons_present = set().union(*course_seasons.values()) if course_seasons else set()
+    cadence = _cadence(seasons_present)
+    H = int(round((cohort["horizon"] / 2) * len(cadence)))
     courses = sorted(closure(list(prog[prog["Program Code"] == pcode]["Course ID"]),
                              prereqs))
     ge_rows = [r for r in (ge_rows or []) if r["program_code"] == pcode]
@@ -269,7 +311,7 @@ def solve_cohort(pcode, prog, course_seasons, units, prereqs, cohort, allow_fixe
     for c in courses + ge_candidates:
         avail = course_seasons.get(c, set())
         for t in range(1, H + 1):
-            if term_season(t) not in avail:
+            if term_season(t, cadence) not in avail:
                 if allow_fixes:
                     fixes_pen.append(take[(c, t)])
                 else:
@@ -340,8 +382,8 @@ def solve_cohort(pcode, prog, course_seasons, units, prereqs, cohort, allow_fixe
         for t in range(1, H + 1):
             if solver.Value(take[(c, t)]):
                 plan.setdefault(t, []).append(c)
-                if term_season(t) not in course_seasons.get(c, set()):
-                    fixes.append({"course": c, "season": term_season(t)})
+                if term_season(t, cadence) not in course_seasons.get(c, set()):
+                    fixes.append({"course": c, "season": term_season(t, cadence)})
     for iid, lbl, _u in reserve_items:
         for t in range(1, H + 1):
             if solver.Value(take[(iid, t)]):
