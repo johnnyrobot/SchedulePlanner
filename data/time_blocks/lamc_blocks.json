@@ -1,0 +1,33 @@
+{
+  "_source": "LA Mission College standardized Time Blocks (Academic Affairs): 2024 Fall, 2024 Summer, 2024/2025 Winter, 2025 Spring. Start times only — a section is 'on grid' when its start matches one of its term-length's standard starts (within a few minutes). Union across class types / meeting patterns / session lengths within each term length, so the check flags genuinely off-grid starts with low false positives.",
+  "_term_lengths": "Term code last digit -> length: 8=Fall and 2=Spring -> '16-week'; 1=Winter -> 'winter'; 6=Summer -> 'summer'.",
+  "16-week": {
+    "label": "16-week / 8-week (Fall & Spring)",
+    "starts": [
+      "7:15 AM", "7:45 AM", "7:55 AM", "8:00 AM", "8:10 AM", "8:50 AM", "8:55 AM",
+      "10:15 AM", "10:35 AM", "11:30 AM",
+      "12:10 PM", "12:15 PM", "12:20 PM", "12:45 PM",
+      "1:40 PM", "1:50 PM", "1:55 PM", "2:20 PM", "2:30 PM", "3:00 PM",
+      "3:25 PM", "3:30 PM", "3:35 PM", "4:00 PM", "4:10 PM", "4:30 PM",
+      "5:05 PM", "5:15 PM", "5:45 PM", "6:30 PM", "6:40 PM", "6:50 PM", "7:00 PM"
+    ]
+  },
+  "winter": {
+    "label": "5-week Winter intersession (MTWTh)",
+    "starts": [
+      "7:55 AM", "9:00 AM", "10:50 AM", "11:00 AM",
+      "2:00 PM", "3:30 PM", "3:50 PM", "4:45 PM", "6:00 PM", "6:40 PM"
+    ]
+  },
+  "summer": {
+    "label": "Summer (5/6/8/10-week sessions)",
+    "starts": [
+      "7:40 AM", "8:00 AM", "8:30 AM", "9:10 AM", "9:30 AM",
+      "10:20 AM", "10:30 AM", "10:40 AM", "10:50 AM", "11:00 AM", "11:50 AM",
+      "12:20 PM", "12:30 PM", "1:00 PM", "1:30 PM", "2:00 PM", "2:50 PM",
+      "3:40 PM", "3:50 PM", "4:00 PM", "4:20 PM", "5:00 PM", "5:30 PM",
+      "6:00 PM", "6:40 PM", "6:50 PM", "7:00 PM", "7:10 PM",
+      "8:20 PM", "8:30 PM", "8:40 PM", "9:50 PM", "10:00 PM"
+    ]
+  }
+}

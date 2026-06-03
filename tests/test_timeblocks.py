@@ -130,3 +130,34 @@ def test_feasible_selection_async_course_is_free():
     feasible, conflicts = tb.feasible_selection(cts)
     assert feasible is False
     assert set(conflicts) == {"A", "B"}
+
+
+# --- grid conformance ---------------------------------------------------------
+def test_term_length_decode():
+    assert tb.term_length(2248) == "16-week"   # Fall (ends 8)
+    assert tb.term_length("2252") == "16-week"  # Spring (ends 2)
+    assert tb.term_length(2256) == "summer"     # Summer (ends 6)
+    assert tb.term_length("2251") == "winter"   # Winter (ends 1)
+    assert tb.term_length(None) == "16-week"    # unknown default
+
+
+def test_on_grid_matches_standard_start():
+    # 8:55 AM (535) is a standard 16-week 2x/week start.
+    m = tb.parse_meeting("MW", "8:55 AM - 10:20 AM")
+    assert tb.on_grid(2248, m) is True
+
+
+def test_off_grid_flags_nonstandard_start():
+    # 9:05 AM is NOT on the 16-week grid (nearest standard is 8:55, >5 min away).
+    m = tb.parse_meeting("MW", "9:05 AM - 10:30 AM")
+    assert tb.on_grid(2248, m) is False
+
+
+def test_on_grid_async_is_vacuously_true():
+    assert tb.on_grid(2248, tb.parse_meeting("", "")) is True
+
+
+def test_on_grid_unknown_grid_fails_open():
+    # A custom grid dict without the term length -> never flag (fail open).
+    assert tb.on_grid(2248, tb.parse_meeting("MW", "9:05 AM - 10:00 AM"),
+                      grid={"summer": {480}}) is True

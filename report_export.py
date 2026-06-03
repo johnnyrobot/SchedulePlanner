@@ -280,6 +280,8 @@ def _diagnostics(results: dict) -> str:
                 lambda x: f'{_esc(x.get("course"))} — {_esc(x.get("fill_pct"))}% fill')
         + block("Under-supply", a.get("under_supply", []), under)
         + block("Time conflicts", a.get("time_block_collisions", []),
+                lambda x: _esc(x.get("summary")))
+        + block("Off-grid sections", a.get("off_grid_sections", []),
                 lambda x: _esc(x.get("summary"))))
     n = _esc(results.get("terms_in_data"))
     return (f'<section class="card" aria-labelledby="diag"><h2 id="diag">Supply diagnostics '

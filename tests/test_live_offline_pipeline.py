@@ -324,3 +324,15 @@ def test_time_block_detector_entry_active_vs_inert():
     async_only = [{"course": "X 1", "days": "", "times": ""}]
     assert build_live_workbook._time_block_detector_entry(live, [])["status"] == "active"
     assert build_live_workbook._time_block_detector_entry(async_only, [])["status"] == "inert"
+
+
+def test_off_grid_sections_flags_nonstandard_start():
+    secs = [
+        {"course": "CHEM 101", "term": 2248, "days": "MW", "times": "8:55 AM - 10:20 AM"},  # on grid
+        {"course": "MATH 245", "term": 2248, "days": "MW", "times": "9:05 AM - 10:30 AM"},  # off grid
+        {"course": "ENGL 101", "term": 2248, "days": "", "times": ""},                       # async, skip
+    ]
+    findings = build_live_workbook._off_grid_sections(secs)
+    courses = {f["course"] for f in findings}
+    assert "MATH 245" in courses
+    assert "CHEM 101" not in courses and "ENGL 101" not in courses

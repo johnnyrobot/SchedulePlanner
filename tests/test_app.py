@@ -99,7 +99,7 @@ def test_fetch_live_returns_results_plus_reconciliation_and_inert(
     assert res["terms_in_data"] >= 1
     assert set(res["analysis"]) == {
         "rotation_gaps", "single_section", "modality_mismatch", "under_supply",
-        "time_block_collisions"}
+        "time_block_collisions", "off_grid_sections"}
     assert "BIOLOGY" in res["programs"]
     # modality_mismatch stays inert (needs IR fill %); under_supply now fires
     # from the live schedule Waitlist status (breadth, no IR headcount).
