@@ -55,6 +55,14 @@ echo "Building SchedulePlanner (Linux) from ${REPO_ROOT} (using ${PY}) ..."
 
 # NOTE: --add-data separator is ':' on Linux/macOS (';' on Windows).
 # pywebview needs a GTK or Qt backend installed on this host (see header note 2).
+#
+# opendataloader_pdf: --collect-DATA (ships the bundled Java CLI jar), NOT
+# --collect-all — the catalog-PDF feature runs that jar in a JVM subprocess, so
+# only the package's pure-Python entrypoints are needed (picked up from
+# sources/pdf_loader.py). --collect-all would force-collect the optional
+# `hybrid_server` submodule, whose lazy docling/torch/fastapi imports add ~300+
+# MB of unused ML deps (torch alone ~284 MB). The --exclude-module guards keep
+# that out even if the build host has those packages installed.
 "${PY}" -m PyInstaller \
   --noconfirm \
   --clean \
@@ -63,7 +71,13 @@ echo "Building SchedulePlanner (Linux) from ${REPO_ROOT} (using ${PY}) ..."
   --add-data 'ui.html:.' \
   --add-data 'files/lamc_data.xlsx:files' \
   --collect-all ortools \
-  --collect-all opendataloader_pdf \
+  --collect-data opendataloader_pdf \
+  --exclude-module opendataloader_pdf.hybrid_server \
+  --exclude-module torch \
+  --exclude-module docling \
+  --exclude-module fastapi \
+  --exclude-module uvicorn \
+  --exclude-module yt_dlp \
   app.py
 
 EXE="dist/SchedulePlanner/SchedulePlanner"

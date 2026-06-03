@@ -57,14 +57,25 @@ python -m PyInstaller \
   --clean \
   --windowed \
   --name SchedulePlanner \
+  --osx-bundle-identifier com.laccd.scheduleplanner \
   --add-data 'ui.html:.' \
   --add-data 'files/lamc_data.xlsx:files' \
   --collect-all ortools \
+  --collect-data opendataloader_pdf \
+  --exclude-module opendataloader_pdf.hybrid_server \
+  --exclude-module torch \
+  --exclude-module docling \
+  --exclude-module fastapi --exclude-module uvicorn --exclude-module yt_dlp \
   app.py
 ```
 
 `--clean` forces a fresh, reproducible rebuild by dropping PyInstaller's cache
-(costs ~a minute); this matches what `scripts/build_macos.sh` does.
+(costs ~a minute); this matches what `scripts/build_macos.sh` does. The script
+additionally stamps `CFBundleShortVersionString`/`CFBundleVersion` from the
+repo-root `VERSION` file via `PlistBuddy` after the build (PyInstaller leaves
+them at `0.0.0` otherwise) — done before signing so the signature seals the
+corrected `Info.plist`. `--osx-bundle-identifier` sets the reverse-DNS bundle
+ID (`com.laccd.scheduleplanner`); `verify_macos_build.sh` asserts both.
 
 Output:
 
@@ -90,6 +101,8 @@ committed `.spec`.
 | `--add-data 'ui.html:.'` | Ships `ui.html` at the bundle root so `resource_path("ui.html")` resolves under `sys._MEIPASS` when frozen. **Without this the window has no UI to load.** |
 | `--add-data 'files/lamc_data.xlsx:files'` | Ships the demo workbook under `files/` so `resource_path("files", "lamc_data.xlsx")` resolves. **Without this "Load demo data" fails with "File not found."** |
 | `--collect-all ortools` | Pulls in OR-Tools' native libraries (`libortools.9.dylib` + the bundled `absl` `.dylib`s under `ortools/.libs/`) plus all submodules and data. **This is the documented high-risk item** — without it the frozen app raises an import/dyld error the moment the solver is touched. |
+| `--collect-data opendataloader_pdf` | Ships the bundled **Java CLI jar** (`opendataloader-pdf-cli.jar`) used by the Local AA/AS GE catalog parser. It is `--collect-**data**`, not `--collect-all`, on purpose: the feature runs the jar in a JVM subprocess, so PyInstaller only needs the package's pure-Python entrypoints (auto-discovered from `sources/pdf_loader.py`). `--collect-all` would also force-collect the optional `hybrid_server` submodule, whose lazy `docling`/`torch` imports drag **~300+ MB** of unused ML deps into the bundle (torch alone ≈284 MB). |
+| `--exclude-module …` (`opendataloader_pdf.hybrid_server`, `torch`, `docling`, `fastapi`, `uvicorn`, `yt_dlp`) | Hard guard so the hybrid-mode ML deps can never be bundled even when the build host happens to have them installed. edgesched imports none of these (it uses `httpx` + the solver); the catalog feature reaches the extractor only through the JVM jar above. `verify_macos_build.sh` asserts they stay out. |
 
 > `--add-data` separator is **`:`** on macOS/Linux and **`;`** on Windows.
 
@@ -286,8 +299,13 @@ the project's internal eLumen live-usage notes (kept locally, not tracked here).
   `--collect-all ortools`; verified loading inside the frozen bundle. If a future
   ortools release relocates its `.dylib`s, re-check `--collect-all ortools` still
   bundles `libortools.*.dylib` and `ortools/.libs/`.
-- **Bundle size** — the `.app` is large (~800 MB) because OR-Tools + pandas +
-  numpy + WebKit bridge are all included. Expected; not a correctness issue.
+- **Bundle size** — the `.app` is **~365 MB** (OR-Tools + pandas + numpy + the
+  WebKit bridge + the ~130 MB bundled Temurin JRE). It used to be ~1.1 GB before
+  the dependency trim: `opendataloader_pdf` is collected with `--collect-data`
+  (jar only) instead of `--collect-all`, and `torch`/`docling`/`fastapi`/`uvicorn`/
+  `yt_dlp` are `--exclude-module`d, which dropped ~735 MB of hybrid-mode ML deps
+  the catalog feature never uses (it runs the bundled jar in a JVM subprocess).
+  `verify_macos_build.sh` asserts that bloat stays out and the jar stays in.
 - **One-file builds** — prefer the default one-bundle `.app` (above). Only try
   `--onefile` after this is stable; one-file apps start slower and make
   native-library debugging harder.
