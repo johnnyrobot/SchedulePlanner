@@ -261,3 +261,49 @@ def test_report_bottlenecks_inert_shows_reason():
     doc = report_export.render_report(results)
     assert "Cross-program bottlenecks" in doc
     assert "no demand map supplied" in doc
+
+
+def test_report_renders_grid_pressure_section():
+    results = {
+        "terms_in_data": 1,
+        "analysis": {
+            "rotation_gaps": [], "single_section": [],
+            "modality_mismatch": [], "under_supply": [],
+            "grid_pressure": {
+                "status": "active",
+                "label": "Grid-conformance & morning-compression — a structural "
+                         "time-block PROXY, not a measured completion rate.",
+                "conformance": {"on_grid_rate": 0.9, "off_grid_sample": [],
+                                "off_grid_truncated": 0, "evaluated": 10,
+                                "on_grid": 9, "off_grid": 1, "skipped": 0},
+                "morning_compression": {"buckets": {"early": 1, "prime": 7,
+                                        "afternoon": 1, "evening": 1},
+                                        "total_timed": 10, "prime_share": 0.7,
+                                        "morning_locked_count": 2},
+                "mutual_exclusions": [{"courses": ["MATH <2>", "CHEM 1"],
+                                       "reason": "both 9-1; overlap"}],
+                "what_if_caveat": "feasibility is not verified",
+                "not_assessed": {
+                    "end_time_duration": {"status": "inert",
+                                          "reason": "no contact category"},
+                    "holidays_session_dates": {"status": "inert",
+                                               "reason": "no calendar"}},
+                "truncated": {"pairs": 0, "off_grid": 0},
+            },
+        },
+        "programs": {},
+    }
+    doc = report_export.render_report(results)
+    assert "Grid conformance" in doc
+    assert "90%" in doc                          # on-grid rate
+    assert "MATH &lt;2&gt;" in doc               # course id HTML-escaped
+    assert "PROXY" in doc
+    assert "no contact category" in doc          # not_assessed reason surfaced
+
+
+def test_report_omits_grid_pressure_when_absent():
+    results = {"terms_in_data": 4,
+               "analysis": {"rotation_gaps": [], "single_section": [],
+                            "modality_mismatch": [], "under_supply": []},
+               "programs": {}}
+    assert "Grid conformance" not in report_export.render_report(results)
