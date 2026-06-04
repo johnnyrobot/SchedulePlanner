@@ -911,6 +911,44 @@ function renderLivePanel(res){
       '<p class="hint">'+escapeHtml(gp.what_if_caveat||'')+'</p>'+rows+
       (naL?'<div class="why">Not assessed:</div><ul>'+naL+'</ul>':'')+foot+'</div>';
   }
+  // Demand-vs-supply action list (F5): offered courses whose seat SUPPLY falls
+  // short of enrolled+waitlisted DEMAND -> a ranked "add a section" list, plus a
+  // neutral capacity-slack observation (NEVER a cut order). Active only when seat
+  // counts are present (IR upload on the live path, or a counts-carrying import).
+  // The honest supply-vs-demand-proxy framing rides in dsl.label. All data escaped.
+  const dsl = res.analysis && res.analysis.demand_supply;
+  if(dsl && dsl.status==='active'){
+    const adds=(dsl.add_list||[]).map(r=>{
+      const why=(r.reasons||[]).map(escapeHtml).join('; ');
+      return '<div class="inert"><div class="det">⊘ '+escapeHtml(r.course)+
+        ' — score '+escapeHtml(String(r.action_score))+' · demand '+
+        escapeHtml(String(r.demand_ratio))+'× · '+
+        escapeHtml(String(r.wait_total))+' waitlisted · '+
+        escapeHtml(String(r.n_sections))+' section'+(r.n_sections===1?'':'s')+'</div>'+
+        '<div class="why">'+why+'</div></div>';
+    }).join('');
+    const addBlock = adds || '<div class="why">No course currently shows add-a-section pressure.</div>';
+    let slack='';
+    if((dsl.capacity_slack||[]).length){
+      const sl=dsl.capacity_slack.map(s=>'<li>'+escapeHtml(s.course)+' — fill '+
+        escapeHtml(String(s.fill))+', '+escapeHtml(String(s.n_sections))+
+        ' sections ('+escapeHtml(s.note||'')+')</li>').join('');
+      slack='<div class="why">Capacity slack (review only — not a cut recommendation):</div><ul>'+sl+'</ul>';
+    }
+    const fp=[], tr=dsl.truncated||{};
+    if(dsl.not_assessed)
+      fp.push(escapeHtml(String(dsl.not_assessed))+
+        ' required course(s) had no usable seat counts — excluded, not silently counted.');
+    if(tr.add_list)
+      fp.push(escapeHtml(String(tr.add_list))+' more add-list course(s) beyond the top shown.');
+    if(tr.capacity_slack)
+      fp.push(escapeHtml(String(tr.capacity_slack))+' more capacity-slack course(s) beyond those shown.');
+    const foot=fp.length?'<p class="hint">'+fp.join(' ')+'</p>':'';
+    html+='<div class="card"><h3>Demand-vs-supply action list</h3>'+
+      '<p class="hint">'+escapeHtml(dsl.label||'')+'</p>'+
+      '<div class="why">Add a section — highest demand-vs-supply pressure:</div>'+
+      addBlock+slack+foot+'</div>';
+  }
   // Plain-language names for the machine detector keys (the panel avoids raw
   // jargon like "modality_mismatch"). Any future key falls back to itself.
   const DET_LABELS={
@@ -921,6 +959,7 @@ function renderLivePanel(res){
     program_buildability:'Program buildability',
     program_bottleneck:'Cross-program bottlenecks',
     grid_pressure:'Grid conformance & morning compression',
+    demand_supply:'Demand-vs-supply action list',
   };
   const inert=res.inert_detectors||[];
   if(inert.length){
