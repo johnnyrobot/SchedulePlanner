@@ -48,6 +48,26 @@ def test_context_includes_buildability_block():
     assert "has time conflicts" in ctx
 
 
+def test_context_includes_ge_inclusive_buildability():
+    """When GE folds into the denominator, the chat context carries the GE-inclusive
+    score, the major-only number, the signed delta, and the DRAFT marker."""
+    results = {"analysis": {"buildability": {
+        "status": "active", "label": "Structural-feasibility PROXY ...",
+        "programs": [{
+            "code": "BIOL", "title": "Biology AS-T", "required_total": 4, "available": 3,
+            "missing": ["PHYSICS 6"], "time_conflict": {"feasible": True},
+            "single_section_required": [], "score": 47, "score_major_only": 55,
+            "score_delta": -8,
+            "ge": {"status": "active", "areas_in_denominator": 2, "areas_schedulable": 1,
+                   "gaps": ["4"], "draft": True},
+        }]}}}
+    ctx = chat_assist._context(results)
+    assert "GE-inclusive" in ctx
+    assert "major-only 55" in ctx
+    assert "GE 1/2 areas schedulable" in ctx
+    assert "DRAFT GE" in ctx
+
+
 def test_context_omits_buildability_when_inert():
     ctx = chat_assist._context({"analysis": {"buildability": {"status": "inert",
                                                               "reason": "no program"}}})
