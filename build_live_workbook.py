@@ -1318,7 +1318,8 @@ def _program_from_workbook(path, course_units=None):
 
 def analyze_import(schedule_path, out_path, *, program=None, program_path=None,
                    facility_path=None, course_master_path=None,
-                   program_lists_path=None, sheet=None, transfer_goal="none"):
+                   program_lists_path=None, sheet=None, transfer_goal="none",
+                   enrollment_path=None, enrollment_map=None):
     """Offline historical audit: convert a real LACCD schedule export into engine
     records and run the SAME pipeline ``analyze_live`` runs — with NO network.
 
@@ -1331,6 +1332,16 @@ def analyze_import(schedule_path, out_path, *, program=None, program_path=None,
     The schedule export typically carries Cap/Tot/Wait columns, so modality_mismatch
     / under_supply light up from the export itself (no separate IR upload). Returns
     the same report shape ``analyze_live`` does, plus an ``import_summary``.
+
+    FF3 — optional IR enrollment overlay (``enrollment_path`` / ``enrollment_map``):
+    an IR PeopleSoft enrollment export can be JOINED onto the imported schedule the
+    SAME way the live path joins it, MERGE-not-strip (see
+    ``enrollment.enrich_sections``): on a (term, CRN) match the IR counts WIN (IR is
+    authoritative); the schedule export's OWN native Cap/Tot/Wait on UNMATCHED
+    sections are PRESERVED, never wiped. So F5 demand_supply reads
+    IR-on-matched + native-on-unmatched, with nothing silently lost. Mirrors
+    ``analyze_live``'s ``enrollment_path`` (real IR adapter) /
+    ``enrollment_map`` (hand-keyed offline) seam; both stay OUTSIDE engine.run.
     """
     records, summary = schedule_import.load_schedule_export(schedule_path, sheet=sheet)
     if not records:
@@ -1369,6 +1380,11 @@ def analyze_import(schedule_path, out_path, *, program=None, program_path=None,
         sections_override=records, program_override=program,
         facility=facility, active_courses=active_courses,
         program_demand=program_demand,
+        # FF3: overlay an IR enrollment export onto the imported schedule. The
+        # join is merge-not-strip (enrollment.enrich_sections), so unmatched
+        # sections keep the schedule export's own native counts — F5
+        # demand_supply then reads IR-on-matched + native-on-unmatched.
+        enrollment_path=enrollment_path, enrollment_map=enrollment_map,
         elumen_live=False, transfer_goal=transfer_goal)
     report["import_summary"] = summary
     return report

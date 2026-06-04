@@ -173,12 +173,28 @@ def load_enrollment(path):
 
 
 def enrich_sections(section_records, enrollment):
-    """Thread enrollment counts onto live section records.
+    """Thread enrollment counts onto live section records (MERGE, not strip).
 
     Returns a NEW list of NEW dicts (does NOT mutate the caller's records in
-    place — this keeps it idempotent and non-aliasing). Matched records gain
-    'Cap Enrl' / 'Tot Enrl' / 'Wait Tot'; unmatched (live-only) records carry no
-    enrollment keys (so they stay 0 downstream via build_sections_df defaults).
+    place — this keeps it idempotent and non-aliasing).
+
+    FF3 MERGE-NOT-STRIP semantics (the fix for the F5-deferred footgun):
+      * MATCHED record (its (term, CRN) is in ``enrollment``): the IR values WIN
+        and overwrite whatever 'Cap Enrl' / 'Tot Enrl' / 'Wait Tot' (and FF5's
+        'Component') the record carried — IR is the authoritative enrollment
+        source.
+      * UNMATCHED record that ALREADY carries native counts (e.g. an imported
+        schedule export that ships Cap/Tot/Wait in the file): those native counts
+        are PRESERVED, never wiped. (The pre-FF3 code stripped them from EVERY
+        record and re-added only on match, so layering an IR upload over a
+        counts-carrying import silently zeroed the unmatched sections — exactly
+        why F5 punted analyze_import(enrollment_path=...).)
+      * UNMATCHED record with NO native counts (a bare live fetch): stays empty,
+        with NO fabricated counts (honest; it defaults to 0 downstream via
+        build_sections_df). Nothing is ever invented.
+
+    Net: matched -> IR counts; unmatched-but-had-native -> keep native;
+    unmatched-no-native -> empty. Deterministic and fail-open.
 
     Join key: (int(term), bare-CRN), where the schedule-side class_nbr is
     stripped of its ` (LEC)`/` (LAB)` suffix. Blank / non-numeric class_nbr is
@@ -200,10 +216,11 @@ def enrich_sections(section_records, enrollment):
     out = []
     for record in section_records:
         # Fresh copy so the caller's dict is never mutated and re-running is a
-        # no-op (idempotent); also strip any stale enrollment keys from a prior
-        # enrich so a now-unmatched record does not retain old counts.
-        new = {k: v for k, v in record.items()
-               if k not in ("Cap Enrl", "Tot Enrl", "Wait Tot", "Component")}
+        # no-op (idempotent). MERGE, not strip: every key on the record (including
+        # any PRE-EXISTING native 'Cap Enrl'/'Tot Enrl'/'Wait Tot'/'Component')
+        # rides through. On a match the IR values are written OVER these below, so
+        # IR wins; on a miss the native counts are simply preserved.
+        new = dict(record)
         crn = _crn(record.get("class_nbr", ""))
         if crn is not None:
             try:
@@ -213,6 +230,7 @@ def enrich_sections(section_records, enrollment):
             if term is not None:
                 counts = enrollment.get((term, crn))
                 if counts is not None:
+                    # IR is authoritative: overwrite any native counts on a match.
                     new["Cap Enrl"] = counts["Cap Enrl"]
                     new["Tot Enrl"] = counts["Tot Enrl"]
                     new["Wait Tot"] = counts["Wait Tot"]
