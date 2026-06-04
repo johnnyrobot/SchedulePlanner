@@ -71,6 +71,7 @@ import os
 
 import httpx
 
+import buildability
 import engine
 from sources import (assist, catalog_ge, course_master, elumen, elumen_client,
                      enrollment, enrollment_ir, ge, mapping, pdf_loader,
@@ -781,6 +782,25 @@ def _room_detector_entry(sections, collisions, *, facility_used, capacity=None,
     return entry
 
 
+def _buildability_detector_entry(block):
+    """Honest active/inert entry for the program-buildability audit (mirrors the
+    other detector entries). Inert carries the audit's own reason."""
+    if not block or block.get("status") != "active":
+        return {
+            "detector": "program_buildability", "status": "inert",
+            "reason": ((block or {}).get("reason")
+                       or "no program / no offered sections to audit"),
+        }
+    return {
+        "detector": "program_buildability", "status": "active",
+        "found": len(block.get("programs", [])),
+        "reason": ("scores whether each program's required path is offered, "
+                   "time-conflict-free, on its recommended season, and seat-available "
+                   "in the audited terms — a structural-feasibility PROXY, not a "
+                   "measured completion rate"),
+    }
+
+
 def analyze_live(campus, terms, program_query, out_path, *, client=None,
                  enrollment_path=None, elumen_fixture=None, elumen_live=False,
                  enrollment_map=None, prereq_max_clauses=None,
@@ -788,6 +808,7 @@ def analyze_live(campus, terms, program_query, out_path, *, client=None,
                  program_id=None, program_title="", program_award="",
                  assist_areas=None, elumen_cache=None,
                  catalog_pdf=None, odl_json=None, facility=None,
+                 active_courses=None,
                  sections_override=None, program_override=None):
     """Run the full live pipeline and return a structured, JSON-serializable report.
 
@@ -1075,6 +1096,17 @@ def analyze_live(campus, terms, program_query, out_path, *, client=None,
     report["inert_detectors"].append(_room_detector_entry(
         sections, room_conflicts, facility_used=bool(facility),
         capacity=room_capacity, lab_stats=_lab_pool_stats(sections, facility)))
+
+    # Program-map buildability (F1): is the program's required path schedulable
+    # against the fetched sections? Deterministic, advisory, computed HERE outside
+    # engine.run (never feeds the deterministic solve). ge_rows seeds the GE
+    # denominator; active_courses (import path's course master) enables the
+    # dead-requirement check; the horizon defaults to the fetched section terms.
+    buildability_block = buildability.buildability_report(
+        [program], sections, ge_rows=ge_rows, active_courses=active_courses)
+    if isinstance(report["results"], dict) and isinstance(report["results"].get("analysis"), dict):
+        report["results"]["analysis"]["buildability"] = buildability_block
+    report["inert_detectors"].append(_buildability_detector_entry(buildability_block))
     return report
 
 
@@ -1163,7 +1195,11 @@ def analyze_import(schedule_path, out_path, *, program=None, program_path=None,
                 "error": f"No active sections found in {schedule_path!r}."}
 
     terms = summary["terms"]
-    course_units = course_master.load_units(course_master_path) if course_master_path else {}
+    # The course master gives BOTH units (solver) and the active-course set (the
+    # buildability dead-requirement check). Load once; live path has neither.
+    course_units, active_courses = (
+        course_master.load_course_master(course_master_path) if course_master_path
+        else ({}, None))
     if course_units:
         for r in records:
             cid = mapping._norm(r.get("course", ""))
@@ -1180,7 +1216,8 @@ def analyze_import(schedule_path, out_path, *, program=None, program_path=None,
     report = analyze_live(
         "LAMC", terms, "(historical import)", out_path,
         sections_override=records, program_override=program,
-        facility=facility, elumen_live=False, transfer_goal=transfer_goal)
+        facility=facility, active_courses=active_courses,
+        elumen_live=False, transfer_goal=transfer_goal)
     report["import_summary"] = summary
     return report
 
