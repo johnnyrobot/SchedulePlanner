@@ -208,6 +208,20 @@ def test_import_without_program_lists_keeps_bottleneck_inert():
     assert det["status"] == "inert" and det["reason"] and "remedy" in det
 
 
+def test_import_populates_grid_pressure():
+    with tempfile.TemporaryDirectory() as tmp:
+        out = str(pathlib.Path(tmp) / "wb.xlsx")
+        report = blw.analyze_import(CSV, out)
+    gp = report["results"]["analysis"]["grid_pressure"]
+    assert gp["status"] in ("active", "inert")
+    if gp["status"] == "active":
+        assert "conformance" in gp and "morning_compression" in gp
+        assert gp["not_assessed"]["end_time_duration"]["status"] == "inert"
+    # the detector entry is present and honestly labelled
+    names = {d["detector"] for d in report["inert_detectors"]}
+    assert "grid_pressure" in names
+
+
 # --- app bridge returns the same flat dict the UI renders ------------------
 
 def test_app_analyze_schedule_import_offline():
