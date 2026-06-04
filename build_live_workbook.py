@@ -73,6 +73,7 @@ import httpx
 
 import buildability
 import cross_program_bottleneck
+import grid_pressure
 import engine
 from sources import (assist, catalog_ge, course_master, elumen, elumen_client,
                      enrollment, enrollment_ir, ge, mapping, pdf_loader,
@@ -824,6 +825,25 @@ def _bottleneck_detector_entry(block):
     }
 
 
+def _grid_pressure_detector_entry(block):
+    """Honest active/inert entry for the grid-conformance + morning-compression
+    audit (mirrors ``_bottleneck_detector_entry``)."""
+    if not block or block.get("status") != "active":
+        return {
+            "detector": "grid_pressure", "status": "inert",
+            "reason": ((block or {}).get("reason")
+                       or "no timed sections to analyze"),
+        }
+    return {
+        "detector": "grid_pressure", "status": "active",
+        "found": len(block.get("mutual_exclusions", [])),
+        "reason": ("flags how concentrated required courses are in the 9 AM-1 PM "
+                   "window and which morning-locked required-course pairs are "
+                   "mutually exclusive — a structural PROXY, not a measured "
+                   "completion rate"),
+    }
+
+
 def analyze_live(campus, terms, program_query, out_path, *, client=None,
                  enrollment_path=None, elumen_fixture=None, elumen_live=False,
                  enrollment_map=None, prereq_max_clauses=None,
@@ -1142,6 +1162,19 @@ def analyze_live(campus, terms, program_query, out_path, *, client=None,
     if isinstance(report["results"], dict) and isinstance(report["results"].get("analysis"), dict):
         report["results"]["analysis"]["bottlenecks"] = bottleneck_block
     report["inert_detectors"].append(_bottleneck_detector_entry(bottleneck_block))
+
+    # Grid-conformance + morning-compression pressure (F3): how concentrated the
+    # schedule's required courses are in the 9 AM-1 PM window, and which required-
+    # course pairs are mutually exclusive because every section is morning-locked.
+    # Deterministic, advisory, computed HERE outside engine.run. Start-time
+    # conformance only — end-time/duration and holiday/session-date awareness ship
+    # inert (no honest contact category / no academic calendar). The structural
+    # mutual-exclusivity fact, NOT a snapping simulation.
+    grid_block = grid_pressure.grid_pressure_report(
+        sections, program=program, program_demand=program_demand)
+    if isinstance(report["results"], dict) and isinstance(report["results"].get("analysis"), dict):
+        report["results"]["analysis"]["grid_pressure"] = grid_block
+    report["inert_detectors"].append(_grid_pressure_detector_entry(grid_block))
     return report
 
 
