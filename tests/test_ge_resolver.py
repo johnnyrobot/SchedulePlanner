@@ -237,3 +237,25 @@ def test_resolve_mixed_system_pattern_disables_cross_system_filter():
                            {"courses": [], "ge_requirements": []})
     assert cov["cross_system_areas"] == []
     assert "B4" in cov["unknown_areas"]
+
+
+def test_resolve_exposes_pre_sweep_offered_eligible():
+    """coverage['areas'][i]['offered_eligible'] is the PRE-sweep count of distinct
+    offered articulating courses. When two areas share the ONLY offered course, the
+    disjoint sweep zeroes one area's post-sweep offered_count (no_offering), but its
+    pre-sweep offered_eligible must stay >= 1 so a buildability denominator never
+    false-flags it as unschedulable."""
+    pattern = {"areas": [{"code": "3A", "title": "Arts", "count": 1, "units_min": 3},
+                         {"code": "3B", "title": "Hum", "count": 1, "units_min": 3}]}
+    assist = {"3A": {"title": "Arts", "courses": ["X 1"]},
+              "3B": {"title": "Hum", "courses": ["X 1"]}}
+    offered = {"X 1"}  # the ONE offered course articulates to BOTH areas
+    _rows, cov = ge.resolve(pattern, assist, offered,
+                            {"courses": [], "ge_requirements": []}, concrete_threshold=3)
+    by_area = {a["area"]: a for a in cov["areas"]}
+    claimed = [a for a in ("3A", "3B") if by_area[a]["offered_count"] == 1]
+    starved = [a for a in ("3A", "3B") if by_area[a]["offered_count"] == 0]
+    assert len(claimed) == 1 and len(starved) == 1          # the sweep splits them
+    assert "no_offering" in by_area[starved[0]]["flags"]    # post-sweep would false-flag
+    assert by_area[starved[0]]["offered_eligible"] == 1     # pre-sweep tells the truth
+    assert by_area[claimed[0]]["offered_eligible"] == 1

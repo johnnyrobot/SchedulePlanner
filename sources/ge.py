@@ -227,6 +227,13 @@ def resolve(pattern, assist_areas, offered, program, *, concrete_threshold=3):
                     cands.append(offered_by_canon[ca])
         offered_eligible[req["area"]] = sorted(set(cands))
 
+    # Pre-sweep per-area offered-eligible counts: how many distinct offered
+    # articulating courses each area has BEFORE the disjoint claiming sweep below.
+    # F4's buildability denominator uses THIS (not the post-sweep offered_count) so a
+    # course claimed by a sibling area never false-flags a shared area as
+    # unschedulable. Per-area / optimistic by design — fail open: can only miss a gap.
+    offered_pre = {area: len(cands) for area, cands in offered_eligible.items()}
+
     used = set()
     for req in sorted(requirements, key=lambda r: (len(offered_eligible[r["area"]]), r["area"])):
         if req.get("reserve_only"):
@@ -246,7 +253,8 @@ def resolve(pattern, assist_areas, offered, program, *, concrete_threshold=3):
                          "candidates": [], "recommended": "", "units": req["units_min"]})
             area_cov.append({"area": area, "title": req["title"], "required": required,
                              "resolution": "reserve", "eligible_count": None,
-                             "offered_count": 0, "flags": []})
+                             "offered_count": 0, "offered_eligible": offered_pre.get(area, 0),
+                             "flags": []})
             continue
         flags = []
         required = max(0, req["count"] - shared_areas.get(area, 0))
@@ -256,7 +264,8 @@ def resolve(pattern, assist_areas, offered, program, *, concrete_threshold=3):
             flags.append("no_assist_data")
         if required <= 0:
             area_cov.append({"area": area, "title": req["title"], "required": 0,
-                             "resolution": "shared", "flags": flags})
+                             "resolution": "shared", "offered_eligible": offered_pre.get(area, 0),
+                             "flags": flags})
             continue
         rec = recs.get(area, "")
         area_elig_canon = {_canon(c) for c in by_area.get(area, [])}
@@ -283,7 +292,8 @@ def resolve(pattern, assist_areas, offered, program, *, concrete_threshold=3):
         area_cov.append({"area": area, "title": req["title"], "required": required,
                          "resolution": resolution,
                          "eligible_count": len(by_area.get(area, [])),
-                         "offered_count": len(offered_cands), "flags": flags})
+                         "offered_count": len(offered_cands),
+                         "offered_eligible": offered_pre.get(area, 0), "flags": flags})
 
     coverage = {"areas": area_cov, "shared_with_major": shared,
                 "unknown_areas": unknown, "cross_system_areas": cross_system}
