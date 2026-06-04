@@ -225,3 +225,41 @@ def test_score_ge_kwargs_default_to_today():
     tc = {"feasible": True}
     assert (B._score(4, ["X"], [], tc, [], [])
             == B._score(4, ["X"], [], tc, [], [], ge_required=0, ge_missing=0))
+
+
+def _ge_active_coverage():
+    return {"reviewed": False, "areas": [
+        {"area": "1A", "required": 1, "offered_eligible": 2, "eligible_count": 4, "flags": []},
+        {"area": "4",  "required": 1, "offered_eligible": 0, "eligible_count": 3, "flags": ["no_offering"]},
+    ]}
+
+
+def test_audit_program_folds_ge_into_score_with_delta():
+    audit = B.audit_program(_program(), _sections(), ge_coverage=_ge_active_coverage())
+    ge = audit["ge"]
+    assert ge["status"] == "active" and ge["draft"] is True
+    assert ge["areas_in_denominator"] == 2 and ge["areas_schedulable"] == 1 and ge["gaps"] == ["4"]
+    # Signed delta: GE-inclusive == major-only + delta (direction not asserted).
+    assert audit["score"] == audit["score_major_only"] + audit["score_delta"]
+    assert audit["score_delta"] != 0          # a GE gap moved the number
+    assert "GE:" in audit["summary"]
+
+
+def test_audit_program_no_ge_is_byte_identical_today():
+    a = B.audit_program(_program(), _sections())
+    assert a["ge"] is None
+    assert a["score"] == a["score_major_only"] and a["score_delta"] == 0
+
+
+def test_audit_program_ge_inert_when_all_unknown_articulation():
+    cov = {"reviewed": True, "areas": [
+        {"area": "6", "required": 1, "offered_eligible": 0, "eligible_count": 0,
+         "flags": ["no_assist_data"]}]}
+    audit = B.audit_program(_program(), _sections(), ge_coverage=cov)
+    assert audit["ge"]["status"] == "inert" and audit["ge"]["reason"]
+    assert audit["score"] == audit["score_major_only"]   # GE did NOT move the number
+
+
+def test_buildability_report_carries_ge_label():
+    rep = B.buildability_report([_program()], _sections(), ge_coverage=_ge_active_coverage())
+    assert "GE-inclusive" in rep["ge_label"]

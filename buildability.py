@@ -316,10 +316,14 @@ def _score(required_total, missing, dead, tc, choices, seasons, *, ge_required=0
     return max(0, min(100, round(score)))
 
 
-def audit_program(program, sections, *, ge_rows=None, active_courses=None,
+def audit_program(program, sections, *, ge_coverage=None, ge_rows=None, active_courses=None,
                   horizon_terms=None, by_design=None):
     """Score one program's required path against the offered sections. Returns a
-    JSON-serializable scorecard (see module docstring for the field meanings)."""
+    JSON-serializable scorecard (see module docstring for the field meanings).
+
+    ``ge_rows`` is an accepted-but-unused temporary back-compat shim for Task 4
+    (the un-migrated build_live_workbook call site still passes it); remove once
+    that call site switches to ``ge_coverage``."""
     by_design = {mapping._norm(c) for c in (by_design or set())}
     offered = offered_by_course(sections)
     required = required_set(program)
@@ -335,9 +339,25 @@ def audit_program(program, sections, *, ge_rows=None, active_courses=None,
     single = single_section_required(required, offered, horizon_terms)
     seasons = season_mismatches(program, offered, horizon_terms)
     seats = seat_pressure(required, offered, horizon_terms)
-    ge = None
 
-    score = _score(len(required), missing, dead, tc, choices, seasons)
+    ge_dn = ge_denominator(ge_coverage)
+    if ge_dn is not None:
+        ge = {**ge_dn, "status": "active",
+              "draft": bool(ge_coverage) and not ge_coverage.get("reviewed", False)}
+        ge_req, ge_miss = ge_dn["areas_in_denominator"], len(ge_dn["gaps"])
+    elif ge_coverage:
+        ge = {"status": "inert", "areas_in_denominator": 0, "areas_schedulable": 0,
+              "gaps": [], "reason": (ge_coverage.get("error")
+                        or "no GE area has known articulation offered this term")}
+        ge_req = ge_miss = 0
+    else:
+        ge = None
+        ge_req = ge_miss = 0
+
+    score = _score(len(required), missing, dead, tc, choices, seasons,
+                   ge_required=ge_req, ge_missing=ge_miss)
+    score_major_only = _score(len(required), missing, dead, tc, choices, seasons)
+    score_delta = score - score_major_only
     parts = [f"{len(avail)}/{len(required)} required courses offered"]
     if missing:
         parts.append(f"{len(missing)} missing")
@@ -346,6 +366,8 @@ def audit_program(program, sections, *, ge_rows=None, active_courses=None,
         parts.append(f"{len(single)} single-section risk")
     if dead:
         parts.append(f"{len(dead)} de-catalogued")
+    if ge and ge.get("status") == "active":
+        parts.append(f"GE: {ge['areas_schedulable']}/{ge['areas_in_denominator']} areas schedulable")
     summary = "; ".join(parts) + "."
 
     return {
@@ -364,15 +386,21 @@ def audit_program(program, sections, *, ge_rows=None, active_courses=None,
         "ge": ge,
         "by_design_excluded": excluded,
         "score": score,
+        "score_major_only": score_major_only,
+        "score_delta": score_delta,
         "summary": summary,
     }
 
 
-def buildability_report(programs, sections, *, ge_rows=None, active_courses=None,
+def buildability_report(programs, sections, *, ge_coverage=None, ge_rows=None, active_courses=None,
                         horizon_terms=None, by_design=None):
     """Audit one or more programs. Honest active/inert envelope: inert (with a
     reason) when there is no program, no section, or no required course is offered
-    at all — never an empty 'all good'."""
+    at all — never an empty 'all good'.
+
+    ``ge_rows`` is an accepted-but-unused temporary back-compat shim for Task 4
+    (the un-migrated build_live_workbook call site still passes it; NOT forwarded
+    down); remove once that call site switches to ``ge_coverage``."""
     horizon = (horizon_terms if horizon_terms is not None
                else sorted({r.get("term") for r in sections if r.get("term") is not None},
                            key=lambda t: str(t)))
@@ -383,14 +411,14 @@ def buildability_report(programs, sections, *, ge_rows=None, active_courses=None
         return {"status": "inert", "label": LABEL,
                 "reason": "no offered sections to audit the required path against"}
 
-    audits = [audit_program(p, sections, ge_rows=ge_rows, active_courses=active_courses,
+    audits = [audit_program(p, sections, ge_coverage=ge_coverage, active_courses=active_courses,
                             horizon_terms=horizon, by_design=by_design)
               for p in programs]
     if not any(a["available"] for a in audits):
         return {"status": "inert", "label": LABEL,
                 "reason": ("none of the program's required courses are offered in the "
                            "audited terms (the required<->offered join is empty)")}
-    return {"status": "active", "label": LABEL,
+    return {"status": "active", "label": LABEL, "ge_label": GE_LABEL,
             "horizon_terms": horizon, "programs": audits}
 
 
