@@ -54,6 +54,37 @@ def test_context_omits_buildability_when_inert():
     assert "PROGRAM BUILDABILITY" not in ctx
 
 
+def test_context_includes_bottleneck_block():
+    """_context grounds the model with the cross-program bottleneck leaderboard so
+    it can answer 'which course is the biggest bottleneck?' — with honest framing."""
+    results = {
+        "analysis": {
+            "bottlenecks": {
+                "status": "active",
+                "label": "Cross-program bottleneck ranking — supply-vs-demand PROXY.",
+                "leaderboard": [
+                    {"course": "MATH 227", "n_programs": 15, "n_sections": 1,
+                     "risk_score": 19.5,
+                     "reasons": ["required by 15 programs", "single section"]},
+                ],
+                "gaps": [{"course": "PHYSICS 6", "n_programs": 4}],
+                "unmatched_program_courses": 2,
+            },
+        },
+    }
+    ctx = chat_assist._context(results)
+    assert "CROSS-PROGRAM BOTTLENECKS" in ctx
+    assert "PROXY" in ctx                       # honest framing travels with it
+    assert "MATH 227" in ctx and "15 programs" in ctx
+    assert "PHYSICS 6" in ctx                    # the not-offered gap surfaces
+
+
+def test_context_omits_bottlenecks_when_inert():
+    ctx = chat_assist._context({"analysis": {"bottlenecks": {"status": "inert",
+                                                             "reason": "no demand map"}}})
+    assert "CROSS-PROGRAM BOTTLENECKS" not in ctx
+
+
 # ------------------------------------------------------------------ router
 def test_route_parses_offering_and_fills_defaults(monkeypatch):
     _patch_chat(monkeypatch, lambda *a, **k: '{"lookup":"offering","courses":["BIOLOGY 6"]}')
