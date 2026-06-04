@@ -72,3 +72,61 @@ def test_morning_locked_excludes_nonprime_and_async():
     locked = G.morning_locked_courses(secs)
     assert set(locked) == {"LOCK"}
     assert locked["LOCK"]["n_sections"] == 2
+
+
+# ----------------------------------------------------------------- mutual exclusions
+def test_mutual_exclusions_finds_overlapping_locked_pairs():
+    secs = [sec("A", days="MW", times="9:00 AM - 10:15 AM"),    # 540-615
+            sec("B", days="MW", times="9:30 AM - 10:45 AM"),    # 570-645 overlaps A
+            sec("C", days="MW", times="11:00 AM - 12:15 PM")]   # 660-735 no overlap
+    locked = G.morning_locked_courses(secs)
+    pairs, trunc = G.mutual_exclusions(secs, locked)
+    pc = {tuple(p["courses"]) for p in pairs}
+    assert ("A", "B") in pc
+    assert ("A", "C") not in pc and ("B", "C") not in pc
+    assert trunc["pairs"] == 0
+
+
+def test_mutual_exclusions_truncates_pairs():
+    secs = [sec(f"CRS {i}", days="MW", times="9:00 AM - 10:15 AM") for i in range(6)]
+    locked = G.morning_locked_courses(secs)                      # 6 courses, all overlap
+    pairs, trunc = G.mutual_exclusions(secs, locked, top=10)     # C(6,2)=15 pairs
+    assert len(pairs) == 10
+    assert trunc["pairs"] == 5
+
+
+# ----------------------------------------------------------------- report envelope
+def test_report_inert_when_no_timed_sections():
+    rep = G.grid_pressure_report([async_sec("X")])
+    assert rep["status"] == "inert"
+    assert "PROXY" in rep["label"] and rep.get("reason")
+
+
+def test_report_active_envelope_has_not_assessed_and_caveat():
+    secs = [sec("A", days="MW", times="9:00 AM - 10:15 AM"),
+            sec("B", days="MW", times="9:30 AM - 10:45 AM")]
+    rep = G.grid_pressure_report(secs, grid={"16-week": {540}})
+    assert rep["status"] == "active"
+    assert "PROXY" in rep["label"]
+    assert rep["morning_compression"]["buckets"]["prime"] == 2
+    assert rep["not_assessed"]["end_time_duration"]["status"] == "inert"
+    assert rep["not_assessed"]["holidays_session_dates"]["status"] == "inert"
+    assert "feasibility is not verified" in rep["what_if_caveat"]
+    assert {tuple(p["courses"]) for p in rep["mutual_exclusions"]} == {("A", "B")}
+
+
+def test_report_relevant_scoping_limits_pairs_to_program():
+    secs = [sec("A", days="MW", times="9:00 AM - 10:15 AM"),
+            sec("B", days="MW", times="9:30 AM - 10:45 AM"),
+            sec("Z", days="MW", times="9:15 AM - 10:30 AM")]
+    program = {"courses": [{"course_id": "A"}, {"course_id": "B"}]}   # Z not required
+    rep = G.grid_pressure_report(secs, program=program)
+    pc = {tuple(p["courses"]) for p in rep["mutual_exclusions"]}
+    assert ("A", "B") in pc
+    assert all("Z" not in p for p in pc)
+
+
+def test_report_is_deterministic():
+    secs = [sec("B", days="MW", times="9:30 AM - 10:45 AM"),
+            sec("A", days="MW", times="9:00 AM - 10:15 AM")]
+    assert G.grid_pressure_report(secs) == G.grid_pressure_report(secs)
