@@ -411,6 +411,67 @@ def _bottlenecks(results: dict) -> str:
             f'{table}{gaps_html}{footnote}</section>')
 
 
+def _grid_pressure(results: dict) -> str:
+    """Grid-conformance + morning-compression (F3): on-grid start-time rate, the
+    time-of-day distribution, and the morning-locked required-course pairs that are
+    mutually exclusive. Honest inert note when nothing could be analyzed; the
+    deliberately-unbuilt end-time/holiday checks surface as 'Not assessed'. All
+    data HTML-escaped."""
+    block = (results.get("analysis") or {}).get("grid_pressure")
+    if not block:
+        return ""
+    label = _esc(block.get("label", ""))
+    if block.get("status") != "active":
+        return ('<section class="card" aria-labelledby="grid"><h2 id="grid">'
+                'Grid conformance &amp; morning compression</h2>'
+                f'<p>Not computed: {_esc(block.get("reason", "no timed sections"))}</p>'
+                f'<p class="note">{label}</p></section>')
+    conf = block.get("conformance") or {}
+    comp = block.get("morning_compression") or {}
+    rate = conf.get("on_grid_rate")
+    rate_txt = "n/a" if rate is None else f"{round(rate * 100)}%"
+    b = comp.get("buckets") or {}
+    dist = (f'early {_esc(b.get("early", 0))} · prime 9–'
+            f'1 {_esc(b.get("prime", 0))} · afternoon {_esc(b.get("afternoon", 0))} '
+            f'· evening {_esc(b.get("evening", 0))}')
+    rows = []
+    for p in block.get("mutual_exclusions", []):
+        cs = (p.get("courses") or ["", ""])
+        rows.append("<tr>"
+                    f'<td class="area">{_esc(cs[0])}</td>'
+                    f'<td class="area">{_esc(cs[1])}</td>'
+                    f'<td>{_esc(p.get("reason"))}</td></tr>')
+    table = ""
+    if rows:
+        table = ('<div class="tablewrap"><table>'
+                 '<caption>Morning-locked required courses that are mutually '
+                 'exclusive</caption>'
+                 '<tr><th>Course</th><th>Course</th><th>Why</th></tr>'
+                 f'{"".join(rows)}</table></div>')
+    na = block.get("not_assessed") or {}
+    na_items = "".join(
+        f'<li>{_esc(k.replace("_", " "))}: {_esc((v or {}).get("reason"))}</li>'
+        for k, v in na.items())
+    na_html = f'<p class="note">Not assessed:</p><ul>{na_items}</ul>' if na_items else ""
+    foot = []
+    tr = block.get("truncated") or {}
+    if tr.get("pairs"):
+        foot.append(f'{_esc(tr["pairs"])} more mutually-exclusive pair(s) beyond '
+                    'those shown.')
+    if conf.get("off_grid_truncated"):
+        foot.append(f'{_esc(conf["off_grid_truncated"])} more off-grid section(s) '
+                    'beyond those shown.')
+    footnote = f'<p class="note">{" ".join(foot)}</p>' if foot else ""
+    return ('<section class="card" aria-labelledby="grid"><h2 id="grid">'
+            'Grid conformance &amp; morning compression</h2>'
+            f'<p class="note">{label}</p>'
+            f'<p>On-grid start times: {_esc(rate_txt)} · time-of-day: {dist} · '
+            f'morning-locked required courses: '
+            f'{_esc(comp.get("morning_locked_count", 0))}</p>'
+            f'<p class="note">{_esc(block.get("what_if_caveat", ""))}</p>'
+            f'{table}{na_html}{footnote}</section>')
+
+
 def _reconciliation(results: dict) -> str:
     rec = results.get("reconciliation")
     if not rec:
@@ -578,6 +639,7 @@ def render_report(results: dict, *, briefing: str = "", generated_at: str = "") 
         f'{_diagnostics(results)}'
         f'{_buildability(results)}'
         f'{_bottlenecks(results)}'
+        f'{_grid_pressure(results)}'
         f'{_reconciliation(results)}'
         f'{_detectors(results)}'
         f'{_ge(results)}'
