@@ -1,0 +1,60 @@
+Scheduling analysis of 1 program across 4 terms of schedule data.
+
+PROGRAMS
+- Biology AS-T — needs fix: full-time 4 terms (needs schedule change); part-time 6 terms.
+    published map broken: BIOLOGY 3 mapped to term 1 but only offered Fall
+    recommended fix: add PHYSICS 6 in Spring
+
+SUPPLY BOTTLENECKS (course-level, across all programs)
+- Rotation gaps (required course offered in too few terms): PHYSICS 6 (1/4)
+- Single-section risk (only one section — a single point of failure): BIOLOGY 3
+- Under-supply (sections at capacity / waitlist pressure): MATH 227 (2/3 sections waitlisted)
+BUILD: campus LAMC · terms 2268, 2272 · program Biology AS-T (AS-T)
+
+TERM-BY-TERM PLANS
+- Biology AS-T [Full-time]: T1: BIOLOGY 3, CHEM 101 | T2: MATH 261
+- Biology AS-T [Part-time]: T1: BIOLOGY 3 | T2: CHEM 101
+
+GENERAL EDUCATION
+Pattern igetc (ASSIST status: ok).
+- Area 1A English Composition: need 1, plan concrete
+- Area 2A Mathematical Concepts: need 1, plan shared
+Met by major: BIOLOGY 3, MATH 261
+
+LIVE RECONCILIATION
+6 program courses offered in the fetched terms, 2 not offered. Not offered: PHYSICS 6, GEOG 15.
+
+TIME CONFLICTS (required courses that clash by meeting time)
+- CHEM 101 & MATH 245 — every offered section overlaps
+
+PROGRAM BUILDABILITY (structural-feasibility PROXY, NOT a measured completion rate)
+- Biology AS-T (score 47/100 GE-inclusive; major-only 55, Δ -8): 3/4 required offered; missing PHYSICS 6; time-conflict-free; 1 single-section; GE 1/2 areas schedulable, gaps 4 [DRAFT GE].
+
+CROSS-PROGRAM BOTTLENECKS (supply-vs-demand PROXY, NOT a measured completion rate)
+- C 0 (risk 1): required by 2 programs, 1 section(s).
+- C 1 (risk 1): required by 2 programs, 1 section(s).
+- C 2 (risk 1): required by 2 programs, 1 section(s).
+- C 3 (risk 1): required by 2 programs, 1 section(s).
+- C 4 (risk 1): required by 2 programs, 1 section(s).
+- C 5 (risk 1): required by 2 programs, 1 section(s).
+- C 6 (risk 1): required by 2 programs, 1 section(s).
+- C 7 (risk 1): required by 2 programs, 1 section(s).
+(+7 more ranked bottleneck course(s) not shown.)
+Required across programs but not offered: G 0 (x1), G 1 (x1), G 2 (x1), G 3 (x1), G 4 (x1), G 5 (x1), G 6 (x1), G 7 (x1).
+(+3 more required-but-not-offered course(s) not shown.)
+
+DEMAND-VS-SUPPLY ACTION LIST (supply-vs-demand PROXY, NOT a measured completion rate)
+- MATH 227 (score 1.3, demand 1.55x): 22 waitlisted, 2 section(s) — add a section.
+(+5 more add-a-section course(s) not shown.)
+Capacity slack (review only — NOT a cut recommendation): ART 101 (fill 0.14).
+(1 required course(s) had no seat counts — excluded, not silently counted.)
+
+GRID CONFORMANCE & MORNING COMPRESSION (structural PROXY, NOT a measured completion rate)
+- on-grid start times: 90%; prime 9AM-1PM share: 0.7; morning-locked required courses: 2.
+- mutually exclusive (both morning-locked): A0 & B0.
+- mutually exclusive (both morning-locked): A1 & B1.
+- mutually exclusive (both morning-locked): A2 & B2.
+- mutually exclusive (both morning-locked): A3 & B3.
+- mutually exclusive (both morning-locked): A4 & B4.
+- mutually exclusive (both morning-locked): A5 & B5.
+(+5 more mutually-exclusive pair(s) not shown.)
