@@ -134,10 +134,39 @@ def test_analyze_live_emits_buildability(lamc_routes, make_client, tmp_path):
         prog0 = block["programs"][0]
         assert prog0["required_total"] >= 1
         assert "available" in prog0 and "score" in prog0 and "time_conflict" in prog0
+        assert "score_major_only" in prog0 and "score_delta" in prog0 and "ge" in prog0
 
     det = next(d for d in report["inert_detectors"]
                if d["detector"] == "program_buildability")
     assert det["status"] == block["status"]
+    json.dumps(report)  # still JSON-serializable end to end
+
+
+def test_analyze_live_buildability_folds_ge(lamc_routes, make_client, tmp_path):
+    """With a transfer GE goal, the buildability audit carries the GE-inclusive
+    score, the major-only score, the signed delta, and the GE block — and the
+    active envelope carries the GE label."""
+    routes = dict(lamc_routes)
+    routes["/api/AcademicYears"] = json.loads((FIX / "assist_academic_years.json").read_text())
+    routes["/api/transferability/courses"] = json.loads(
+        (FIX / "assist_transferability_igetc_LAMC.json").read_text())
+    report = build_live_workbook.analyze_live(
+        "LAMC", [2268], "Biology", str(tmp_path / "ge_build.xlsx"),
+        client=make_client(routes), transfer_goal="igetc", assist_year_id=77,
+        ge_pattern_path=str(FIX / "ge_pattern_test.json"))
+    block = report["results"]["analysis"]["buildability"]
+    assert block["status"] == "active"
+    assert "GE-inclusive" in block["ge_label"]
+    prog0 = block["programs"][0]
+    assert {"score_major_only", "score_delta", "ge"} <= set(prog0)
+    assert prog0["score"] == prog0["score_major_only"] + prog0["score_delta"]
+    # GE actually folded (guards against regressing to the dead ge_rows= shim,
+    # which would leave ge=None / delta=0):
+    assert prog0["ge"] is not None and prog0["ge"]["status"] == "active"
+    assert prog0["score_delta"] != 0
+    # the detector reason advertises the GE fold
+    det = next(d for d in report["inert_detectors"] if d["detector"] == "program_buildability")
+    assert "GE requirements fold into the denominator" in det["reason"]
     json.dumps(report)  # still JSON-serializable end to end
 
 
