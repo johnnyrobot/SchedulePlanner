@@ -186,6 +186,22 @@ def _context(results: dict) -> str:
         extra += ["", "PROGRAM BUILDABILITY (structural-feasibility PROXY, NOT a measured "
                   "completion rate)", *bl]
 
+    bnk = (results.get("analysis") or {}).get("bottlenecks")
+    if bnk and bnk.get("status") == "active":
+        nl = []
+        for r in bnk.get("leaderboard", [])[:8]:
+            nl.append(f"- {r.get('course')} (risk {r.get('risk_score')}): required by "
+                      f"{r.get('n_programs')} programs, {r.get('n_sections')} section(s).")
+        gaps = bnk.get("gaps") or []
+        if gaps:
+            nl.append("Required across programs but not offered: "
+                      + ", ".join(f"{g.get('course')} (x{g.get('n_programs')})"
+                                  for g in gaps[:8]) + ".")
+        # Honest framing rides with the ranking so the assistant never overclaims:
+        # it is a structural supply-vs-demand proxy, not a measured completion rate.
+        extra += ["", "CROSS-PROGRAM BOTTLENECKS (supply-vs-demand PROXY, NOT a measured "
+                  "completion rate)", *nl]
+
     return base + ("\n" + "\n".join(extra) if extra else "")
 
 
