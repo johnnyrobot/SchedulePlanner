@@ -952,6 +952,17 @@ def analyze_live(campus, terms, program_query, out_path, *, client=None,
     engine still reads a finished workbook only. When ``elumen_live`` is set and
     no client is injected, this opens its own httpx.Client (mirroring build()),
     so all network IO stays OUTSIDE engine.run().
+
+    ``demand_program_ids`` (FF4) OPTS IN to the bounded live cross-program demand
+    fan-out: an explicit list of program-id dicts (typically a capped slice of
+    ``program_mapper.get_all_programs``) whose program maps are fetched and
+    aggregated into the ProgramDemand that activates F2's cross-program bottleneck
+    leaderboard on the live path. Default off (None/empty -> no fan-out). Bounded:
+    at most ``live_demand.DEFAULT_MAX_PROGRAMS`` are fetched. Fails open: an empty
+    or fully-failing fan-out leaves the demand map falsy so F2 stays honestly
+    inert. An explicit ``program_demand`` (offline import path) always wins over
+    the fan-out. This fetch runs HERE in the data-gathering phase, never inside
+    engine.run().
     """
     # Precedence: LIVE beats FIXTURE. Record a human-readable warning if both
     # were requested, so the report makes the override explicit (never silent).

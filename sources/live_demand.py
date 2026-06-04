@@ -46,6 +46,8 @@ runs entirely OUTSIDE ``engine.run`` (it is data-gathering, like the rest of
 """
 from __future__ import annotations
 
+import logging
+
 from .mapping import _norm
 from .program_lists import ProgramDemand
 from .program_mapper import fetch_program_by_id
@@ -111,10 +113,14 @@ def fan_out_demand(campus, program_specs, *, client=None,
             program = fetch_program_by_id(
                 campus, plan, title=spec.get("title", ""),
                 award=spec.get("award", ""), client=client)
-        except Exception:
+        except Exception as exc:
             # FAIL OPEN: one program's fetch failing must not abort the whole
             # fan-out (that would silently drop ALL demand). Skip it; the rest of
-            # the bounded set still aggregates. Demand is never fabricated.
+            # the bounded set still aggregates. Demand is never fabricated. Emit a
+            # WARNING so a skipped (e.g. 404) program is not operationally opaque —
+            # the fail-open contract is unchanged (we still continue).
+            logging.getLogger(__name__).warning(
+                "live_demand: skipping program %r (%s)", plan, exc)
             continue
 
         title = (program.get("title") or "").strip()
