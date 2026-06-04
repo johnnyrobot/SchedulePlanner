@@ -214,6 +214,27 @@ def _context(results: dict) -> str:
         extra += ["", "CROSS-PROGRAM BOTTLENECKS (supply-vs-demand PROXY, NOT a measured "
                   "completion rate)", *nl]
 
+    gp = (results.get("analysis") or {}).get("grid_pressure")
+    if gp and gp.get("status") == "active":
+        conf = gp.get("conformance") or {}
+        comp = gp.get("morning_compression") or {}
+        pairs = gp.get("mutual_exclusions") or []
+        rate = conf.get("on_grid_rate")
+        gl = [f"- on-grid start times: "
+              f"{'n/a' if rate is None else str(round(rate * 100)) + '%'}; "
+              f"prime 9AM-1PM share: {comp.get('prime_share')}; "
+              f"morning-locked required courses: {comp.get('morning_locked_count')}."]
+        for p in pairs[:6]:
+            cs = p.get("courses") or ["", ""]
+            gl.append(f"- mutually exclusive (both morning-locked): "
+                      f"{cs[0]} & {cs[1]}.")
+        # Honest count of what the [:6] slice plus any engine cap leaves out.
+        hidden = max(0, len(pairs) - 6) + ((gp.get("truncated") or {}).get("pairs") or 0)
+        if hidden:
+            gl.append(f"(+{hidden} more mutually-exclusive pair(s) not shown.)")
+        extra += ["", "GRID CONFORMANCE & MORNING COMPRESSION (structural PROXY, NOT "
+                  "a measured completion rate)", *gl]
+
     return base + ("\n" + "\n".join(extra) if extra else "")
 
 
