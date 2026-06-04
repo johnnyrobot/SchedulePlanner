@@ -129,3 +129,49 @@ def test_report_renders_time_conflicts_block():
     assert "Time conflicts" in doc
     assert "every offered section overlaps" in doc
     assert "CHEM 101 &amp; MATH 245" in doc   # & is HTML-escaped
+
+
+def test_report_renders_buildability_section():
+    """An active buildability block renders a Program-buildability card with the
+    score, summary, blocking reasons, and the honest PROXY label; data escaped."""
+    results = {
+        "terms_in_data": 1,
+        "analysis": {
+            "rotation_gaps": [], "single_section": [],
+            "modality_mismatch": [], "under_supply": [],
+            "buildability": {
+                "status": "active",
+                "label": "Structural-feasibility PROXY, not a measured completion rate.",
+                "horizon_terms": [2268],
+                "programs": [{
+                    "code": "BIOL-AS", "title": "Biology <AS>", "required_total": 4,
+                    "available": 3, "missing": ["PHYSICS 6"], "dead_requirements": [],
+                    "single_section_required": ["BIOLOGY 3"],
+                    "choice_groups": [], "season_mismatches": [], "seat_pressure": [],
+                    "time_conflict": {"feasible": False,
+                                      "pairwise_hard": [["BIOLOGY 3", "CHEM 101"]],
+                                      "term_clashes": []},
+                    "by_design_excluded": [], "score": 62,
+                    "summary": "3/4 required courses offered; 1 missing; has time conflicts.",
+                }],
+            },
+        },
+        "programs": {},
+    }
+    doc = report_export.render_report(results)
+    assert "Program buildability" in doc
+    assert "score 62/100" in doc
+    assert "Not offered: PHYSICS 6" in doc
+    assert "Time conflict: BIOLOGY 3 &amp; CHEM 101" in doc
+    assert "PROXY" in doc
+    assert "Biology &lt;AS&gt;" in doc        # title is HTML-escaped
+
+
+def test_report_omits_buildability_when_absent():
+    """Demo / non-live results (no buildability key) render without the section."""
+    results = {"terms_in_data": 4,
+               "analysis": {"rotation_gaps": [], "single_section": [],
+                            "modality_mismatch": [], "under_supply": []},
+               "programs": {}}
+    doc = report_export.render_report(results)
+    assert "Program buildability" not in doc
