@@ -151,6 +151,30 @@ def test_context_grid_pressure_surfaces_truncation():
     assert "+5 more mutually-exclusive pair(s) not shown" in ctx   # (7-6)+4
 
 
+def test_context_includes_demand_supply_proxy_framing():
+    results = {"analysis": {"demand_supply": {
+        "status": "active", "label": "L",
+        "add_list": [{"course": "MATH 227", "action_score": 1.3, "demand_ratio": 1.55,
+                      "wait_total": 22, "n_sections": 2}],
+        "capacity_slack": [{"course": "ART 101", "fill": 0.14, "n_sections": 2,
+                            "note": "review only"}],
+        "program_weighted": True, "not_assessed": 0,
+        "truncated": {"add_list": 5, "capacity_slack": 0}}}}
+    ctx = chat_assist._context(results)
+    blob = "\n".join(ctx) if isinstance(ctx, list) else str(ctx)
+    assert "DEMAND-VS-SUPPLY" in blob
+    assert "PROXY" in blob and "MATH 227" in blob
+    assert "+5 more" in blob                 # honest truncation, no silent drop
+
+
+def test_context_omits_demand_supply_when_inert():
+    results = {"analysis": {"demand_supply": {"status": "inert", "label": "L",
+                                              "reason": "no seat counts"}}}
+    ctx = chat_assist._context(results)
+    blob = "\n".join(ctx) if isinstance(ctx, list) else str(ctx)
+    assert "DEMAND-VS-SUPPLY" not in blob
+
+
 # ------------------------------------------------------------------ router
 def test_route_parses_offering_and_fills_defaults(monkeypatch):
     _patch_chat(monkeypatch, lambda *a, **k: '{"lookup":"offering","courses":["BIOLOGY 6"]}')
