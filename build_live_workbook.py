@@ -73,6 +73,7 @@ import httpx
 
 import buildability
 import cross_program_bottleneck
+import demand_supply
 import grid_pressure
 import engine
 from sources import (assist, catalog_ge, course_master, elumen, elumen_client,
@@ -830,6 +831,28 @@ def _bottleneck_detector_entry(block):
     }
 
 
+def _demand_supply_detector_entry(block):
+    """Honest active/inert entry for the demand-vs-supply action list (F5;
+    mirrors ``_bottleneck_detector_entry``). Inert carries the report's own
+    reason (e.g. no seat counts on a bare live fetch)."""
+    if not block or block.get("status") != "active":
+        return {
+            "detector": "demand_supply", "status": "inert",
+            "remedy": ("upload an IR enrollment export (live path) or import a "
+                       "schedule export that carries Cap/Tot/Wait counts"),
+            "reason": ((block or {}).get("reason")
+                       or "no seat counts to assess demand against"),
+        }
+    return {
+        "detector": "demand_supply", "status": "active",
+        "found": len(block.get("add_list", [])),
+        "reason": ("ranks courses whose seats fall short of enrolled+waitlisted "
+                   "demand into an 'add a section' list (waitlist counts only "
+                   "when paired with high fill / a closed status); a structural "
+                   "supply-vs-demand PROXY, not a measured completion rate"),
+    }
+
+
 def _grid_pressure_detector_entry(block):
     """Honest active/inert entry for the grid-conformance + morning-compression
     audit (mirrors ``_bottleneck_detector_entry``)."""
@@ -1168,6 +1191,18 @@ def analyze_live(campus, terms, program_query, out_path, *, client=None,
     if isinstance(report["results"], dict) and isinstance(report["results"].get("analysis"), dict):
         report["results"]["analysis"]["bottlenecks"] = bottleneck_block
     report["inert_detectors"].append(_bottleneck_detector_entry(bottleneck_block))
+
+    # Demand-vs-supply action list (F5): offered courses whose seat SUPPLY falls
+    # short of enrolled+waitlisted DEMAND -> a ranked "add a section" list, plus a
+    # neutral capacity-slack observation. Reads Cap/Tot/Wait off the sections
+    # (IR-joined on the live path, or carried natively by an imported schedule
+    # export); INERT until seat counts exist (a bare live fetch has none).
+    # Cross-program demand is an OPTIONAL weight. Computed HERE outside engine.run.
+    demand_supply_block = demand_supply.demand_supply_report(
+        sections, program_demand=program_demand, facility=facility)
+    if isinstance(report["results"], dict) and isinstance(report["results"].get("analysis"), dict):
+        report["results"]["analysis"]["demand_supply"] = demand_supply_block
+    report["inert_detectors"].append(_demand_supply_detector_entry(demand_supply_block))
 
     # Grid-conformance + morning-compression pressure (F3): how concentrated the
     # schedule's required courses are in the 9 AM-1 PM window, and which required-

@@ -106,7 +106,7 @@ def test_build_live_workbook_emits_structured_report(lamc_routes, make_client,
     assert {d["detector"] for d in inert} == {
         "modality_mismatch", "prerequisite_ordering", "ge_scheduling",
         "time_block_conflict", "room_conflict", "program_buildability",
-        "program_bottleneck", "grid_pressure"}
+        "program_bottleneck", "grid_pressure", "demand_supply"}
     for d in inert:
         if d["detector"] == "ge_scheduling" or d.get("status") == "active":
             continue  # ge_scheduling / active detectors carry "reason" but no "remedy"
@@ -389,3 +389,54 @@ def test_off_grid_sections_flags_nonstandard_start():
     courses = {f["course"] for f in findings}
     assert "MATH 245" in courses
     assert "CHEM 101" not in courses and "ENGL 101" not in courses
+
+
+# --- F5: demand-vs-supply action list ----------------------------------------
+def test_analyze_live_demand_supply_inert_without_counts(lamc_routes, make_client, tmp_path):
+    """A bare live fetch has no Cap/Tot/Wait -> F5 inert with an honest reason."""
+    client = make_client(lamc_routes)
+    out = tmp_path / "live.xlsx"
+    report = build_live_workbook.analyze_live(
+        "LAMC", [2268], "Biology", str(out), client=client)
+    block = report["results"]["analysis"]["demand_supply"]
+    assert block["status"] == "inert"
+    assert "PROXY" in block["label"]
+    det = next(d for d in report["inert_detectors"] if d["detector"] == "demand_supply")
+    assert det["status"] == "inert"
+    json.dumps(report)
+
+
+def test_analyze_live_demand_supply_active_with_counts(tmp_path):
+    """Sections carrying Cap/Tot/Wait (import-style) -> F5 active: an
+    over-subscribed course lands on the add list, an under-filled multi-section
+    course on the capacity-slack list."""
+    records = [
+        {"course": "MATH 227", "term": 2268, "class_nbr": "30001 (LEC)", "days": "MW",
+         "times": "9:00 AM - 10:15 AM", "Cap Enrl": 40, "Tot Enrl": 40, "Wait Tot": 22,
+         "status": "Closed", "units": 5},
+        {"course": "MATH 227", "term": 2268, "class_nbr": "30002 (LEC)", "days": "TR",
+         "times": "9:00 AM - 10:15 AM", "Cap Enrl": 40, "Tot Enrl": 39, "Wait Tot": 12,
+         "status": "Waitlist", "units": 5},
+        {"course": "ART 101", "term": 2268, "class_nbr": "30003 (LEC)", "days": "MW",
+         "times": "1:00 PM - 2:15 PM", "Cap Enrl": 40, "Tot Enrl": 6, "Wait Tot": 0,
+         "status": "Open", "units": 3},
+        {"course": "ART 101", "term": 2268, "class_nbr": "30004 (LEC)", "days": "TR",
+         "times": "1:00 PM - 2:15 PM", "Cap Enrl": 40, "Tot Enrl": 5, "Wait Tot": 0,
+         "status": "Open", "units": 3},
+    ]
+    program = {"code": "TEST", "title": "Test", "award": "AS",
+               "courses": [{"course_id": "MATH 227", "recommended_semester": 1}],
+               "major_choices": []}
+    out = tmp_path / "imp.xlsx"
+    report = build_live_workbook.analyze_live(
+        "LAMC", [2268], "(test)", str(out),
+        sections_override=records, program_override=program)
+    block = report["results"]["analysis"]["demand_supply"]
+    assert block["status"] == "active"
+    add_courses = [r["course"] for r in block["add_list"]]
+    assert any("MATH 227" in c for c in add_courses)
+    slack_courses = [s["course"] for s in block["capacity_slack"]]
+    assert any("ART 101" in c for c in slack_courses)
+    det = next(d for d in report["inert_detectors"] if d["detector"] == "demand_supply")
+    assert det["status"] == "active"
+    json.dumps(report)
