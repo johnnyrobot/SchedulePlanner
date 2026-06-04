@@ -872,6 +872,33 @@ function renderLivePanel(res){
     html+='<div class="card"><h3>Cross-program bottlenecks</h3>'+
       '<p class="hint">'+escapeHtml(bnk.label||'')+'</p>'+rows+gaps+foot+'</div>';
   }
+  const gp = res.analysis && res.analysis.grid_pressure;
+  if(gp && gp.status==='active'){
+    const conf=gp.conformance||{}, comp=gp.morning_compression||{}, b=comp.buckets||{};
+    const rate=conf.on_grid_rate==null?'n/a':Math.round(conf.on_grid_rate*100)+'%';
+    const rows=(gp.mutual_exclusions||[]).map(p=>{
+      const cs=p.courses||['',''];
+      return '<div class="inert"><div class="det">⊘ '+escapeHtml(cs[0])+' &amp; '+
+        escapeHtml(cs[1])+'</div><div class="why">'+escapeHtml(p.reason||'')+'</div></div>';
+    }).join('');
+    const na=gp.not_assessed||{};
+    const naL=Object.keys(na).map(k=>'<li>'+escapeHtml(k.replace(/_/g,' '))+': '+
+      escapeHtml((na[k]||{}).reason||'')+'</li>').join('');
+    const fp=[], tr=gp.truncated||{};
+    if(tr.pairs) fp.push(escapeHtml(String(tr.pairs))+' more mutually-exclusive pair(s) beyond those shown.');
+    if(conf.off_grid_truncated) fp.push(escapeHtml(String(conf.off_grid_truncated))+' more off-grid section(s) beyond those shown.');
+    const foot=fp.length?'<p class="hint">'+fp.join(' ')+'</p>':'';
+    html+='<div class="card"><h3>Grid conformance &amp; morning compression</h3>'+
+      '<p class="hint">'+escapeHtml(gp.label||'')+'</p>'+
+      '<div class="why">On-grid start times: '+escapeHtml(rate)+
+      ' · time-of-day: early '+escapeHtml(String(b.early||0))+
+      ' · prime 9AM-1PM '+escapeHtml(String(b.prime||0))+
+      ' · afternoon '+escapeHtml(String(b.afternoon||0))+
+      ' · evening '+escapeHtml(String(b.evening||0))+
+      ' · morning-locked required: '+escapeHtml(String(comp.morning_locked_count||0))+'</div>'+
+      '<p class="hint">'+escapeHtml(gp.what_if_caveat||'')+'</p>'+rows+
+      (naL?'<div class="why">Not assessed:</div><ul>'+naL+'</ul>':'')+foot+'</div>';
+  }
   // Plain-language names for the machine detector keys (the panel avoids raw
   // jargon like "modality_mismatch"). Any future key falls back to itself.
   const DET_LABELS={
@@ -881,6 +908,7 @@ function renderLivePanel(res){
     room_conflict:'Room conflicts & capacity',
     program_buildability:'Program buildability',
     program_bottleneck:'Cross-program bottlenecks',
+    grid_pressure:'Grid conformance & morning compression',
   };
   const inert=res.inert_detectors||[];
   if(inert.length){
