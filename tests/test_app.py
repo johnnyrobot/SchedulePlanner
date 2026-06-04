@@ -99,7 +99,8 @@ def test_fetch_live_returns_results_plus_reconciliation_and_inert(
     assert res["terms_in_data"] >= 1
     assert set(res["analysis"]) == {
         "rotation_gaps", "single_section", "modality_mismatch", "under_supply",
-        "time_block_collisions", "off_grid_sections", "room_conflicts"}
+        "time_block_collisions", "off_grid_sections", "room_conflicts",
+        "buildability"}
     assert "BIOLOGY" in res["programs"]
     # modality_mismatch stays inert (needs IR fill %); under_supply now fires
     # from the live schedule Waitlist status (breadth, no IR headcount).
@@ -120,7 +121,7 @@ def test_fetch_live_returns_results_plus_reconciliation_and_inert(
     # no transfer_goal is given).
     assert {d["detector"] for d in inert} == {
         "modality_mismatch", "prerequisite_ordering", "ge_scheduling",
-        "time_block_conflict", "room_conflict"}
+        "time_block_conflict", "room_conflict", "program_buildability"}
     for d in inert:
         if d["detector"] == "ge_scheduling" or d.get("status") == "active":
             continue  # ge_scheduling / active detectors carry "reason" but no "remedy"
@@ -363,7 +364,7 @@ def test_fetch_live_blank_enrollment_path_is_ignored(lamc_routes, make_client):
     assert "error" not in res, res.get("error")
     assert {d["detector"] for d in res["inert_detectors"]} == {
         "modality_mismatch", "prerequisite_ordering", "ge_scheduling",
-        "time_block_conflict", "room_conflict"}
+        "time_block_conflict", "room_conflict", "program_buildability"}
 
 
 # ---- Task 8: transfer_goal param + ge_coverage flattening ------------------

@@ -105,7 +105,7 @@ def test_build_live_workbook_emits_structured_report(lamc_routes, make_client,
     # ge_scheduling is always present (inert when no transfer_goal given).
     assert {d["detector"] for d in inert} == {
         "modality_mismatch", "prerequisite_ordering", "ge_scheduling",
-        "time_block_conflict", "room_conflict"}
+        "time_block_conflict", "room_conflict", "program_buildability"}
     for d in inert:
         if d["detector"] == "ge_scheduling" or d.get("status") == "active":
             continue  # ge_scheduling / active detectors carry "reason" but no "remedy"
@@ -115,6 +115,29 @@ def test_build_live_workbook_emits_structured_report(lamc_routes, make_client,
     # engine results embedded
     assert report["results"]["terms_in_data"] >= 1
     assert "BIOLOGY" in report["results"]["programs"]
+
+
+def test_analyze_live_emits_buildability(lamc_routes, make_client, tmp_path):
+    """The program-map buildability audit (F1) is injected into
+    results['analysis']['buildability'] and surfaced as a detector entry."""
+    client = make_client(lamc_routes)
+    out = tmp_path / "live.xlsx"
+    report = build_live_workbook.analyze_live(
+        "LAMC", [2268], "Biology", str(out), client=client)
+
+    block = report["results"]["analysis"]["buildability"]
+    assert block["status"] in ("active", "inert")
+    assert "PROXY" in block["label"]          # honesty caveat travels with it
+    if block["status"] == "active":
+        assert block["programs"]
+        prog0 = block["programs"][0]
+        assert prog0["required_total"] >= 1
+        assert "available" in prog0 and "score" in prog0 and "time_conflict" in prog0
+
+    det = next(d for d in report["inert_detectors"]
+               if d["detector"] == "program_buildability")
+    assert det["status"] == block["status"]
+    json.dumps(report)  # still JSON-serializable end to end
 
 
 def test_build_live_workbook_report_program_not_found(lamc_routes, make_client,
