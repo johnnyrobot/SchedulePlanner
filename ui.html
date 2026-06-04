@@ -791,6 +791,33 @@ function renderLivePanel(res){
       (codes?'<div class="hint">Not offered in the fetched terms:</div><div class="codes">'+codes+'</div>':'')+
       '</div>';
   }
+  // Program-map buildability (F1): is the required path schedulable? Per-program
+  // score + the blocking reasons. Honest framing ("structural-feasibility proxy,
+  // not a measured completion rate") carried in bld.label. All data escaped.
+  const bld = res.analysis && res.analysis.buildability;
+  if(bld && bld.status==='active'){
+    const cards=(bld.programs||[]).map(p=>{
+      const reasons=[];
+      if((p.missing||[]).length) reasons.push('Not offered: '+p.missing.map(escapeHtml).join(', '));
+      if((p.dead_requirements||[]).length) reasons.push('De-catalogued: '+p.dead_requirements.map(escapeHtml).join(', '));
+      const tc=p.time_conflict||{};
+      (tc.pairwise_hard||[]).forEach(pr=>reasons.push('Time conflict: '+pr.map(escapeHtml).join(' &amp; ')));
+      (tc.term_clashes||[]).forEach(t=>reasons.push('Term '+escapeHtml(String(t.recommended_semester))+' clash: '+(t.courses||[]).map(escapeHtml).join(', ')));
+      (p.choice_groups||[]).forEach(ch=>{ if(ch.slack<0) reasons.push('Unsatisfiable choice: '+(ch.options||[]).map(escapeHtml).join(', ')); });
+      if((p.single_section_required||[]).length) reasons.push('Single-section risk: '+p.single_section_required.map(escapeHtml).join(', '));
+      (p.season_mismatches||[]).forEach(m=>reasons.push(escapeHtml(m.course)+' mapped to '+escapeHtml(m.recommended_season)+' but offered '+(m.offered_seasons||[]).map(escapeHtml).join(', ')));
+      (p.seat_pressure||[]).forEach(s=>reasons.push(escapeHtml(s.course)+' seat pressure'+(s.fill_pct!=null?' ('+escapeHtml(String(s.fill_pct))+'% fill)':' (closed/waitlisted)')));
+      if((p.by_design_excluded||[]).length) reasons.push('By-design (not flagged): '+p.by_design_excluded.map(escapeHtml).join(', '));
+      const lis=reasons.length?reasons.map(r=>'<li>'+r+'</li>').join(''):'<li>no blockers found</li>';
+      const ok=p.score>=80;
+      return '<div class="inert"><div class="det'+(ok?' on':'')+'">'+(ok?'✓ ':'⊘ ')+
+        escapeHtml(p.title||p.code)+' — score '+escapeHtml(String(p.score))+'/100</div>'+
+        '<div class="why">'+escapeHtml(p.summary||'')+'</div><ul>'+lis+'</ul></div>';
+    }).join('');
+    const terms=(bld.horizon_terms||[]).map(escapeHtml).join(', ');
+    html+='<div class="card"><h3>Program buildability'+(terms?' (terms '+terms+')':'')+'</h3>'+
+      '<p class="hint">'+escapeHtml(bld.label||'')+'</p>'+cards+'</div>';
+  }
   // Plain-language names for the machine detector keys (the panel avoids raw
   // jargon like "modality_mismatch"). Any future key falls back to itself.
   const DET_LABELS={
@@ -798,6 +825,7 @@ function renderLivePanel(res){
     prerequisite_ordering:'Prerequisite ordering',
     time_block_conflict:'Time-block conflicts',
     room_conflict:'Room conflicts & capacity',
+    program_buildability:'Program buildability',
   };
   const inert=res.inert_detectors||[];
   if(inert.length){
