@@ -485,6 +485,71 @@ def _grid_pressure(results: dict) -> str:
             f'{table}{na_html}{footnote}</section>')
 
 
+def _demand_supply(results: dict) -> str:
+    """Demand-vs-supply action list (F5): offered courses whose seats fall short
+    of enrolled+waitlisted demand, ranked into an 'add a section' list, plus a
+    neutral capacity-slack observation (never a cut order). Empty when absent;
+    honest inert note when no seat counts were available. All data HTML-escaped."""
+    block = (results.get("analysis") or {}).get("demand_supply")
+    if not block:
+        return ""
+    label = _esc(block.get("label", ""))
+    if block.get("status") != "active":
+        return ('<section class="card" aria-labelledby="dsl"><h2 id="dsl">'
+                'Demand-vs-supply action list</h2>'
+                f'<p>Not computed: '
+                f'{_esc(block.get("reason", "no seat counts available"))}</p>'
+                f'<p class="note">{label}</p></section>')
+
+    rows = []
+    for r in block.get("add_list", []):
+        why = "; ".join(_esc(x) for x in r.get("reasons", []))
+        rows.append(
+            "<tr>"
+            f'<td class="area">{_esc(r.get("course"))}</td>'
+            f'<td>{_esc(r.get("action_score"))}</td>'
+            f'<td>{_esc(r.get("demand_ratio"))}</td>'
+            f'<td>{_esc(r.get("wait_total"))}</td>'
+            f'<td>{_esc(r.get("n_sections"))}</td>'
+            f'<td>{why}</td>'
+            "</tr>")
+    table = (
+        '<div class="tablewrap"><table>'
+        '<caption>Add a section — highest demand-vs-supply pressure</caption>'
+        '<tr><th>Course</th><th>Score</th><th>Demand&nbsp;ratio</th>'
+        '<th>Waitlist</th><th>Sections</th><th>Why</th></tr>'
+        f'{"".join(rows)}</table></div>') if rows else \
+        '<p>No course currently shows add-a-section pressure.</p>'
+
+    slack = block.get("capacity_slack", [])
+    slack_html = ""
+    if slack:
+        items = "".join(
+            f'<li>{_esc(s.get("course"))} — fill {_esc(s.get("fill"))}, '
+            f'{_esc(s.get("n_sections"))} sections ({_esc(s.get("note"))})</li>'
+            for s in slack)
+        slack_html = ('<h3>Capacity slack (review only — not a cut recommendation)</h3>'
+                      f'<ul class="issues">{items}</ul>')
+
+    foot = []
+    trunc = block.get("truncated") or {}
+    if block.get("not_assessed"):
+        foot.append(f'{_esc(block["not_assessed"])} required course(s) had no usable '
+                    'seat counts — excluded here, not silently counted.')
+    if trunc.get("add_list"):
+        foot.append(f'{_esc(trunc["add_list"])} more add-list course(s) beyond the '
+                    'top shown.')
+    if trunc.get("capacity_slack"):
+        foot.append(f'{_esc(trunc["capacity_slack"])} more capacity-slack course(s) '
+                    'beyond those shown.')
+    footnote = f'<p class="note">{" ".join(foot)}</p>' if foot else ""
+
+    return ('<section class="card" aria-labelledby="dsl"><h2 id="dsl">'
+            'Demand-vs-supply action list</h2>'
+            f'<p class="note">{label}</p>'
+            f'{table}{slack_html}{footnote}</section>')
+
+
 def _reconciliation(results: dict) -> str:
     rec = results.get("reconciliation")
     if not rec:
@@ -653,6 +718,7 @@ def render_report(results: dict, *, briefing: str = "", generated_at: str = "") 
         f'{_buildability(results)}'
         f'{_bottlenecks(results)}'
         f'{_grid_pressure(results)}'
+        f'{_demand_supply(results)}'
         f'{_reconciliation(results)}'
         f'{_detectors(results)}'
         f'{_ge(results)}'
