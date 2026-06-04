@@ -311,18 +311,11 @@ def test_ff3_analyze_import_ir_unmatched_native_counts_survive(tmp_path):
     out = str(tmp_path / "wb.xlsx")
     report = blw.analyze_import(CSV, out, enrollment_path=ir)
     block = report["results"]["analysis"]["demand_supply"]
-    # ENGL 101's native counts were preserved (assessed, not wiped) -> it appears
-    # with its native cap/tot somewhere in the report's assessed accounting.
-    # sections_with_counts must include the unmatched native-counts sections.
+    # ENGL 101's native counts were preserved (assessed, not wiped) -> the report's
+    # sections_with_counts must include the unmatched native-counts sections (the
+    # IR export only matched MATH 227, so the other 3 native-counts sections prove
+    # the merge did not zero them).
     assert block["sections_with_counts"] >= 3
-    # buildability seat check still sees ENGL 101's native capacity (not zeroed):
-    # the demand_supply block assessed at least the 4 counts-carrying courses.
-    json_courses = {r["course"] for r in block["add_list"]} | {
-        s["course"] for s in block["capacity_slack"]}
-    # ENGL 101 native fill 30/40 = 0.75 (not slack, not high-fill-add) -> may be
-    # absent from both lists, which is fine; the load-bearing assertion is that
-    # its native counts were COUNTED (not wiped to 0), proven by the seat-count
-    # tally above. BIOLOGY 003 native 20/40 = 0.5 is also not slack/add.
 
 
 def test_ff3_analyze_import_without_ir_still_active_from_native(tmp_path):

@@ -1022,15 +1022,19 @@ def analyze_live(campus, terms, program_query, out_path, *, client=None,
         return report
 
     # --- enrollment join (outside engine.run, on raw records) ----------------
-    # enrich_sections returns a NEW list; matched records gain Cap/Tot/Wait keys
-    # that build_sections_df then reads. matched==0 keeps every count at 0 and
-    # the enrollment detectors INERT (the honest fixture-only contract).
+    # enrich_sections returns a NEW list; the join is MERGE-not-strip (FF3), so a
+    # record carries "Cap Enrl" when EITHER the IR join matched it OR it already
+    # carried native counts (an imported schedule export ships Cap/Tot/Wait in the
+    # file). So this counter is sections-WITH-counts, not IR-matched-only: on a
+    # bare live fetch the only counts come from IR (matched), but on the import+IR
+    # path it includes IR-matched AND native-carried sections. 0 -> every count
+    # stays 0 and the enrollment detectors are INERT (the honest contract).
     enrollment_source = None
-    matched_sections = 0
+    sections_with_counts = 0
     if enrollment_map is not None:
         enrollment_source = enrollment_path or "inline enrollment map (synthetic key)"
         sections = enrollment.enrich_sections(sections, enrollment_map)
-        matched_sections = sum(1 for r in sections if "Cap Enrl" in r)
+        sections_with_counts = sum(1 for r in sections if "Cap Enrl" in r)
     elif enrollment_path is not None:
         enrollment_source = enrollment_path
         # Tolerant real-export adapter (CSV/xlsx, aliased columns, "2024 Fall"
@@ -1039,7 +1043,7 @@ def analyze_live(campus, terms, program_query, out_path, *, client=None,
         # enrich_sections join below is unchanged.
         enrollment_data = enrollment_ir.load_ir_export(enrollment_path)
         sections = enrollment.enrich_sections(sections, enrollment_data)
-        matched_sections = sum(1 for r in sections if "Cap Enrl" in r)
+        sections_with_counts = sum(1 for r in sections if "Cap Enrl" in r)
 
     # OFFLINE IMPORT: the schedule export itself carries Cap/Tot/Wait columns, so
     # the counts arrive inline on the records (no enrollment join). Reflect that
@@ -1049,7 +1053,7 @@ def analyze_live(campus, terms, program_query, out_path, *, client=None,
         n_inline = sum(1 for r in sections if "Cap Enrl" in r)
         if n_inline:
             enrollment_source = "schedule export (counts in file)"
-            matched_sections = n_inline
+            sections_with_counts = n_inline
             inline_counts = True
 
     # --- eLumen prereq map (outside engine.run) ------------------------------
@@ -1196,7 +1200,7 @@ def analyze_live(campus, terms, program_query, out_path, *, client=None,
     # Build the detector report from the enrichment outcomes (honest activation).
     report["inert_detectors"] = (
         _enrollment_detector_entries(source=enrollment_source,
-                                     matched=matched_sections,
+                                     matched=sections_with_counts,
                                      total=len(sections), inline=inline_counts)
         + [_prereq_detector_entry(source=elumen_source, results=prereq_results,
                                   live=elumen_live_active,
