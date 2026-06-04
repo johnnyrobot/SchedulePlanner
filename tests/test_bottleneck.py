@@ -172,6 +172,18 @@ def test_report_truncates_and_counts():
 
 
 # --------------------------------------------------------------- determinism
+def test_offered_param_matches_recompute():
+    """Passing a pre-computed offered_by_course map (the bottleneck_report
+    optimization) is behavior-identical to recomputing it internally."""
+    import buildability
+    secs = [sec("CS 101", 2268, "1"), sec("MATH 227", 2268, "2"),
+            sec("MATH 227", 2268, "3")]
+    d = demand({"CS 101": ["A"], "MATH 227": ["A", "B"], "PHYS 1": ["A"]})
+    offered = buildability.offered_by_course(secs)
+    assert B.leaderboard(d, secs, offered=offered) == B.leaderboard(d, secs)
+    assert B.cross_program_gaps(d, secs, offered=offered) == B.cross_program_gaps(d, secs)
+
+
 def test_leaderboard_is_deterministic():
     secs = [sec("CS 101", 2268, "1"), sec("MATH 227", 2268, "2"),
             sec("CHEM 101", 2268, "3")]

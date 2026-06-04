@@ -85,6 +85,21 @@ def test_context_omits_bottlenecks_when_inert():
     assert "CROSS-PROGRAM BOTTLENECKS" not in ctx
 
 
+def test_context_bottleneck_surfaces_truncation():
+    """The chat grounding slices to the top 8 of each list; the courses it leaves
+    out (its own [:8] slice + the engine's cap overflow) are surfaced as honest
+    counts, never silently dropped."""
+    board = [{"course": f"C {i}", "risk_score": 1, "n_programs": 1, "n_sections": 1}
+             for i in range(10)]
+    gaps = [{"course": f"G {i}", "n_programs": 1} for i in range(9)]
+    ctx = chat_assist._context({"analysis": {"bottlenecks": {
+        "status": "active", "label": "supply-vs-demand PROXY",
+        "leaderboard": board, "gaps": gaps,
+        "truncated": {"leaderboard": 5, "gaps": 2}}}})
+    assert "+7 more ranked bottleneck course(s) not shown" in ctx   # (10-8)+5
+    assert "+3 more required-but-not-offered course(s) not shown" in ctx  # (9-8)+2
+
+
 # ------------------------------------------------------------------ router
 def test_route_parses_offering_and_fills_defaults(monkeypatch):
     _patch_chat(monkeypatch, lambda *a, **k: '{"lookup":"offering","courses":["BIOLOGY 6"]}')

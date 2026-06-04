@@ -124,14 +124,18 @@ def _sample_titles(plans, titles):
     return sorted(titles.get(p, p) for p in plans)[:_TITLE_SAMPLE]
 
 
-def leaderboard(demand, sections, facility=None, *, top=20):
+def leaderboard(demand, sections, facility=None, *, top=20, offered=None):
     """Rank required-AND-offered courses by bottleneck risk.
 
     Returns ``(rows, truncated)`` where ``rows`` is the top-``top`` leaderboard
     (sorted by ``risk_score`` desc, then ``n_programs`` desc, then ``course`` asc
     — fully deterministic) and ``truncated`` is how many ranked rows were dropped
-    past the cap (never a silent truncation)."""
-    offered = offered_by_course(sections)
+    past the cap (never a silent truncation).
+
+    ``offered`` is an already-computed :func:`offered_by_course` map; passing it
+    lets :func:`bottleneck_report` parse the meeting patterns once and share the
+    result (mirrors :func:`buildability.audit_program`)."""
+    offered = offered_by_course(sections) if offered is None else offered
     rows = []
     for course, plans in demand.required.items():
         secs = offered.get(course)
@@ -156,11 +160,13 @@ def leaderboard(demand, sections, facility=None, *, top=20):
     return rows[:top], max(0, len(rows) - top)
 
 
-def cross_program_gaps(demand, sections, *, top=20):
+def cross_program_gaps(demand, sections, *, top=20, offered=None):
     """Required-by-many courses with NO offered section in the window — the
     'missing across N programs' companion to the leaderboard. Returns
-    ``(rows, truncated)`` sorted by ``n_programs`` desc, then ``course`` asc."""
-    offered = offered_by_course(sections)
+    ``(rows, truncated)`` sorted by ``n_programs`` desc, then ``course`` asc.
+    ``offered`` may be a pre-computed :func:`offered_by_course` map (shared by
+    :func:`bottleneck_report` to avoid re-parsing meeting patterns)."""
+    offered = offered_by_course(sections) if offered is None else offered
     rows = [{"course": course, "n_programs": len(plans),
              "programs": _sample_titles(plans, demand.titles)}
             for course, plans in demand.required.items()
@@ -187,15 +193,18 @@ def bottleneck_report(demand, sections, facility=None, *, top=20):
         return {"status": "inert", "label": LABEL,
                 "reason": "no offered sections to rank the required courses against"}
 
-    board, board_trunc = leaderboard(demand, sections, facility, top=top)
+    # Parse the meeting patterns ONCE and share the map across both passes + the
+    # unmatched count (mirrors buildability.audit_program — F2 is institution-wide,
+    # so re-parsing thousands of sections three times would be wasteful).
+    offered = offered_by_course(sections)
+    board, board_trunc = leaderboard(demand, sections, facility, top=top, offered=offered)
     if not board:
         return {"status": "inert", "label": LABEL,
                 "reason": ("no program-required course matched an offered section — "
                            "the required<->offered join is empty (are the demand map "
                            "and the schedule for the same campus / term?)")}
 
-    gaps, gaps_trunc = cross_program_gaps(demand, sections, top=top)
-    offered = offered_by_course(sections)
+    gaps, gaps_trunc = cross_program_gaps(demand, sections, top=top, offered=offered)
     unmatched = sum(1 for c in demand.required if not offered.get(c))
     return {"status": "active", "label": LABEL,
             "leaderboard": board,
