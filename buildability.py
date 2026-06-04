@@ -316,14 +316,10 @@ def _score(required_total, missing, dead, tc, choices, seasons, *, ge_required=0
     return max(0, min(100, round(score)))
 
 
-def audit_program(program, sections, *, ge_coverage=None, ge_rows=None, active_courses=None,
+def audit_program(program, sections, *, ge_coverage=None, active_courses=None,
                   horizon_terms=None, by_design=None):
     """Score one program's required path against the offered sections. Returns a
-    JSON-serializable scorecard (see module docstring for the field meanings).
-
-    ``ge_rows`` is an accepted-but-unused temporary back-compat shim for Task 4
-    (the un-migrated build_live_workbook call site still passes it); remove once
-    that call site switches to ``ge_coverage``."""
+    JSON-serializable scorecard (see module docstring for the field meanings)."""
     by_design = {mapping._norm(c) for c in (by_design or set())}
     offered = offered_by_course(sections)
     required = required_set(program)
@@ -392,15 +388,11 @@ def audit_program(program, sections, *, ge_coverage=None, ge_rows=None, active_c
     }
 
 
-def buildability_report(programs, sections, *, ge_coverage=None, ge_rows=None, active_courses=None,
+def buildability_report(programs, sections, *, ge_coverage=None, active_courses=None,
                         horizon_terms=None, by_design=None):
     """Audit one or more programs. Honest active/inert envelope: inert (with a
     reason) when there is no program, no section, or no required course is offered
-    at all — never an empty 'all good'.
-
-    ``ge_rows`` is an accepted-but-unused temporary back-compat shim for Task 4
-    (the un-migrated build_live_workbook call site still passes it; NOT forwarded
-    down); remove once that call site switches to ``ge_coverage``."""
+    at all — never an empty 'all good'."""
     horizon = (horizon_terms if horizon_terms is not None
                else sorted({r.get("term") for r in sections if r.get("term") is not None},
                            key=lambda t: str(t)))
