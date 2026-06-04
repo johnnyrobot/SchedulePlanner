@@ -22,16 +22,21 @@ detectors, honestly labelled active / inert like them.
 
 Honesty: this is a structural supply-vs-demand PROXY, never a measured completion
 rate. The demand map is a static snapshot. The required<->offered join uses
-:func:`sources.mapping._norm` (which does NOT collapse leading zeros), so
-program-list courses that don't join an offered course are reported as
-``unmatched_program_courses`` rather than silently dropped. The risk score (see
-:func:`leaderboard`) is a transparent, documented heuristic — a triage ranking,
-not a metric.
+:func:`sources.mapping._norm` (which does NOT collapse leading zeros) plus the
+FF1 :func:`sources.mapping.canonical_subject` crosswalk, which folds only
+DATA-VERIFIED alternate subject spellings (e.g. ``ENGL`` -> ``ENGLISH``) to one
+canonical token so a source-side encoding alias is not mis-counted as unmatched.
+The crosswalk is conservative on purpose — it never aliases the ambiguous
+``ENG`` — so it cannot manufacture a false match; program-list courses that
+still don't join are reported as ``unmatched_program_courses`` rather than
+silently dropped. The risk score (see :func:`leaderboard`) is a transparent,
+documented heuristic — a triage ranking, not a metric.
 """
 from __future__ import annotations
 
 from buildability import offered_by_course
 from sources import facility as facility_mod
+from sources.mapping import canonical_subject
 
 # Honesty caveat that travels with every report (see module docstring).
 LABEL = (
@@ -48,6 +53,52 @@ FILL_THRESHOLD = 0.85
 
 # How many program titles to sample into each leaderboard row (deterministic, sorted).
 _TITLE_SAMPLE = 5
+
+
+def _alias_index(offered):
+    """Build a canonical-subject fallback index for an :func:`offered_by_course`
+    map (FF1).
+
+    Maps each offered course id's CANONICAL-subject form -> the SAME section list,
+    but ONLY for ids whose canonical form differs from the id itself (i.e. ids that
+    actually carry an aliased subject like ``ENGL``/``BIOL``). This index is a
+    fallback consulted by :func:`_offered_match` *after* a direct lookup misses, so
+    when both sides already share a spelling the existing match (and its row label)
+    is byte-identical — the crosswalk is strictly additive, never a relabel.
+
+    Conservative by construction: :func:`sources.mapping.canonical_subject` folds
+    only data-verified subject pairs and never the ambiguous ``ENG``, so the
+    fallback cannot manufacture a false match. Returns a NEW dict; the caller's map
+    is untouched."""
+    idx = {}
+    for cid, secs in offered.items():
+        canon = canonical_subject(cid)
+        if canon != cid:
+            idx.setdefault(canon, []).extend(secs)
+    return idx
+
+
+def _offered_match(course, offered, alias_idx):
+    """Resolve a demand ``course`` to ``(matched_course_id, sections)`` against an
+    offered map, trying the direct :func:`sources.mapping._norm` key FIRST and only
+    falling back to the FF1 canonical-subject crosswalk (``alias_idx``) on a miss.
+
+    Returns ``(course, None)`` when neither hits. The direct-first order keeps every
+    already-matching course's label and sections untouched (no regression); the
+    fallback rescues only genuinely-aliased source-side spellings, reporting the
+    matched offering under its canonical id."""
+    secs = offered.get(course)
+    if secs:
+        return course, secs
+    canon = canonical_subject(course)
+    if canon != course:
+        secs = offered.get(canon) or alias_idx.get(canon)
+        if secs:
+            return canon, secs
+    secs = alias_idx.get(course)
+    if secs:
+        return course, secs
+    return course, None
 
 
 def _is_closed(status):
@@ -134,17 +185,23 @@ def leaderboard(demand, sections, facility=None, *, top=20, offered=None):
 
     ``offered`` is an already-computed :func:`offered_by_course` map; passing it
     lets :func:`bottleneck_report` parse the meeting patterns once and share the
-    result (mirrors :func:`buildability.audit_program`)."""
+    result (mirrors :func:`buildability.audit_program`). The required<->offered
+    join is matched on canonical subject (FF1 :func:`_canonicalize_offered`) so a
+    source-side subject-spelling alias (``ENGL`` vs ``ENGLISH``) is not a miss."""
     offered = offered_by_course(sections) if offered is None else offered
+    alias_idx = _alias_index(offered)
     rows = []
     for course, plans in demand.required.items():
-        secs = offered.get(course)
+        matched, secs = _offered_match(course, offered, alias_idx)
         if not secs:
             continue  # required but not offered -> see cross_program_gaps
         m = _course_metrics(secs, facility)
         n_programs = len(plans)
         rows.append({
-            "course": course,
+            # ``matched`` is the demand spelling on a direct hit (label unchanged)
+            # or the canonical offered id when rescued via the FF1 crosswalk;
+            # ``demand.listed``/``titles`` stay keyed on the program-list spelling.
+            "course": matched,
             "n_programs": n_programs,
             "n_listed": len(demand.listed.get(course, plans)),
             "programs": _sample_titles(plans, demand.titles),
@@ -165,12 +222,15 @@ def cross_program_gaps(demand, sections, *, top=20, offered=None):
     'missing across N programs' companion to the leaderboard. Returns
     ``(rows, truncated)`` sorted by ``n_programs`` desc, then ``course`` asc.
     ``offered`` may be a pre-computed :func:`offered_by_course` map (shared by
-    :func:`bottleneck_report` to avoid re-parsing meeting patterns)."""
+    :func:`bottleneck_report` to avoid re-parsing meeting patterns). The join is
+    matched on canonical subject (FF1) so an aliased course (``ENGL`` vs
+    ``ENGLISH``) that IS offered is not mis-reported as a gap."""
     offered = offered_by_course(sections) if offered is None else offered
+    alias_idx = _alias_index(offered)
     rows = [{"course": course, "n_programs": len(plans),
              "programs": _sample_titles(plans, demand.titles)}
             for course, plans in demand.required.items()
-            if not offered.get(course)]
+            if not _offered_match(course, offered, alias_idx)[1]]
     rows.sort(key=lambda r: (-r["n_programs"], r["course"]))
     return rows[:top], max(0, len(rows) - top)
 
@@ -205,7 +265,12 @@ def bottleneck_report(demand, sections, facility=None, *, top=20):
                            "and the schedule for the same campus / term?)")}
 
     gaps, gaps_trunc = cross_program_gaps(demand, sections, top=top, offered=offered)
-    unmatched = sum(1 for c in demand.required if not offered.get(c))
+    # Count unmatched on the SAME direct-first + FF1-crosswalk-fallback join the
+    # leaderboard/gaps use: a program course offered only under an aliased subject
+    # spelling (ENGL vs ENGLISH) is matched, not inflated into the unmatched tally.
+    alias_idx = _alias_index(offered)
+    unmatched = sum(1 for c in demand.required
+                    if not _offered_match(c, offered, alias_idx)[1])
     return {"status": "active", "label": LABEL,
             "leaderboard": board,
             "gaps": gaps,
