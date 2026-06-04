@@ -288,6 +288,64 @@ def _diagnostics(results: dict) -> str:
             f'({n} terms)</h2><div class="analysis">{body}</div></section>')
 
 
+def _buildability(results: dict) -> str:
+    """Program-map buildability audit (F1): per-program structural-feasibility
+    score + the blocking reasons. Empty when the audit is absent (non-live
+    reports). Honest inert note when nothing could be audited."""
+    block = (results.get("analysis") or {}).get("buildability")
+    if not block:
+        return ""
+    label = _esc(block.get("label", ""))
+    if block.get("status") != "active":
+        return ('<section class="card" aria-labelledby="build"><h2 id="build">Program buildability</h2>'
+                f'<p>Not computed: {_esc(block.get("reason", "no program / sections to audit"))}</p>'
+                f'<p class="muted">{label}</p></section>')
+
+    def reasons(p):
+        out = []
+        if p.get("missing"):
+            out.append("Not offered: " + ", ".join(_esc(c) for c in p["missing"]))
+        if p.get("dead_requirements"):
+            out.append("De-catalogued: " + ", ".join(_esc(c) for c in p["dead_requirements"]))
+        tc = p.get("time_conflict") or {}
+        for pair in tc.get("pairwise_hard", []):
+            out.append("Time conflict: " + " &amp; ".join(_esc(c) for c in pair))
+        for tcl in tc.get("term_clashes", []):
+            out.append(f'Term {_esc(tcl.get("recommended_semester"))} clash: '
+                       + ", ".join(_esc(c) for c in tcl.get("courses", [])))
+        for ch in p.get("choice_groups", []):
+            if ch.get("slack", 0) < 0:
+                out.append("Unsatisfiable choice: " + ", ".join(_esc(o) for o in ch.get("options", [])))
+        if p.get("single_section_required"):
+            out.append("Single-section risk: "
+                       + ", ".join(_esc(c) for c in p["single_section_required"]))
+        for m in p.get("season_mismatches", []):
+            out.append(f'{_esc(m.get("course"))} mapped to {_esc(m.get("recommended_season"))} '
+                       f'but offered {", ".join(_esc(s) for s in m.get("offered_seasons", []))}')
+        for sp in p.get("seat_pressure", []):
+            fp = sp.get("fill_pct")
+            out.append(f'{_esc(sp.get("course"))} seat pressure'
+                       + (f' ({_esc(fp)}% fill)' if fp is not None else " (closed/waitlisted)"))
+        if p.get("by_design_excluded"):
+            out.append("By-design (not flagged): "
+                       + ", ".join(_esc(c) for c in p["by_design_excluded"]))
+        return out
+
+    cards = []
+    for p in block.get("programs", []):
+        lis = "".join(f"<li>{r}</li>" for r in reasons(p)) or "<li>no blockers found</li>"
+        cards.append(
+            '<div class="a">'
+            f'<h3>{_esc(p.get("title") or p.get("code"))} — score {_esc(p.get("score"))}/100</h3>'
+            f'<p>{_esc(p.get("summary"))}</p>'
+            f'<ul>{lis}</ul></div>')
+    terms = ", ".join(_esc(t) for t in block.get("horizon_terms", []))
+    return (f'<section class="card" aria-labelledby="build"><h2 id="build">Program buildability '
+            f'(terms {terms})</h2>'
+            f'<p class="muted">{label}</p>'
+            f'<div class="analysis">{"".join(cards)}</div></section>')
+
+
 def _reconciliation(results: dict) -> str:
     rec = results.get("reconciliation")
     if not rec:
@@ -453,6 +511,7 @@ def render_report(results: dict, *, briefing: str = "", generated_at: str = "") 
         '<main id="main">'
         f'{_programs(results)}'
         f'{_diagnostics(results)}'
+        f'{_buildability(results)}'
         f'{_reconciliation(results)}'
         f'{_detectors(results)}'
         f'{_ge(results)}'
