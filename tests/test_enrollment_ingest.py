@@ -213,6 +213,81 @@ def test_unmatched_record_keeps_no_enrollment_keys():
     assert "Wait Tot" not in out[0]
 
 
+# --- FF3: MERGE-not-strip — native counts on UNMATCHED records survive -------
+
+def test_ff3_unmatched_record_keeps_its_native_counts():
+    # THE regression F5 feared: layering an IR enrollment map over records that
+    # ALREADY carry native Cap/Tot/Wait (e.g. an imported schedule export) must
+    # NOT wipe those native counts on the sections the IR join does not match.
+    enrollment = {(2248, "17818"): {"Cap Enrl": 30, "Tot Enrl": 25, "Wait Tot": 5}}
+    records = [
+        # native-counts record whose CRN is NOT in the IR map -> keep native
+        {"term": 2248, "course": "MATH 245", "class_nbr": "99999 (LEC)",
+         "Cap Enrl": 35, "Tot Enrl": 34, "Wait Tot": 7},
+    ]
+    out = enrich_sections(records, enrollment)
+    assert out[0]["Cap Enrl"] == 35
+    assert out[0]["Tot Enrl"] == 34
+    assert out[0]["Wait Tot"] == 7
+
+
+def test_ff3_matched_record_ir_values_win_over_native():
+    # IR is the authoritative enrollment source: when a record DID carry native
+    # counts AND the IR join matches, the IR values overwrite the native ones.
+    enrollment = {(2248, "17818"): {"Cap Enrl": 30, "Tot Enrl": 25, "Wait Tot": 5}}
+    records = [
+        {"term": 2248, "course": "BIOLOGY 003", "class_nbr": "17818 (LEC)",
+         "Cap Enrl": 99, "Tot Enrl": 1, "Wait Tot": 0},  # stale native counts
+    ]
+    out = enrich_sections(records, enrollment)
+    assert out[0]["Cap Enrl"] == 30   # IR wins
+    assert out[0]["Tot Enrl"] == 25
+    assert out[0]["Wait Tot"] == 5
+
+
+def test_ff3_unmatched_no_native_stays_empty():
+    # Honesty: an unmatched record that NEVER had native counts stays empty (no
+    # fabricated counts) — the pre-FF3 contract for live-only records is kept.
+    enrollment = {(2248, "17818"): {"Cap Enrl": 30, "Tot Enrl": 25, "Wait Tot": 5}}
+    records = [{"term": 2248, "course": "MATH 245", "class_nbr": "99999 (LEC)"}]
+    out = enrich_sections(records, enrollment)
+    assert "Cap Enrl" not in out[0]
+    assert "Tot Enrl" not in out[0]
+    assert "Wait Tot" not in out[0]
+
+
+def test_ff3_unmatched_record_keeps_native_component():
+    # FF5's Component must ride through the merge too: an unmatched record that
+    # carries a native Component keeps it (not stripped); a matched record gets
+    # the IR Component.
+    enrollment = {(2248, "17818"): {"Cap Enrl": 30, "Tot Enrl": 25,
+                                    "Wait Tot": 5, "Component": "LAB"}}
+    records = [
+        {"term": 2248, "course": "MATH 245", "class_nbr": "99999 (LEC)",
+         "Cap Enrl": 35, "Tot Enrl": 34, "Wait Tot": 7, "Component": "LEC"},
+        {"term": 2248, "course": "BIOLOGY 003", "class_nbr": "17818 (LEC)",
+         "Component": "LEC"},
+    ]
+    out = enrich_sections(records, enrollment)
+    assert out[0]["Component"] == "LEC"   # unmatched native Component preserved
+    assert out[1]["Component"] == "LAB"   # matched -> IR Component wins
+
+
+def test_ff3_merge_is_idempotent_with_native_counts():
+    # Re-running over already-merged records is still a no-op (idempotent), even
+    # when both native + IR counts are in play.
+    enrollment = {(2248, "17818"): {"Cap Enrl": 30, "Tot Enrl": 25, "Wait Tot": 5}}
+    records = [
+        {"term": 2248, "course": "BIOLOGY 003", "class_nbr": "17818 (LEC)",
+         "Cap Enrl": 99, "Tot Enrl": 1, "Wait Tot": 0},  # matched, IR wins
+        {"term": 2248, "course": "MATH 245", "class_nbr": "99999 (LEC)",
+         "Cap Enrl": 35, "Tot Enrl": 34, "Wait Tot": 7},  # unmatched, native kept
+    ]
+    once = enrich_sections(records, enrollment)
+    twice = enrich_sections(once, enrollment)
+    assert once == twice
+
+
 # --- blank / non-numeric class_nbr is skipped (never key on "") ------------
 
 def test_blank_class_nbr_is_not_falsely_matched():
