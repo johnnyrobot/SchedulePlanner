@@ -40,7 +40,7 @@ completion target** (no student-level outcome exists in any LACCD source, so eve
 | Research lever (source) | edgesched feature | Status |
 |---|---|---|
 | Guided-pathway course maps ✅; "57% can't get required courses" ✅ + shutout ✅; "enroll in all required courses in one term" | **F1 Program-Map Buildability Audit** | ✅ **SHIPPED** (branch `feat/program-buildability-audit`) |
-| Bottleneck / single-section courses ✅ | **F2 Cross-Program Bottleneck Leaderboard** | planned |
+| Bottleneck / single-section courses ✅ | **F2 Cross-Program Bottleneck Leaderboard** | ✅ **SHIPPED** (branch `feat/cross-program-bottleneck`) |
 | Standardized meeting-time blocks ✅; UCF 45% fewer conflicts ❓ | **F3 Grid-Conformance + Morning-Compression Pressure** | planned |
 | Guided-pathway maps **include GE** ✅ | **F4 GE in the Program Denominator (ASSIST id 47)** | planned |
 | Demand-driven / predictive scheduling (⚠️/❓) | **F5 Demand-vs-Supply Action List** | planned (IR adapter unblocks it) |
@@ -73,15 +73,34 @@ single-section bottlenecks, choice-group slack, recommended-season match, seat p
   offered, an unsatisfiable MATH 247/261 choice, two Spring-mapped/Fall-only courses, and seat
   pressure on CHEM 101 / BIOLOGY 006).
 
-## F2 — Cross-Program Bottleneck Leaderboard
+## F2 — Cross-Program Bottleneck Leaderboard  ✅ shipped
 
 Institution-wide ranking of the most dangerous required courses, scored by `#programs-depending ×
 #sections × seat-fill × lab-room scarcity` — "fix this one course, help N programs." Evidence: Q2/Q3
 name single-section/bottleneck courses as a forced-choice driver. Data: CH DEV 001 required by 16
 programs, MATH 227 by 15, CS 101 by 13; ~1.06 sections/course/term; ~47 specialized lab rooms are the
-binding constraint. Fit: extends `engine.analyze`'s per-course `single_section` with cross-program
-demand weighting (the Program Course Lists fan-out) + lab scarcity from the shipped
-`sources/facility.py`.
+binding constraint.
+
+- **Implementation (shipped on `feat/cross-program-bottleneck`):** the cross-program demand
+  (programs-per-course) lives only in the **Program Course Lists** export, so F2 is an **offline /
+  import-path** feature — inert on a bare live fetch (one program per run), active wherever a demand
+  map is supplied. New tolerant reader **`sources/program_lists.py`** → a `ProgramDemand`
+  (`required`/`listed`/`titles`); new pure module **`cross_program_bottleneck.py`** (no
+  network/solver/pandas; reuses `buildability.offered_by_course` for section dedup +
+  `facility.is_lab`). `risk_score = round(n_programs / max(1, min_sections_per_term) · lab_mult ·
+  fill_mult, 1)` (lab/fill amplifiers 1.3). `bottleneck_report` returns an honest active/inert
+  envelope `{leaderboard, gaps, unmatched_program_courses, truncated}`. Wired into `analyze_live`
+  (`program_demand`) / `analyze_import` (`program_lists_path`) **outside `engine.run`**; surfaced in
+  the exported report, the live UI panel (+ an Option-1 program-lists picker), and the chat assistant
+  — each carrying the *"structural supply-vs-demand PROXY, not a measured completion rate"* label.
+  **Honesty:** unmatched program-list courses are reported, never silently dropped; no silent
+  truncation on any surface. Validated on real data (Fall 2025 schedule × the Oct-2024 Program Course
+  Lists: CH DEV 011 ranks as a 13-program bottleneck; the `unmatched` count honestly surfaces a
+  source-side `ENG`/`ENGL`/`ENGLISH` subject-encoding inconsistency). 5-lens adversarial review +
+  per-finding verification; 554 tests pass; determinism gate green. *(NB: the module is named
+  `cross_program_bottleneck`, not `bottleneck`, because the latter shadows the `bottleneck` accel
+  library pandas probes as an optional dependency.)* The named-but-deferred fast-follows: a subject
+  crosswalk to shrink `unmatched`, and a live-path fan-out for cross-program demand.
 
 ## F3 — Grid-Conformance + Morning-Compression Pressure
 
