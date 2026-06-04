@@ -36,6 +36,11 @@ LABEL = (
     "Seat pressure is a demand proxy, not causation."
 )
 
+GE_LABEL = ("GE-inclusive buildability — a structural-coverage PROXY, not a measured "
+            "completion rate. Per-area schedulability (any one articulating course offered "
+            ">= the area's required count); it does not assert all GE areas are jointly "
+            "fillable with distinct courses. Unreviewed GE pattern counts ride a DRAFT caveat.")
+
 # Default planning cadence -> season per abstract recommended-semester index.
 # Mirrors engine.term_season's default (Fall/Spring) and engine.season_of_code,
 # kept local so this module stays solver-free / import-cheap.
@@ -256,30 +261,49 @@ def dead_requirements(required, active_courses):
     return sorted(c for c in required if c not in active_courses), None
 
 
-def ge_summary(ge_rows):
-    """F4 seam: a coarse GE-denominator view from ge.resolve rows. ``None`` when
-    no GE pattern was requested. ``gaps`` = concrete areas with no offered
-    candidate (cannot be scheduled); reserve areas are deferred, not gaps."""
-    if not ge_rows:
+def ge_denominator(ge_coverage):
+    """Honest GE contribution to the buildability denominator from ge.resolve
+    coverage. ``None`` when GE was not requested or no area is countable.
+
+    Counts ONLY areas with a real requirement (``required >= 1``), known
+    articulation (no ``no_assist_data`` flag), and that are not a deferred
+    ``reserve_only`` remainder (``eligible_count is None``). Among those an area is
+    SCHEDULABLE iff it has ``>= required`` distinct offered eligible courses
+    PRE-sweep (``offered_eligible`` — never the post-sweep ``offered_count``, which
+    false-flags shared areas); otherwise it is a GAP. Shared / no-articulation /
+    remainder areas are EXCLUDED (fail open — they never penalize the score)."""
+    if not ge_coverage or not ge_coverage.get("areas"):
         return None
-    required = len(ge_rows)
-    concrete = sum(1 for r in ge_rows
-                   if r.get("resolution") == "concrete" and r.get("candidates"))
-    reserved = sum(1 for r in ge_rows if r.get("resolution") == "reserve")
-    gaps = sorted(str(r.get("area")) for r in ge_rows
-                  if r.get("resolution") == "concrete" and not r.get("candidates"))
-    return {"areas_required": required, "areas_schedulable": concrete,
-            "areas_reserved": reserved, "gaps": gaps}
+    in_denom, schedulable, gaps = 0, 0, []
+    for a in ge_coverage["areas"]:
+        req = _int(a.get("required")) or 0
+        if req < 1:                                       # shared bucket; major covers it
+            continue
+        if a.get("eligible_count") is None:               # reserve-only remainder; deferred
+            continue
+        if "no_assist_data" in (a.get("flags") or []):    # unknown articulation; fail open
+            continue
+        in_denom += 1
+        if (_int(a.get("offered_eligible")) or 0) >= req:
+            schedulable += 1
+        else:
+            gaps.append(str(a.get("area")))
+    if not in_denom:
+        return None
+    return {"areas_in_denominator": in_denom, "areas_schedulable": schedulable,
+            "gaps": sorted(gaps)}
 
 
 # ----------------------------------------------------------------- assembly
 
-def _score(required_total, missing, dead, tc, choices, seasons):
+def _score(required_total, missing, dead, tc, choices, seasons, *, ge_required=0, ge_missing=0):
     """Transparent triage score in [0, 100]. Availability dominates; structural
-    blockers deduct fixed amounts."""
-    if not required_total:
+    blockers deduct fixed amounts. ``ge_required``/``ge_missing`` fold schedulable GE
+    areas (and GE gaps) into the denominator; both default 0 -> major-only score."""
+    denom = required_total + ge_required
+    if not denom:
         return 0
-    avail_ratio = (required_total - len(missing)) / required_total
+    avail_ratio = (denom - (len(missing) + ge_missing)) / denom
     score = 100.0 * avail_ratio
     if not tc["feasible"]:
         score -= 15
@@ -311,7 +335,7 @@ def audit_program(program, sections, *, ge_rows=None, active_courses=None,
     single = single_section_required(required, offered, horizon_terms)
     seasons = season_mismatches(program, offered, horizon_terms)
     seats = seat_pressure(required, offered, horizon_terms)
-    ge = ge_summary(ge_rows)
+    ge = None
 
     score = _score(len(required), missing, dead, tc, choices, seasons)
     parts = [f"{len(avail)}/{len(required)} required courses offered"]
