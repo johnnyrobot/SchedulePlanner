@@ -72,10 +72,12 @@ import os
 import httpx
 
 import buildability
+import cross_program_bottleneck
 import engine
 from sources import (assist, catalog_ge, course_master, elumen, elumen_client,
                      enrollment, enrollment_ir, ge, mapping, pdf_loader,
-                     program_mapper, schedule, schedule_import, timeblocks)
+                     program_lists, program_mapper, schedule, schedule_import,
+                     timeblocks)
 # Imported under an alias so the module name does not shadow the loaded ``facility``
 # room-map that analyze_live / analyze_import pass around as a local variable.
 from sources import facility as facilities
@@ -801,6 +803,27 @@ def _buildability_detector_entry(block):
     }
 
 
+def _bottleneck_detector_entry(block):
+    """Honest active/inert entry for the cross-program bottleneck leaderboard
+    (mirrors ``_buildability_detector_entry``). Inert carries the audit's own
+    reason (e.g. no program-lists demand map on a bare live fetch)."""
+    if not block or block.get("status") != "active":
+        return {
+            "detector": "program_bottleneck", "status": "inert",
+            "remedy": ("supply a Program Course Lists export on the offline import "
+                       "path so cross-program demand can be counted"),
+            "reason": ((block or {}).get("reason")
+                       or "no program-lists demand map / no offered sections"),
+        }
+    return {
+        "detector": "program_bottleneck", "status": "active",
+        "found": len(block.get("leaderboard", [])),
+        "reason": ("ranks required courses by how many programs depend on each vs "
+                   "how few sections / seats / lab rooms they have — a structural "
+                   "supply-vs-demand PROXY, not a measured completion rate"),
+    }
+
+
 def analyze_live(campus, terms, program_query, out_path, *, client=None,
                  enrollment_path=None, elumen_fixture=None, elumen_live=False,
                  enrollment_map=None, prereq_max_clauses=None,
@@ -808,7 +831,7 @@ def analyze_live(campus, terms, program_query, out_path, *, client=None,
                  program_id=None, program_title="", program_award="",
                  assist_areas=None, elumen_cache=None,
                  catalog_pdf=None, odl_json=None, facility=None,
-                 active_courses=None,
+                 active_courses=None, program_demand=None,
                  sections_override=None, program_override=None):
     """Run the full live pipeline and return a structured, JSON-serializable report.
 
@@ -1107,6 +1130,18 @@ def analyze_live(campus, terms, program_query, out_path, *, client=None,
     if isinstance(report["results"], dict) and isinstance(report["results"].get("analysis"), dict):
         report["results"]["analysis"]["buildability"] = buildability_block
     report["inert_detectors"].append(_buildability_detector_entry(buildability_block))
+
+    # Cross-program bottleneck leaderboard (F2): which required courses are the
+    # most dangerous institution-wide bottlenecks (many programs depending, few
+    # sections / seats / lab rooms)? Needs the multi-program demand map; INERT on
+    # a bare live fetch (the live path resolves one program per run), ACTIVE on
+    # the import path when a Program Course Lists export is supplied. Deterministic,
+    # advisory, computed HERE outside engine.run.
+    bottleneck_block = cross_program_bottleneck.bottleneck_report(
+        program_demand, sections, facility)
+    if isinstance(report["results"], dict) and isinstance(report["results"].get("analysis"), dict):
+        report["results"]["analysis"]["bottlenecks"] = bottleneck_block
+    report["inert_detectors"].append(_bottleneck_detector_entry(bottleneck_block))
     return report
 
 
@@ -1172,8 +1207,8 @@ def _program_from_workbook(path, course_units=None):
 
 
 def analyze_import(schedule_path, out_path, *, program=None, program_path=None,
-                   facility_path=None, course_master_path=None, sheet=None,
-                   transfer_goal="none"):
+                   facility_path=None, course_master_path=None,
+                   program_lists_path=None, sheet=None, transfer_goal="none"):
     """Offline historical audit: convert a real LACCD schedule export into engine
     records and run the SAME pipeline ``analyze_live`` runs — with NO network.
 
@@ -1212,11 +1247,18 @@ def analyze_import(schedule_path, out_path, *, program=None, program_path=None,
         program = _pseudo_program(records, course_units, terms=terms)
 
     facility = facilities.load_facility(facility_path) if facility_path else None
+    # The Program Course Lists export carries the cross-program demand (how many
+    # programs require each course) — the headline F2 signal, which the live path
+    # cannot supply (one program per run). Absent it, the bottleneck leaderboard
+    # stays honestly inert.
+    program_demand = (program_lists.load_program_lists(program_lists_path)
+                      if program_lists_path else None)
 
     report = analyze_live(
         "LAMC", terms, "(historical import)", out_path,
         sections_override=records, program_override=program,
         facility=facility, active_courses=active_courses,
+        program_demand=program_demand,
         elumen_live=False, transfer_goal=transfer_goal)
     report["import_summary"] = summary
     return report
