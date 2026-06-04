@@ -48,6 +48,18 @@ _DAY_COLUMNS = ["DAYS", "Meetings"]
 _ROOM_COLUMNS = ["Room Descr", "ROOM"]
 _CLASS_NBR_COLUMNS = ["Class Nbr", "Class Number"]
 _NO_MEETING_DAYS = {"", "TBA", "ARR", "ARRANGED", "N/A", "ONLINE", "ASYNC"}
+# FF5 CAPTURE-ONLY: weeks-of-instruction + the per-section session date range.
+# These survive onto the record so a FUTURE calendar/duration check can read them;
+# nothing consumes them yet (no check is activated). First non-blank column wins;
+# a single combined date column OR a separate start/end pair both fold to a
+# "start - end" string. Missing -> "" (fail open, never invented).
+_WOI_COLUMNS = ["WOI", "Weeks of Instruction", "Weeks", "Wks"]
+_DATES_COLUMNS = ["Session Dates", "Dates", "Mtg Dates", "Meeting Dates",
+                  "Class Dates", "Date Range"]
+_START_DATE_COLUMNS = ["Class Start Date", "Start Date", "Mtg Start Date",
+                       "Session Start Date", "Begin Date"]
+_END_DATE_COLUMNS = ["Class End Date", "End Date", "Mtg End Date",
+                     "Session End Date"]
 
 
 def _first(rd, columns):
@@ -112,6 +124,23 @@ def _times(rd):
     return f"{start} - {end}" if start and end else ""
 
 
+def _session_dates(rd):
+    """The per-section session date range as a ``"start - end"`` string.
+
+    CAPTURE-ONLY (FF5): carried so a future calendar/holiday check can read it;
+    nothing consumes it yet. A single combined date column wins if present;
+    otherwise a separate start/end pair is folded. Missing -> ``""`` (fail open —
+    the date range is never invented from other fields)."""
+    combined = _first(rd, _DATES_COLUMNS)
+    if combined:
+        return combined
+    start = _first(rd, _START_DATE_COLUMNS)
+    end = _first(rd, _END_DATE_COLUMNS)
+    if start and end:
+        return f"{start} - {end}"
+    return start or end or ""
+
+
 def load_schedule_export(path, *, sheet=None):
     """Read a real schedule export into ``(records, summary)``.
 
@@ -171,6 +200,11 @@ def load_schedule_export(path, *, sheet=None):
             "times": _times(rd),
             "room": _first(rd, _ROOM_COLUMNS),
             "facil_id": str(rd.get("Facil ID") or "").strip(),
+            # FF5 CAPTURE-ONLY: weeks-of-instruction + session date range survive
+            # so a future calendar/duration check can read them (the live fetch
+            # already carries these keys). No consumer reads them yet.
+            "woi": _first(rd, _WOI_COLUMNS),
+            "dates": _session_dates(rd),
             "status": "Active",
         }
         if has_comb and not _empty(rd.get("Comb Sects ID")):

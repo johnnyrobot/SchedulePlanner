@@ -152,6 +152,11 @@ def load_enrollment(path):
                 "Cap Enrl": int(rd["Cap Enrl"]),
                 "Tot Enrl": int(rd["Tot Enrl"]),
                 "Wait Tot": int(rd["Wait Tot"]),
+                # FF5 CAPTURE-ONLY: the PeopleSoft Component (contact category,
+                # e.g. LEC/LAB/Activity). Carried so a future Title-5 contact-
+                # category map can read it; no check consumes it yet. Not PII.
+                # Tolerant default "" when the export omits the column.
+                "Component": str(rd.get("Component") or "").strip(),
             }
         except (ValueError, TypeError) as exc:
             # Surface which column/value tripped the coercion so the operator can
@@ -198,7 +203,7 @@ def enrich_sections(section_records, enrollment):
         # no-op (idempotent); also strip any stale enrollment keys from a prior
         # enrich so a now-unmatched record does not retain old counts.
         new = {k: v for k, v in record.items()
-               if k not in ("Cap Enrl", "Tot Enrl", "Wait Tot")}
+               if k not in ("Cap Enrl", "Tot Enrl", "Wait Tot", "Component")}
         crn = _crn(record.get("class_nbr", ""))
         if crn is not None:
             try:
@@ -211,5 +216,10 @@ def enrich_sections(section_records, enrollment):
                     new["Cap Enrl"] = counts["Cap Enrl"]
                     new["Tot Enrl"] = counts["Tot Enrl"]
                     new["Wait Tot"] = counts["Wait Tot"]
+                    # FF5 CAPTURE-ONLY: ride the IR Component onto the matched
+                    # record when the map carries it (older maps may not). No
+                    # consumer reads it yet.
+                    if "Component" in counts:
+                        new["Component"] = counts["Component"]
         out.append(new)
     return out
