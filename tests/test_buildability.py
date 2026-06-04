@@ -263,3 +263,14 @@ def test_audit_program_ge_inert_when_all_unknown_articulation():
 def test_buildability_report_carries_ge_label():
     rep = B.buildability_report([_program()], _sections(), ge_coverage=_ge_active_coverage())
     assert "GE-inclusive" in rep["ge_label"]
+
+
+def test_score_ge_can_raise_when_major_has_gaps():
+    """Folding a fully-schedulable GE set RAISES the score when the major path has
+    gaps — the signed delta can be POSITIVE (guards against assuming GE only lowers
+    the number)."""
+    tc = {"feasible": True}
+    major = B._score(4, ["X", "Y"], [], tc, [], [])                 # (4-2)/4 = 50
+    blended = B._score(4, ["X", "Y"], [], tc, [], [], ge_required=4, ge_missing=0)  # (8-2)/8 = 75
+    assert major == 50 and blended == 75
+    assert blended > major          # GE folding RAISED the score (positive delta)
