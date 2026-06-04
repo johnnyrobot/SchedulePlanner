@@ -332,3 +332,33 @@ def test_report_omits_grid_pressure_when_absent():
                             "modality_mismatch": [], "under_supply": []},
                "programs": {}}
     assert "Grid conformance" not in report_export.render_report(results)
+
+
+def test_demand_supply_section_renders_and_escapes():
+    results = {"analysis": {"demand_supply": {
+        "status": "active", "label": "Demand-vs-supply PROXY label",
+        "add_list": [{"course": "MATH 227", "action_score": 1.3, "demand_ratio": 1.55,
+                      "wait_total": 22, "n_sections": 2,
+                      "reasons": ["fill 1.00", "22 waitlisted", "<b>x</b>"]}],
+        "capacity_slack": [{"course": "ART 101", "fill": 0.14, "n_sections": 2,
+                            "note": "review only — not a cut recommendation"}],
+        "sections_with_counts": 4, "program_weighted": True, "not_assessed": 1,
+        "truncated": {"add_list": 3, "capacity_slack": 0}}}}
+    html = report_export._demand_supply(results)
+    assert "Demand-vs-supply action list" in html
+    assert "MATH 227" in html and "ART 101" in html
+    assert "&lt;b&gt;x&lt;/b&gt;" in html and "<b>x</b>" not in html   # escaped
+    assert "not a cut" in html
+    assert "1 required course" in html or "not_assessed" not in html   # footnote present
+    assert "3 more add-list" in html
+
+
+def test_demand_supply_section_empty_when_absent():
+    assert report_export._demand_supply({"analysis": {}}) == ""
+
+
+def test_demand_supply_section_inert_note():
+    results = {"analysis": {"demand_supply": {
+        "status": "inert", "label": "L", "reason": "no seat counts to assess"}}}
+    html = report_export._demand_supply(results)
+    assert "Not computed" in html and "no seat counts" in html
