@@ -43,7 +43,7 @@ completion target** (no student-level outcome exists in any LACCD source, so eve
 | Bottleneck / single-section courses ✅ | **F2 Cross-Program Bottleneck Leaderboard** | ✅ **SHIPPED** (branch `feat/cross-program-bottleneck`) |
 | Standardized meeting-time blocks ✅; UCF 45% fewer conflicts ❓ | **F3 Grid-Conformance + Morning-Compression Pressure** | ✅ **SHIPPED** (branch `feat/grid-conformance-morning`) |
 | Guided-pathway maps **include GE** ✅ | **F4 GE in the Program Denominator (ASSIST id 47)** | ✅ SHIPPED (branch feat/ge-program-denominator) |
-| Demand-driven / predictive scheduling (⚠️/❓) | **F5 Demand-vs-Supply Action List** | planned (IR adapter unblocks it) |
+| Demand-driven / predictive scheduling (⚠️/❓) | **F5 Demand-vs-Supply Action List** | ✅ SHIPPED (branch `feat/demand-supply-action-list`) |
 | Equity gains for working/parent/URM ✅ | **F6 Equity / Archetype Exposure View** | planned |
 | Honesty doctrine + the claim→source map | **F7 Evidence-Cited Reporting & Chat Grounding** | planned |
 
@@ -187,13 +187,38 @@ code-quality review + a positive-delta regression guard. Fit note: `ge.resolve` 
 `assist.fetch_ge_courses` already ran in `analyze_live`; F1's `ge_summary` GE-seam was the placeholder
 F4 replaced.
 
-## F5 — Demand-vs-Supply Action List
+## F5 — Demand-vs-Supply Action List  ✅ shipped
 
-A ranked scheduling action list: required courses that are over-subscribed (→ add a section) vs
-under-filled (→ consolidate), weighted by cross-program demand. Evidence: demand-driven/predictive
-scheduling (⚠️/❓ — directionally strong, headline numbers soft). Data: the shipped IR adapter flips
-`fill`/`under_supply` from inert→active, so demand signals finally exist offline. **Honesty:** demand
-PROXY, never completion causation; waitlist is weak (pair Wait>15 with fill≥0.9/Closed).
+**What:** An asymmetric seat-supply scorecard — a ranked **"add a section"** list for over-subscribed
+required courses, plus a neutral **capacity-slack observation** (under-filled courses worth a review,
+never a cut order). Deterministic; advisory; attaches to `results["analysis"]["demand_supply"]`
+**outside `engine.run`** (determinism gate untouched).
+
+- **Activation gate:** seat counts (`cap_total > 0`) must be present. They reach the module two honest,
+  already-plumbed ways: (1) on the **live path**, an IR PeopleSoft enrollment export joined via
+  `enrollment.enrich_sections` — the live class-schedule API carries no Cap/Tot/Wait, so a bare live
+  fetch stays **inert** (with an honest reason); (2) on the **import path**, a schedule export that
+  carries Cap/Tot/Wait natively activates F5 from the export itself.
+- **Headline metric:** `demand_ratio = (Tot + Wait) / Cap`. Over-subscription gate is **defensive
+  and asymmetric**: a course joins the add list on `fill ≥ 0.95` OR (`Wait > 15` AND (`fill ≥ 0.90`
+  OR a Closed section)) — waitlist never qualifies alone.
+- **Cross-program weight (optional):** F2's `ProgramDemand` amplifies ranking via
+  `action_score = demand_ratio × (1 + 0.1 × n_programs)` — a weight, not a gate; F5 runs without it.
+- **Capacity-slack observation:** courses with `fill ≤ 0.40` across ≥ 2 sections surface as a
+  review note carrying an explicit disclaimer ("not a cut recommendation — this proxy cannot see
+  evening / online / cohort intent").
+- **Implementation (shipped on `feat/demand-supply-action-list`):** new pure module
+  **`demand_supply.py`** (stdlib only — no network, solver, or pandas; mirrors F1–F3 architecture).
+  Wired into `analyze_live` and `analyze_import` outside `engine.run`; surfaced in `report_export`,
+  the `ui.html` live panel, and `chat_assist` — each carrying the `DEMAND_SUPPLY_LABEL` ("structural
+  supply-vs-demand PROXY, not a measured completion rate or causal claim"). Honest footnotes for
+  truncation and `not_assessed` courses on every surface; never a silent empty result.
+- **Deferred follow-up:** `analyze_import(enrollment_path=…)` was dropped because
+  `enrollment.enrich_sections` strips native counts from unmatched records on merge; the
+  merge-not-strip enrichment is the documented out-of-scope follow-up.
+- **Tests:** new `tests/test_demand_supply.py` (10 tests) plus wiring/surface assertions in
+  `test_live_offline_pipeline.py`, `test_report_export.py`, and `test_chat_assist.py`. Full suite
+  green (603 passed, 5 pre-existing platform-coupled fixtures deselected).
 
 ## F6 — Equity / Archetype Exposure View
 
