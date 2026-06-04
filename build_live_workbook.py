@@ -794,13 +794,18 @@ def _buildability_detector_entry(block):
             "reason": ((block or {}).get("reason")
                        or "no program / no offered sections to audit"),
         }
+    ge_active = any((p.get("ge") or {}).get("status") == "active"
+                    for p in block.get("programs", []))
+    reason = ("scores whether each program's required path is offered, "
+              "time-conflict-free, on its recommended season, and seat-available "
+              "in the audited terms — a structural-feasibility PROXY, not a "
+              "measured completion rate")
+    if ge_active:
+        reason += ("; GE requirements fold into the denominator "
+                   "(GE-inclusive score + signed major-only delta)")
     return {
         "detector": "program_buildability", "status": "active",
-        "found": len(block.get("programs", [])),
-        "reason": ("scores whether each program's required path is offered, "
-                   "time-conflict-free, on its recommended season, and seat-available "
-                   "in the audited terms — a structural-feasibility PROXY, not a "
-                   "measured completion rate"),
+        "found": len(block.get("programs", [])), "reason": reason,
     }
 
 
@@ -1140,13 +1145,14 @@ def analyze_live(campus, terms, program_query, out_path, *, client=None,
         sections, room_conflicts, facility_used=bool(facility),
         capacity=room_capacity, lab_stats=_lab_pool_stats(sections, facility)))
 
-    # Program-map buildability (F1): is the program's required path schedulable
-    # against the fetched sections? Deterministic, advisory, computed HERE outside
-    # engine.run (never feeds the deterministic solve). ge_rows seeds the GE
-    # denominator; active_courses (import path's course master) enables the
-    # dead-requirement check; the horizon defaults to the fetched section terms.
+    # Program-map buildability (F1 + F4): is the program's required path schedulable
+    # against the fetched sections, and — when a GE goal is selected — does the GE
+    # requirement set fold into the denominator? Deterministic, advisory, computed
+    # HERE outside engine.run. ge_coverage carries the per-area pre-sweep offered
+    # counts the GE denominator needs; active_courses enables the dead-requirement
+    # check; the horizon defaults to the fetched section terms.
     buildability_block = buildability.buildability_report(
-        [program], sections, ge_rows=ge_rows, active_courses=active_courses)
+        [program], sections, ge_coverage=ge_coverage, active_courses=active_courses)
     if isinstance(report["results"], dict) and isinstance(report["results"].get("analysis"), dict):
         report["results"]["analysis"]["buildability"] = buildability_block
     report["inert_detectors"].append(_buildability_detector_entry(buildability_block))
