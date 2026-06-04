@@ -185,3 +185,43 @@ def test_perfect_program_scores_100():
     ]
     audit = B.audit_program(prog, secs)
     assert audit["score"] == 100 and audit["time_conflict"]["feasible"] is True
+
+
+def _ge_coverage():
+    """ge.resolve-style coverage: one schedulable area, one true gap, and three
+    areas that must be EXCLUDED from the denominator (shared / no-articulation /
+    reserve-only remainder)."""
+    return {"areas": [
+        {"area": "1A", "required": 1, "offered_eligible": 2, "eligible_count": 4, "flags": []},
+        {"area": "4",  "required": 1, "offered_eligible": 0, "eligible_count": 3, "flags": ["no_offering"]},
+        {"area": "6",  "required": 1, "offered_eligible": 0, "eligible_count": 0, "flags": ["no_assist_data"]},
+        {"area": "5B", "required": 0, "resolution": "shared", "flags": []},
+        {"area": "3",  "required": 1, "offered_eligible": 0, "eligible_count": None, "flags": []},
+    ]}
+
+
+def test_ge_denominator_counts_schedulable_and_gaps_excludes_rest():
+    dn = B.ge_denominator(_ge_coverage())
+    assert dn == {"areas_in_denominator": 2, "areas_schedulable": 1, "gaps": ["4"]}
+
+
+def test_ge_denominator_none_when_absent_or_all_unknown():
+    assert B.ge_denominator(None) is None
+    assert B.ge_denominator({"areas": []}) is None
+    # every area is unknown-articulation -> nothing countable -> None (fail open)
+    assert B.ge_denominator({"areas": [
+        {"area": "6", "required": 1, "offered_eligible": 0, "eligible_count": 0,
+         "flags": ["no_assist_data"]}]}) is None
+
+
+def test_score_rescales_denominator_with_ge():
+    tc = {"feasible": True}
+    major = B._score(8, ["X"], [], tc, [], [])                       # (8-1)/8 -> 88
+    blended = B._score(8, ["X"], [], tc, [], [], ge_required=7, ge_missing=1)  # (15-2)/15 -> 87
+    assert major == 88 and blended == 87
+
+
+def test_score_ge_kwargs_default_to_today():
+    tc = {"feasible": True}
+    assert (B._score(4, ["X"], [], tc, [], [])
+            == B._score(4, ["X"], [], tc, [], [], ge_required=0, ge_missing=0))
