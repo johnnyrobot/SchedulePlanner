@@ -866,6 +866,8 @@ function renderLivePanel(res){
         '(course ids aren’t leading-zero-collapsed) — excluded, not silently counted.');
     if(tr.leaderboard)
       fp.push(escapeHtml(String(tr.leaderboard))+' more ranked course(s) beyond the top shown.');
+    if(tr.gaps)
+      fp.push(escapeHtml(String(tr.gaps))+' more required-but-not-offered course(s) beyond those shown.');
     const foot=fp.length?'<p class="hint">'+fp.join(' ')+'</p>':'';
     html+='<div class="card"><h3>Cross-program bottlenecks</h3>'+
       '<p class="hint">'+escapeHtml(bnk.label||'')+'</p>'+rows+gaps+foot+'</div>';

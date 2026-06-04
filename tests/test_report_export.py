@@ -225,6 +225,31 @@ def test_report_omits_bottlenecks_when_absent():
     assert "Cross-program bottlenecks" not in doc
 
 
+def test_report_bottlenecks_notes_both_truncations():
+    """Neither the leaderboard NOR the gaps overflow is silently dropped — both
+    'N more …' notes render (honesty doctrine: no silent truncation)."""
+    results = {
+        "terms_in_data": 1,
+        "analysis": {
+            "rotation_gaps": [], "single_section": [],
+            "modality_mismatch": [], "under_supply": [],
+            "bottlenecks": {
+                "status": "active", "label": "… PROXY …",
+                "leaderboard": [{"course": "MATH 227", "n_programs": 9,
+                                 "n_sections": 1, "risk_score": 9.0,
+                                 "reasons": ["required by 9 programs"]}],
+                "gaps": [{"course": "PHYSICS 6", "n_programs": 4, "programs": []}],
+                "unmatched_program_courses": 0,
+                "truncated": {"leaderboard": 3, "gaps": 7},
+            },
+        },
+        "programs": {},
+    }
+    doc = report_export.render_report(results)
+    assert "3 more ranked course(s) beyond the top shown" in doc
+    assert "7 more required-but-not-offered course(s) beyond those shown" in doc
+
+
 def test_report_bottlenecks_inert_shows_reason():
     results = {"terms_in_data": 1,
                "analysis": {"rotation_gaps": [], "single_section": [],
