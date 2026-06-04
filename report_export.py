@@ -400,6 +400,9 @@ def _bottlenecks(results: dict) -> str:
     if trunc.get("leaderboard"):
         foot.append(f'{_esc(trunc["leaderboard"])} more ranked course(s) beyond the '
                     'top shown.')
+    if trunc.get("gaps"):
+        foot.append(f'{_esc(trunc["gaps"])} more required-but-not-offered course(s) '
+                    'beyond those shown.')
     footnote = f'<p class="note">{" ".join(foot)}</p>' if foot else ""
 
     return ('<section class="card" aria-labelledby="bnk"><h2 id="bnk">'

@@ -188,15 +188,27 @@ def _context(results: dict) -> str:
 
     bnk = (results.get("analysis") or {}).get("bottlenecks")
     if bnk and bnk.get("status") == "active":
+        trunc = bnk.get("truncated") or {}
+        board = bnk.get("leaderboard") or []
         nl = []
-        for r in bnk.get("leaderboard", [])[:8]:
+        for r in board[:8]:
             nl.append(f"- {r.get('course')} (risk {r.get('risk_score')}): required by "
                       f"{r.get('n_programs')} programs, {r.get('n_sections')} section(s).")
+        # Honest count of what this grounding leaves out: the rows beyond the [:8]
+        # shown here PLUS any the leaderboard itself dropped past its cap — never a
+        # silent truncation.
+        hidden = max(0, len(board) - 8) + (trunc.get("leaderboard") or 0)
+        if hidden:
+            nl.append(f"(+{hidden} more ranked bottleneck course(s) not shown.)")
         gaps = bnk.get("gaps") or []
         if gaps:
             nl.append("Required across programs but not offered: "
                       + ", ".join(f"{g.get('course')} (x{g.get('n_programs')})"
                                   for g in gaps[:8]) + ".")
+            hidden_gaps = max(0, len(gaps) - 8) + (trunc.get("gaps") or 0)
+            if hidden_gaps:
+                nl.append(f"(+{hidden_gaps} more required-but-not-offered course(s) "
+                          "not shown.)")
         # Honest framing rides with the ranking so the assistant never overclaims:
         # it is a structural supply-vs-demand proxy, not a measured completion rate.
         extra += ["", "CROSS-PROGRAM BOTTLENECKS (supply-vs-demand PROXY, NOT a measured "
