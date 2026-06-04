@@ -79,9 +79,9 @@ import demand_supply
 import grid_pressure
 import engine
 from sources import (assist, catalog_ge, course_master, elumen, elumen_client,
-                     enrollment, enrollment_ir, ge, mapping, pdf_loader,
-                     program_lists, program_mapper, schedule, schedule_import,
-                     timeblocks)
+                     enrollment, enrollment_ir, ge, live_demand, mapping,
+                     pdf_loader, program_lists, program_mapper, schedule,
+                     schedule_import, timeblocks)
 # Imported under an alias so the module name does not shadow the loaded ``facility``
 # room-map that analyze_live / analyze_import pass around as a local variable.
 from sources import facility as facilities
@@ -917,6 +917,7 @@ def analyze_live(campus, terms, program_query, out_path, *, client=None,
                  assist_areas=None, elumen_cache=None,
                  catalog_pdf=None, odl_json=None, facility=None,
                  active_courses=None, program_demand=None,
+                 demand_program_ids=None,
                  sections_override=None, program_override=None):
     """Run the full live pipeline and return a structured, JSON-serializable report.
 
@@ -974,6 +975,22 @@ def analyze_live(campus, terms, program_query, out_path, *, client=None,
         sections, program = build(campus, terms, program_query, client=client,
                                   program_id=program_id, program_title=program_title,
                                   program_award=program_award)
+
+    # --- FF4: bounded live cross-program demand fan-out (outside engine.run) ---
+    # F2's cross-program bottleneck leaderboard needs a programs-per-course demand
+    # map, which a bare live fetch (one program per run) cannot carry -> F2 inert.
+    # OPT-IN: only when the caller hands over an explicit, bounded list of program
+    # ids (``demand_program_ids``, typically a capped slice of
+    # program_mapper.get_all_programs) do we fan out across those program maps and
+    # aggregate the SAME ProgramDemand shape the offline Program Course Lists loader
+    # emits, so the F2 inject below activates with NO change. This is network IO, so
+    # it lives HERE in the data-gathering phase, never inside engine.run(). An
+    # explicit ``program_demand`` (offline import path) always wins; the fan-out
+    # FAILS OPEN — an empty/failing fan-out leaves program_demand falsy and F2 stays
+    # honestly inert (never a fabricated map).
+    if program_demand is None and demand_program_ids:
+        program_demand = live_demand.fan_out_demand(
+            campus, demand_program_ids, client=client)
 
     report = {
         "campus": campus,
