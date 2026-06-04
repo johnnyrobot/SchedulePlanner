@@ -28,6 +28,7 @@ REPO = pathlib.Path(__file__).resolve().parent.parent
 CSV = str(REPO / "files" / "lamc_schedule_sample.csv")
 XLSX = str(REPO / "files" / "lamc_schedule_sample.xlsx")
 FAC = str(REPO / "files" / "lamc_facility_sample.xlsx")
+PLISTS = str(REPO / "files" / "lamc_program_lists_sample.xlsx")
 
 
 # --- day normalization (R -> Th) -------------------------------------------
@@ -163,6 +164,48 @@ def test_pseudo_program_lists_all_offered_courses():
     assert prog["code"] == "ALL"
     assert {c["course_id"] for c in prog["courses"]} == {
         "ACCTG 001", "ENGL 101", "MATH 227", "BIOLOGY 003"}
+
+
+# --- F2: cross-program bottleneck on the import path -----------------------
+
+def test_import_with_program_lists_emits_active_leaderboard():
+    """A Program Course Lists export supplies the cross-program demand the live
+    path can't, so the bottleneck leaderboard activates on the import path. The
+    CSV offers MATH 227 + BIOLOGY 003, both required in the sample lists."""
+    import json
+
+    with tempfile.TemporaryDirectory() as tmp:
+        out = str(pathlib.Path(tmp) / "wb.xlsx")
+        report = blw.analyze_import(CSV, out, program_lists_path=PLISTS)
+    json.dumps(report)  # JSON-serializable end to end
+
+    block = report["results"]["analysis"]["bottlenecks"]
+    assert block["status"] == "active"
+    assert "PROXY" in block["label"]
+    board = {r["course"]: r for r in block["leaderboard"]}
+    assert "MATH 227" in board
+    assert board["MATH 227"]["n_programs"] == 4       # required by 4 sample plans
+    assert board["MATH 227"]["risk_score"] >= board.get(
+        "BIOLOGY 003", {"risk_score": 0})["risk_score"]
+
+    det = next(d for d in report["inert_detectors"]
+               if d["detector"] == "program_bottleneck")
+    assert det["status"] == "active"
+    assert det["found"] == len(block["leaderboard"])
+
+
+def test_import_without_program_lists_keeps_bottleneck_inert():
+    """No demand map -> the leaderboard stays honestly inert (the import path
+    audits one schedule; cross-program demand needs the program-lists export)."""
+    with tempfile.TemporaryDirectory() as tmp:
+        out = str(pathlib.Path(tmp) / "wb.xlsx")
+        report = blw.analyze_import(CSV, out)
+    block = report["results"]["analysis"]["bottlenecks"]
+    assert block["status"] == "inert"
+    assert block["reason"]
+    det = next(d for d in report["inert_detectors"]
+               if d["detector"] == "program_bottleneck")
+    assert det["status"] == "inert" and det["reason"] and "remedy" in det
 
 
 # --- app bridge returns the same flat dict the UI renders ------------------
