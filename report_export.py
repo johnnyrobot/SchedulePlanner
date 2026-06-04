@@ -513,13 +513,14 @@ def _demand_supply(results: dict) -> str:
             f'<td>{_esc(r.get("n_sections"))}</td>'
             f'<td>{why}</td>'
             "</tr>")
-    table = (
-        '<div class="tablewrap"><table>'
-        '<caption>Add a section — highest demand-vs-supply pressure</caption>'
-        '<tr><th>Course</th><th>Score</th><th>Demand&nbsp;ratio</th>'
-        '<th>Waitlist</th><th>Sections</th><th>Why</th></tr>'
-        f'{"".join(rows)}</table></div>') if rows else \
-        '<p>No course currently shows add-a-section pressure.</p>'
+    if rows:
+        table = ('<div class="tablewrap"><table>'
+                 '<caption>Add a section — highest demand-vs-supply pressure</caption>'
+                 '<tr><th>Course</th><th>Score</th><th>Demand&nbsp;ratio</th>'
+                 '<th>Waitlist</th><th>Sections</th><th>Why</th></tr>'
+                 f'{"".join(rows)}</table></div>')
+    else:
+        table = '<p>No course currently shows add-a-section pressure.</p>'
 
     slack = block.get("capacity_slack", [])
     slack_html = ""

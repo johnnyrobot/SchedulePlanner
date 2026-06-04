@@ -349,7 +349,7 @@ def test_demand_supply_section_renders_and_escapes():
     assert "MATH 227" in html and "ART 101" in html
     assert "&lt;b&gt;x&lt;/b&gt;" in html and "<b>x</b>" not in html   # escaped
     assert "not a cut" in html
-    assert "1 required course" in html or "not_assessed" not in html   # footnote present
+    assert "1 required course" in html   # not_assessed footnote present
     assert "3 more add-list" in html
 
 
