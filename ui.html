@@ -244,6 +244,11 @@
       <span id="importFacName" class="hint"></span>
       <span class="tip" tabindex="0" role="button" aria-label="What is the facility data option?">?<span class="tip-bub" role="tooltip">The LACCD <b>LAC_SRC_FACILITY_DATA</b> export (room → seats). Enables room <b>over-capacity</b> + lab-pool analysis, joined on <i>Facil ID</i>. Optional — double-bookings are detected without it.</span></span>
     </div>
+    <div class="row mt liveopts">
+      <button class="ghost" id="importPlistsBtn" type="button" onclick="pickImportPrograms()">Add program course lists (optional)</button>
+      <span id="importPlistsName" class="hint"></span>
+      <span class="tip" tabindex="0" role="button" aria-label="What is the program course lists option?">?<span class="tip-bub" role="tooltip">The LACCD <b>Program Course Lists</b> export (one row per program × required course). Unlocks the <b>cross-program bottleneck leaderboard</b> — which required courses many programs depend on but few sections / seats / lab rooms serve. Optional.</span></span>
+    </div>
     <div class="row mt">
       <button id="importBtn" onclick="runScheduleImport()">Audit schedule export</button>
       <span id="importStatus" class="hint"></span>
@@ -570,7 +575,7 @@ function clearLiveEnrollment(){
 // Convert a real LACCD schedule export -> engine workbook -> the SAME analysis
 // the live path produces (no network), adding room double-booking + over-capacity
 // diagnostics. The optional facility export enables the capacity join.
-let importSchedPath = '', importFacPath = '';
+let importSchedPath = '', importFacPath = '', importPlistsPath = '';
 async function pickScheduleImport(){
   let r;
   try{ r = await window.pywebview.api.choose_schedule_file(); }
@@ -601,6 +606,21 @@ function clearImportFacility(){
   importFacPath='';
   document.getElementById('importFacName').textContent='';
 }
+async function pickImportPrograms(){
+  let r;
+  try{ r = await window.pywebview.api.choose_program_lists_file(); }
+  catch(e){ r = {path:''}; }
+  if(r && r.path){
+    importPlistsPath = r.path;
+    const name = r.path.split(/[\\/]/).pop();
+    document.getElementById('importPlistsName').innerHTML =
+      escapeHtml(name)+' <a href="#" onclick="clearImportPrograms();return false;">✕ remove</a>';
+  }
+}
+function clearImportPrograms(){
+  importPlistsPath='';
+  document.getElementById('importPlistsName').textContent='';
+}
 async function runScheduleImport(){
   if(!importSchedPath){
     document.getElementById('importStatus').textContent='Choose a schedule export first.';
@@ -620,7 +640,7 @@ async function runScheduleImport(){
   let res;
   try{
     res = await window.pywebview.api.analyze_schedule_import(
-      importSchedPath, null, importFacPath||null, null);
+      importSchedPath, null, importFacPath||null, null, importPlistsPath||null);
   }catch(e){
     res = {error:'Unexpected error talking to the app: '+String(e)};
   }
@@ -818,6 +838,38 @@ function renderLivePanel(res){
     html+='<div class="card"><h3>Program buildability'+(terms?' (terms '+terms+')':'')+'</h3>'+
       '<p class="hint">'+escapeHtml(bld.label||'')+'</p>'+cards+'</div>';
   }
+  // Cross-program bottleneck leaderboard (F2): required courses ranked by how many
+  // programs depend on each vs how little supply (sections / seats / lab rooms)
+  // exists. Active only with a Program Course Lists demand map (Option 1); the
+  // honest "supply-vs-demand proxy" framing rides in bnk.label. All data escaped.
+  const bnk = res.analysis && res.analysis.bottlenecks;
+  if(bnk && bnk.status==='active'){
+    const rows=(bnk.leaderboard||[]).map(r=>{
+      const why=(r.reasons||[]).map(escapeHtml).join('; ');
+      const progs=(r.programs||[]).map(escapeHtml).join(', ');
+      return '<div class="inert"><div class="det">⊘ '+escapeHtml(r.course)+
+        ' — risk '+escapeHtml(String(r.risk_score))+' · '+
+        escapeHtml(String(r.n_programs))+' program'+(r.n_programs===1?'':'s')+' · '+
+        escapeHtml(String(r.n_sections))+' section'+(r.n_sections===1?'':'s')+'</div>'+
+        '<div class="why">'+why+(progs?' — '+progs:'')+'</div></div>';
+    }).join('');
+    let gaps='';
+    if((bnk.gaps||[]).length){
+      const gl=bnk.gaps.map(g=>'<li>'+escapeHtml(g.course)+' — required by '+
+        escapeHtml(String(g.n_programs))+' program(s), not offered</li>').join('');
+      gaps='<div class="why">Required across programs but not offered:</div><ul>'+gl+'</ul>';
+    }
+    const fp=[], tr=bnk.truncated||{};
+    if(bnk.unmatched_program_courses)
+      fp.push(escapeHtml(String(bnk.unmatched_program_courses))+
+        ' program-list course(s) could not be matched to an offered section '+
+        '(course ids aren’t leading-zero-collapsed) — excluded, not silently counted.');
+    if(tr.leaderboard)
+      fp.push(escapeHtml(String(tr.leaderboard))+' more ranked course(s) beyond the top shown.');
+    const foot=fp.length?'<p class="hint">'+fp.join(' ')+'</p>':'';
+    html+='<div class="card"><h3>Cross-program bottlenecks</h3>'+
+      '<p class="hint">'+escapeHtml(bnk.label||'')+'</p>'+rows+gaps+foot+'</div>';
+  }
   // Plain-language names for the machine detector keys (the panel avoids raw
   // jargon like "modality_mismatch"). Any future key falls back to itself.
   const DET_LABELS={
@@ -826,6 +878,7 @@ function renderLivePanel(res){
     time_block_conflict:'Time-block conflicts',
     room_conflict:'Room conflicts & capacity',
     program_buildability:'Program buildability',
+    program_bottleneck:'Cross-program bottlenecks',
   };
   const inert=res.inert_detectors||[];
   if(inert.length){

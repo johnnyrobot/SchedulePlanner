@@ -80,6 +80,19 @@ class Api:
             return {"path": ""}
         return {"path": result[0]}
 
+    def choose_program_lists_file(self):
+        """Pick a LACCD Program Course Lists export (.xlsx/.csv) for the offline
+        audit (Option 1). Unlocks the cross-program bottleneck leaderboard — the
+        cross-program demand counts (how many programs require each course) that
+        the live path, which resolves one program per run, cannot supply. Both
+        containers are accepted (the program_lists reader normalizes either)."""
+        result = webview.windows[0].create_file_dialog(
+            webview.OPEN_DIALOG,
+            file_types=("Program course lists (*.xlsx;*.xls;*.csv)", "All files (*.*)"))
+        if not result:
+            return {"path": ""}
+        return {"path": result[0]}
+
     # ---- bundled demo data -------------------------------------------
     def _demo_path(self):
         """Absolute path to the bundled synthetic demo workbook.
@@ -242,7 +255,7 @@ class Api:
 
     # ---- offline historical schedule import (Option 1) ----------------
     def analyze_schedule_import(self, path, program_path=None, facility_path=None,
-                                course_master_path=None):
+                                course_master_path=None, program_lists_path=None):
         """Audit a real LACCD schedule export OFFLINE (no network).
 
         Converts the export -> engine workbook -> the SAME analysis fetch_live
@@ -253,7 +266,10 @@ class Api:
           - program_path: an engine workbook whose 'programs' sheet narrows the
             audit to one degree path;
           - facility_path: the LAC_SRC_FACILITY_DATA export -> room capacity;
-          - course_master_path: real units (else every course defaults to 3).
+          - course_master_path: real units (else every course defaults to 3);
+          - program_lists_path: a Program Course Lists export -> the cross-program
+            bottleneck leaderboard (which required courses many programs depend on
+            but few sections / seats / lab rooms serve).
 
         Schedule exports usually carry Cap/Tot/Wait, so modality_mismatch /
         under_supply light up from the export itself. Returns {'error': ...} on any
@@ -265,8 +281,9 @@ class Api:
         prog = (program_path or "").strip() or None
         fac = (facility_path or "").strip() or None
         cm = (course_master_path or "").strip() or None
+        pl = (program_lists_path or "").strip() or None
         for label, fp in (("Program file", prog), ("Facility file", fac),
-                          ("Course master", cm)):
+                          ("Course master", cm), ("Program course lists", pl)):
             if fp and not os.path.exists(fp):
                 return {"error": f"{label} not found: {fp}"}
         try:
@@ -274,7 +291,7 @@ class Api:
                 out_path = os.path.join(tmp, "import_workbook.xlsx")
                 report = build_live_workbook.analyze_import(
                     p, out_path, program_path=prog, facility_path=fac,
-                    course_master_path=cm)
+                    course_master_path=cm, program_lists_path=pl)
         except Exception as e:
             return {"error": (f"Could not import the schedule export: "
                               f"{type(e).__name__}: {e}")}
