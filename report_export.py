@@ -346,6 +346,68 @@ def _buildability(results: dict) -> str:
             f'<div class="analysis">{"".join(cards)}</div></section>')
 
 
+def _bottlenecks(results: dict) -> str:
+    """Cross-program bottleneck leaderboard (F2): required courses ranked by how
+    many programs depend on each vs how little supply (sections / seats / lab
+    rooms) exists. Empty when absent (live / demo reports carry no demand map);
+    honest inert note when no Program Course Lists export was supplied. All data
+    HTML-escaped."""
+    block = (results.get("analysis") or {}).get("bottlenecks")
+    if not block:
+        return ""
+    label = _esc(block.get("label", ""))
+    if block.get("status") != "active":
+        return ('<section class="card" aria-labelledby="bnk"><h2 id="bnk">'
+                'Cross-program bottlenecks</h2>'
+                f'<p>Not computed: '
+                f'{_esc(block.get("reason", "no program-lists demand map supplied"))}</p>'
+                f'<p class="note">{label}</p></section>')
+
+    rows = []
+    for r in block.get("leaderboard", []):
+        why = "; ".join(_esc(x) for x in r.get("reasons", []))
+        rows.append(
+            "<tr>"
+            f'<td class="area">{_esc(r.get("course"))}</td>'
+            f'<td>{_esc(r.get("risk_score"))}</td>'
+            f'<td>{_esc(r.get("n_programs"))}</td>'
+            f'<td>{_esc(r.get("n_sections"))}</td>'
+            f'<td>{why}</td>'
+            "</tr>")
+    table = (
+        '<div class="tablewrap"><table>'
+        '<caption>Highest-risk required courses</caption>'
+        '<tr><th>Course</th><th>Risk</th><th>Programs</th><th>Sections</th>'
+        '<th>Why</th></tr>'
+        f'{"".join(rows)}</table></div>')
+
+    gaps = block.get("gaps", [])
+    gaps_html = ""
+    if gaps:
+        items = "".join(
+            f'<li>{_esc(g.get("course"))} — required by {_esc(g.get("n_programs"))} '
+            'program(s), not offered</li>' for g in gaps)
+        gaps_html = ('<h3>Required across programs but not offered</h3>'
+                     f'<ul class="issues">{items}</ul>')
+
+    foot = []
+    unmatched = block.get("unmatched_program_courses")
+    trunc = block.get("truncated") or {}
+    if unmatched:
+        foot.append(f'{_esc(unmatched)} program-list course(s) could not be matched '
+                    'to an offered section (course ids are not leading-zero-collapsed) '
+                    '— excluded here, not silently counted.')
+    if trunc.get("leaderboard"):
+        foot.append(f'{_esc(trunc["leaderboard"])} more ranked course(s) beyond the '
+                    'top shown.')
+    footnote = f'<p class="note">{" ".join(foot)}</p>' if foot else ""
+
+    return ('<section class="card" aria-labelledby="bnk"><h2 id="bnk">'
+            'Cross-program bottlenecks</h2>'
+            f'<p class="note">{label}</p>'
+            f'{table}{gaps_html}{footnote}</section>')
+
+
 def _reconciliation(results: dict) -> str:
     rec = results.get("reconciliation")
     if not rec:
@@ -512,6 +574,7 @@ def render_report(results: dict, *, briefing: str = "", generated_at: str = "") 
         f'{_programs(results)}'
         f'{_diagnostics(results)}'
         f'{_buildability(results)}'
+        f'{_bottlenecks(results)}'
         f'{_reconciliation(results)}'
         f'{_detectors(results)}'
         f'{_ge(results)}'
