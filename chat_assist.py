@@ -168,6 +168,24 @@ def _context(results: dict) -> str:
         extra += ["", "TIME CONFLICTS (required courses that clash by meeting time)",
                   *[f"- {f.get('summary')}" for f in tbc]]
 
+    bld = (results.get("analysis") or {}).get("buildability")
+    if bld and bld.get("status") == "active":
+        bl = []
+        for p in bld.get("programs", []):
+            bits = [f"{p.get('available')}/{p.get('required_total')} required offered"]
+            if p.get("missing"):
+                bits.append("missing " + ", ".join(p["missing"]))
+            bits.append("time-conflict-free" if (p.get("time_conflict") or {}).get("feasible")
+                        else "has time conflicts")
+            if p.get("single_section_required"):
+                bits.append(f"{len(p['single_section_required'])} single-section")
+            bl.append(f"- {p.get('title') or p.get('code')} (score {p.get('score')}/100): "
+                      + "; ".join(bits) + ".")
+        # The honest framing must travel with the numbers (structural proxy, not a
+        # measured completion rate) so the assistant never overclaims.
+        extra += ["", "PROGRAM BUILDABILITY (structural-feasibility PROXY, NOT a measured "
+                  "completion rate)", *bl]
+
     return base + ("\n" + "\n".join(extra) if extra else "")
 
 

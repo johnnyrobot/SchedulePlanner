@@ -23,6 +23,37 @@ def _patch_chat(monkeypatch, fn):
     monkeypatch.setattr(llm_assist, "_chat", fn)
 
 
+def test_context_includes_buildability_block():
+    """_context grounds the model with the program-buildability audit so it can
+    answer 'can a student finish the required path?' — with the honest framing."""
+    results = {
+        "analysis": {
+            "buildability": {
+                "status": "active", "horizon_terms": [2268],
+                "label": "Structural-feasibility PROXY, not a measured completion rate.",
+                "programs": [{
+                    "code": "BIOL-AS", "title": "Biology AS-T",
+                    "required_total": 4, "available": 3, "missing": ["PHYSICS 6"],
+                    "single_section_required": ["BIOLOGY 3"],
+                    "time_conflict": {"feasible": False}, "score": 62,
+                }],
+            },
+        },
+    }
+    ctx = chat_assist._context(results)
+    assert "PROGRAM BUILDABILITY" in ctx
+    assert "PROXY" in ctx                       # honest framing travels with it
+    assert "Biology AS-T (score 62/100)" in ctx
+    assert "missing PHYSICS 6" in ctx
+    assert "has time conflicts" in ctx
+
+
+def test_context_omits_buildability_when_inert():
+    ctx = chat_assist._context({"analysis": {"buildability": {"status": "inert",
+                                                              "reason": "no program"}}})
+    assert "PROGRAM BUILDABILITY" not in ctx
+
+
 # ------------------------------------------------------------------ router
 def test_route_parses_offering_and_fills_defaults(monkeypatch):
     _patch_chat(monkeypatch, lambda *a, **k: '{"lookup":"offering","courses":["BIOLOGY 6"]}')
