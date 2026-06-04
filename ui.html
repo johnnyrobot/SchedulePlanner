@@ -830,13 +830,25 @@ function renderLivePanel(res){
       if((p.by_design_excluded||[]).length) reasons.push('By-design (not flagged): '+p.by_design_excluded.map(escapeHtml).join(', '));
       const lis=reasons.length?reasons.map(r=>'<li>'+r+'</li>').join(''):'<li>no blockers found</li>';
       const ok=p.score>=80;
+      const ge=p.ge||{};
+      let geLine='';
+      if(ge.status==='active'){
+        const d=p.score_delta||0;
+        const gaps=(ge.gaps||[]).length?', gaps '+ge.gaps.map(escapeHtml).join(', '):'';
+        geLine='<div class="why">GE-inclusive: major-only '+escapeHtml(String(p.score_major_only))+
+          '/100, Δ '+(d>0?'+':'')+escapeHtml(String(d))+'; '+
+          escapeHtml(String(ge.areas_schedulable))+'/'+escapeHtml(String(ge.areas_in_denominator))+
+          ' GE areas schedulable'+gaps+(ge.draft?' (DRAFT GE counts)':'')+'.</div>';
+      }
       return '<div class="inert"><div class="det'+(ok?' on':'')+'">'+(ok?'✓ ':'⊘ ')+
         escapeHtml(p.title||p.code)+' — score '+escapeHtml(String(p.score))+'/100</div>'+
+        geLine+
         '<div class="why">'+escapeHtml(p.summary||'')+'</div><ul>'+lis+'</ul></div>';
     }).join('');
     const terms=(bld.horizon_terms||[]).map(escapeHtml).join(', ');
     html+='<div class="card"><h3>Program buildability'+(terms?' (terms '+terms+')':'')+'</h3>'+
-      '<p class="hint">'+escapeHtml(bld.label||'')+'</p>'+cards+'</div>';
+      '<p class="hint">'+escapeHtml(bld.label||'')+'</p>'+
+      (bld.ge_label?'<p class="hint">'+escapeHtml(bld.ge_label)+'</p>':'')+cards+'</div>';
   }
   // Cross-program bottleneck leaderboard (F2): required courses ranked by how many
   // programs depend on each vs how little supply (sections / seats / lab rooms)
