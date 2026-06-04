@@ -171,6 +171,49 @@ def test_report_truncates_and_counts():
     assert rep["truncated"]["leaderboard"] == 5
 
 
+# --------------------------------------------------------------- FF1 subject-alias crosswalk
+def test_subject_alias_collapses_engl_english_to_one_match():
+    """A demand course written ``ENGL 101`` joins an offered ``ENGLISH 101`` via
+    the verified subject crosswalk: it ranks (not a gap) and is NOT counted as an
+    unmatched program course. This is the SOURCE-side encoding mess F2's smoke
+    surfaced (schedule-import emits ENGL; the live schedule emits ENGLISH)."""
+    secs = [sec("ENGLISH 101", 2268, "1")]            # offered under the long form
+    d = demand({"ENGL 101": ["P1", "P2"]})            # required under the short form
+    rep = B.bottleneck_report(d, secs)
+    assert rep["status"] == "active"
+    # the aliased course is matched -> on the board, NOT in gaps, NOT unmatched
+    assert any(r["course"] == "ENGLISH 101" for r in rep["leaderboard"])
+    assert all(g["course"] != "ENGL 101" for g in rep["gaps"])
+    assert rep["unmatched_program_courses"] == 0
+
+
+def test_subject_alias_does_not_force_match_ambiguous_eng():
+    """GUARD: ``ENG`` is the classic ambiguous code (English vs Engineering) and is
+    NOT in the verified crosswalk, so an ``ENG 101`` demand must stay honestly
+    unmatched against an ``ENGLISH 101`` offering — a false match here would be
+    worse than an honest miss."""
+    secs = [sec("ENGLISH 101", 2268, "1"), sec("MATH 227", 2268, "2")]
+    d = demand({"ENG 101": ["P1", "P2"], "MATH 227": ["P1"]})
+    rep = B.bottleneck_report(d, secs)
+    assert rep["status"] == "active"
+    # MATH 227 matches; ENG 101 does NOT collapse onto ENGLISH 101
+    assert any(r["course"] == "MATH 227" for r in rep["leaderboard"])
+    assert all(r["course"] != "ENGLISH 101" for r in rep["leaderboard"])
+    assert any(g["course"] == "ENG 101" for g in rep["gaps"])
+    assert rep["unmatched_program_courses"] == 1
+
+
+def test_subject_alias_leaves_non_aliased_unmatched_count_unchanged():
+    """A non-aliased required-but-not-offered course is still counted unmatched
+    exactly as before (the crosswalk is additive — it only rescues real aliases,
+    never changes matched/unmatched semantics for other courses)."""
+    secs = [sec("MATH 227", 2268, "1")]
+    d = demand({"MATH 227": ["P1"], "PHYSICS 6": ["P1", "P2"]})   # PHYSICS 6 not offered
+    rep = B.bottleneck_report(d, secs)
+    assert rep["unmatched_program_courses"] == 1
+    assert any(g["course"] == "PHYSICS 6" for g in rep["gaps"])
+
+
 # --------------------------------------------------------------- determinism
 def test_offered_param_matches_recompute():
     """Passing a pre-computed offered_by_course map (the bottleneck_report

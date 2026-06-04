@@ -68,6 +68,49 @@ def test_build_programs_df_schema():
     assert dict(zip(df["Course ID"], df["Recommended Semester"]))["MATH 245"] == 2
 
 
+# --- FF1: subject-alias crosswalk -------------------------------------------
+
+def test_canonical_subject_folds_verified_aliases():
+    # Each pair is verified from files/catalog.csv (Subject vs Acad Org, same row).
+    assert mapping.canonical_subject("ENGL 101") == "ENGLISH 101"
+    assert mapping.canonical_subject("BIOL 6") == "BIOLOGY 6"
+    assert mapping.canonical_subject("HIST 11") == "HISTORY 11"
+    assert mapping.canonical_subject("PSYC 1") == "PSYCH 1"
+    assert mapping.canonical_subject("CS 101") == "COMPSCI 101"
+    assert mapping.canonical_subject("PHYS 101") == "PHYSICS 101"
+
+
+def test_canonical_subject_idempotent_on_canonical_form():
+    # Folding the already-canonical form is a no-op (the value isn't itself a key).
+    for canon in ("ENGLISH 101", "BIOLOGY 6", "PHYSICS 101", "COMPSCI 101"):
+        assert mapping.canonical_subject(canon) == canon
+
+
+def test_canonical_subject_does_not_alias_ambiguous_eng():
+    # ENG (English vs Engineering) is the classic trap and is NOT in the table.
+    assert mapping.canonical_subject("ENG 101") == "ENG 101"
+    # Engineering is ENGR in the data, also untouched.
+    assert mapping.canonical_subject("ENGR 101") == "ENGR 101"
+
+
+def test_canonical_subject_leaves_non_aliased_and_numberless_intact():
+    assert mapping.canonical_subject("MATH 227") == "MATH 227"
+    assert mapping.canonical_subject("CH DEV 1") == "CH DEV 1"   # multi-word subject untouched
+    assert mapping.canonical_subject("FOO") == "FOO"             # no number -> unchanged
+    # Only the subject token is rewritten; the catalog number is preserved verbatim.
+    assert mapping.canonical_subject("engl 101") == "ENGLISH 101"   # also normalizes case
+
+
+def test_canonical_subject_does_not_change_norm_output():
+    # Determinism guard: _norm's output is untouched for existing inputs.
+    for code in ("ENGL 101", "MATH 227", "CS 101", "BIOLOGY 003"):
+        assert mapping._norm(code) == mapping._norm(code)
+    assert mapping.subject_aliases()["ENGL"] == "ENGLISH"
+    # subject_aliases returns a copy — mutating it must not affect the table.
+    mapping.subject_aliases()["ENGL"] = "WRONG"
+    assert mapping.canonical_subject("ENGL 101") == "ENGLISH 101"
+
+
 def test_reconcile_courses_reports_unmatched():
     matched, unmatched = mapping.reconcile_courses(SECTIONS, PROGRAM)
     assert set(matched) == {"CS 101", "MATH 245"}

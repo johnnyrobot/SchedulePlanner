@@ -42,6 +42,81 @@ def _norm(code):
     return re.sub(r"\s+", " ", str(code).strip().upper())
 
 
+# --- FF1: subject-alias crosswalk (F2 unmatched reducer) ---------------------
+# A SOURCE-side encoding mess — the same subject is sometimes written short
+# (``ENGL``) and sometimes long (``ENGLISH``) across LACCD exports — inflates
+# F2's ``unmatched_program_courses`` with non-bugs. This crosswalk folds the two
+# spellings to ONE canonical subject token *before the join* so genuinely-aliased
+# codes stop counting as unmatched.
+#
+# HONESTY DOCTRINE: a wrong alias creates a FALSE MATCH, which is worse than an
+# honest unmatched course. So every pair below is VERIFIED from committed repo
+# data — ``files/catalog.csv`` carries, per course row, both a ``Subject`` code
+# and an ``Acad Org`` code for the SAME course; the six rows where they differ
+# are same-course aliases by construction:
+#
+#   Subject  Acad Org   Discipline        evidence (catalog.csv row)
+#   ENGL  -> ENGLISH    English           ENGL 101 / Acad Org ENGLISH
+#   BIOL  -> BIOLOGY    Biology           BIOL 6   / Acad Org BIOLOGY
+#   HIST  -> HISTORY    History           HIST 11  / Acad Org HISTORY
+#   PSYC  -> PSYCH      Psychology        PSYC 1   / Acad Org PSYCH
+#   CS    -> COMPSCI    Computer Science  CS 101   / Acad Org COMPSCI
+#   PHYS  -> PHYSICS    Physics           PHYS 101 / Acad Org PHYSICS
+#
+# ENGL<->ENGLISH is further corroborated end-to-end: the schedule-import sample
+# (files/lamc_schedule_sample.csv) emits ``ENGL`` while the live schedule
+# subjects/listing fixtures emit ``ENGLISH`` for the same English courses — the
+# exact divergence F2's real-data smoke surfaced.
+#
+# DELIBERATELY ABSENT: ``ENG``. It is the classic ambiguous trap (English at one
+# institution, Engineering at another) and appears in NONE of the committed data
+# (Engineering is ``ENGR`` with Subject == Acad Org, needing no alias). Aliasing
+# ``ENG`` would be a speculative guess, so we do not — it stays honestly
+# unmatched. To extend the table, only add a pair you can verify the same way.
+#
+# Values are the canonical (longer, Acad-Org) form; keys are alternates. Both are
+# uppercase + whitespace-collapsed to match :func:`_norm` output.
+_SUBJECT_ALIASES = {
+    "ENGL": "ENGLISH",
+    "BIOL": "BIOLOGY",
+    "HIST": "HISTORY",
+    "PSYC": "PSYCH",
+    "CS": "COMPSCI",
+    "PHYS": "PHYSICS",
+}
+
+
+def subject_aliases():
+    """Return a copy of the verified alternate->canonical subject crosswalk.
+
+    A copy so callers cannot mutate the shared table. See ``_SUBJECT_ALIASES``
+    for the per-pair data evidence and the honesty doctrine behind it."""
+    return dict(_SUBJECT_ALIASES)
+
+
+def canonical_subject(code):
+    """Fold an aliased subject token in a course id to its canonical spelling.
+
+    A SEPARATE, composable step layered ON TOP of :func:`_norm` — it never
+    changes ``_norm``'s output for any input, so the determinism gate is
+    untouched. Splits a normalized course id into ``<subject> <number>``,
+    rewrites ONLY the subject token via the verified :data:`_SUBJECT_ALIASES`
+    crosswalk, and leaves the catalog number (and any course id with no number,
+    or an unknown subject) byte-identical. Idempotent and stdlib-only.
+
+    ``canonical_subject("ENGL 101") == "ENGLISH 101"`` but
+    ``canonical_subject("ENG 101") == "ENG 101"`` (ambiguous code, never aliased)
+    and ``canonical_subject("MATH 227") == "MATH 227"`` (no alias needed)."""
+    norm = _norm(code)
+    parts = norm.split(" ", 1)
+    if len(parts) != 2:
+        # No "<subject> <number>" shape (e.g. a bare token) — nothing to rewrite.
+        return norm
+    subject, rest = parts
+    canon = _SUBJECT_ALIASES.get(subject)
+    return f"{canon} {rest}" if canon else norm
+
+
 def _to_units(value, default=3.0):
     """Coerce '3.00', '3-4', 5.0, '' -> float (solver does int(units))."""
     try:
