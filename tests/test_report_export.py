@@ -175,3 +175,64 @@ def test_report_omits_buildability_when_absent():
                "programs": {}}
     doc = report_export.render_report(results)
     assert "Program buildability" not in doc
+
+
+def test_report_renders_bottlenecks_section():
+    """An active bottlenecks block renders the Cross-program bottlenecks card:
+    ranked rows, the gaps, the unmatched count, the PROXY label; data escaped."""
+    results = {
+        "terms_in_data": 1,
+        "analysis": {
+            "rotation_gaps": [], "single_section": [],
+            "modality_mismatch": [], "under_supply": [],
+            "bottlenecks": {
+                "status": "active",
+                "label": "Cross-program bottleneck ranking — a structural "
+                         "supply-vs-demand PROXY, NOT a measured completion rate.",
+                "leaderboard": [{
+                    "course": "MATH <227>", "n_programs": 15, "n_listed": 18,
+                    "programs": ["Biology AS-T", "Chemistry AS-T"],
+                    "n_sections": 1, "min_sections_per_term": 1, "fill_pct": 96,
+                    "closed": False, "is_lab": False, "risk_score": 19.5,
+                    "reasons": ["required by 15 programs",
+                                "single section in at least one offered term",
+                                "at 96% fill"],
+                }],
+                "gaps": [{"course": "PHYSICS 6", "n_programs": 4,
+                          "programs": ["Biology AS-T"]}],
+                "unmatched_program_courses": 2,
+                "truncated": {"leaderboard": 0, "gaps": 0},
+            },
+        },
+        "programs": {},
+    }
+    doc = report_export.render_report(results)
+    assert "Cross-program bottlenecks" in doc
+    assert "MATH &lt;227&gt;" in doc                 # course id HTML-escaped
+    assert "15" in doc and "19.5" in doc             # n_programs + risk score
+    assert "required by 15 programs" in doc
+    assert "PHYSICS 6" in doc                          # the gaps list
+    assert "PROXY" in doc
+    assert "2" in doc                                  # unmatched count surfaced
+
+
+def test_report_omits_bottlenecks_when_absent():
+    results = {"terms_in_data": 4,
+               "analysis": {"rotation_gaps": [], "single_section": [],
+                            "modality_mismatch": [], "under_supply": []},
+               "programs": {}}
+    doc = report_export.render_report(results)
+    assert "Cross-program bottlenecks" not in doc
+
+
+def test_report_bottlenecks_inert_shows_reason():
+    results = {"terms_in_data": 1,
+               "analysis": {"rotation_gaps": [], "single_section": [],
+                            "modality_mismatch": [], "under_supply": [],
+                            "bottlenecks": {"status": "inert",
+                                            "label": "... PROXY ...",
+                                            "reason": "no demand map supplied"}},
+               "programs": {}}
+    doc = report_export.render_report(results)
+    assert "Cross-program bottlenecks" in doc
+    assert "no demand map supplied" in doc
