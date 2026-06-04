@@ -42,7 +42,7 @@ completion target** (no student-level outcome exists in any LACCD source, so eve
 | Guided-pathway course maps ✅; "57% can't get required courses" ✅ + shutout ✅; "enroll in all required courses in one term" | **F1 Program-Map Buildability Audit** | ✅ **SHIPPED** (branch `feat/program-buildability-audit`) |
 | Bottleneck / single-section courses ✅ | **F2 Cross-Program Bottleneck Leaderboard** | ✅ **SHIPPED** (branch `feat/cross-program-bottleneck`) |
 | Standardized meeting-time blocks ✅; UCF 45% fewer conflicts ❓ | **F3 Grid-Conformance + Morning-Compression Pressure** | ✅ **SHIPPED** (branch `feat/grid-conformance-morning`) |
-| Guided-pathway maps **include GE** ✅ | **F4 GE in the Program Denominator (ASSIST id 47)** | planned |
+| Guided-pathway maps **include GE** ✅ | **F4 GE in the Program Denominator (ASSIST id 47)** | ✅ SHIPPED (branch feat/ge-program-denominator) |
 | Demand-driven / predictive scheduling (⚠️/❓) | **F5 Demand-vs-Supply Action List** | planned (IR adapter unblocks it) |
 | Equity gains for working/parent/URM ✅ | **F6 Equity / Archetype Exposure View** | planned |
 | Honesty doctrine + the claim→source map | **F7 Evidence-Cited Reporting & Chat Grounding** | planned |
@@ -149,14 +149,43 @@ not a measured completion rate."*
   determinism gate stays green (F3 lives outside `engine.run`). Full suite green (571 passed, 5
   pre-existing platform-coupled fixtures deselected).
 
-## F4 — GE in the Program Denominator (ASSIST id 47)
+## F4 — GE in the Program Denominator (ASSIST id 47) — ✅ SHIPPED
 
-Fold GE-area requirements into the buildability denominator so a "complete" program map isn't silently
-major-only. Evidence: guided-pathway maps include GE; a GE-less map overstates buildability. Data:
-Program Course Lists is major-only and `program_mapper.py` drops most CHOICE/GENERAL_EDUCATION
-elements; add GE from ASSIST (LAMC institutionId 47) / IGETC strings. Fit: `ge.resolve` +
-`assist.fetch_ge_courses` already run in `analyze_live`; F1 already threads `ge_rows` into a GE-seam
-field — F4 deepens it.
+Folds GE-area requirements into the buildability denominator so a "complete" program map isn't silently
+major-only. Evidence: guided-pathway maps include GE; a GE-less map overstates buildability.
+
+**What shipped** (branch `feat/ge-program-denominator`, stacked on the F3 branch; 8 commits): the
+buildability score is now **GE-inclusive** — `buildability.ge_denominator(ge_coverage)` folds schedulable
+GE areas into `_score`'s denominator (the user-chosen *rescale* model), and each scorecard carries
+`score`, **`score_major_only`**, and a signed **`score_delta`** so the overstatement a GE-less map
+hides is explicit and auditable on every program. Wired into `analyze_live` via one injection line
+(`ge_coverage=ge_coverage`, OUTSIDE `engine.run` → determinism gate green) and surfaced in
+`report_export` / `ui.html` / `chat_assist` + the `program_buildability` detector reason, all carrying
+the new `GE_LABEL` ("GE-inclusive buildability — a structural-coverage PROXY, not a measured completion
+rate").
+
+**Honesty (the load-bearing design choice):** the denominator unit is **per-area, pre-sweep**. The
+naïve "wire the old `ge_summary` into `_score`" was rejected as dishonest — `ge.resolve`'s `resolution`
+is an *auto-schedule* decision (a >3-offered area with no recommended course stays `reserve`) and its
+`offered_count` is *post* the disjoint claiming sweep (a shared area shows 0 when a sibling grabbed its
+course), so both **false-flag schedulable areas**. F4 instead added a pre-sweep `offered_eligible` count
+to `ge.resolve` coverage and counts an area SCHEDULABLE iff `offered_eligible >= required`. **Fail open:**
+shared (`required<=0`), reserve-only-remainder (`eligible_count is None`), and no-articulation
+(`no_assist_data`) areas are EXCLUDED from the denominator — never a gap. **Inert** when no GE goal is
+selected (major-only, honest reason) or when articulation is unavailable (ASSIST outage / empty injected
+map / all `no_assist_data` → GE never moves the score). Unreviewed GE patterns (all shipped patterns have
+`reviewed_by` blank by design) still count but ride a **DRAFT** caveat on every surface. The signed delta
+is genuinely signed: a fully-schedulable GE set **raises** the score when the major path has gaps
+(unit-pinned), so no surface asserts a fixed direction.
+
+Scope: scores the **single** transfer/local goal already selected for the run; area-satisfiable
+(per-area, optimistic — does not assert all GE areas are jointly fillable with distinct courses). Active
+on the live/injected transfer paths and the local-catalog path. **Out of scope / follow-up:** an offline
+ASSIST-area route through `analyze_import` (F4 stays honestly inert on a bare import, same doctrine as
+F2's "no demand map → inert"). 584 tests pass (+~13 new); subagent-driven build with per-task spec +
+code-quality review + a positive-delta regression guard. Fit note: `ge.resolve` +
+`assist.fetch_ge_courses` already ran in `analyze_live`; F1's `ge_summary` GE-seam was the placeholder
+F4 replaced.
 
 ## F5 — Demand-vs-Supply Action List
 
