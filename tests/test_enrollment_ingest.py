@@ -45,7 +45,9 @@ def test_load_enrollment_returns_dict_keyed_int_term_str_bare_crn():
 def test_load_enrollment_planted_rows_have_expected_counts():
     enr = load_enrollment(str(SAMPLE))
     assert ACCTG_KEY in enr, f"expected planted key {ACCTG_KEY}"
-    assert enr[ACCTG_KEY] == {"Cap Enrl": 40, "Tot Enrl": 14, "Wait Tot": 0}
+    assert enr[ACCTG_KEY]["Cap Enrl"] == 40
+    assert enr[ACCTG_KEY]["Tot Enrl"] == 14
+    assert enr[ACCTG_KEY]["Wait Tot"] == 0
     assert ENGL_KEY in enr
     assert enr[ENGL_KEY]["Cap Enrl"] == 40
     assert enr[ENGL_KEY]["Tot Enrl"] == 40
@@ -111,6 +113,33 @@ def test_load_enrollment_blank_class_nbr_footer_raises(tmp_path):
     with pytest.raises(SourceDataError) as exc:
         load_enrollment(str(bad))
     assert str(bad) in str(exc.value) or "blank_classnbr.xlsx" in str(exc.value)
+
+
+# --- FF5: IR Component (contact category) preserved through the join --------
+
+def test_load_enrollment_carries_component():
+    # Capture-only: the IR export's PeopleSoft Component (LEC/LAB/Activity) is
+    # carried into the join map so it can ride onto the enriched record. The
+    # committed fixture's planted rows are LEC.
+    enr = load_enrollment(str(SAMPLE))
+    assert enr[ACCTG_KEY]["Component"] == "LEC"
+    assert enr[ENGL_KEY]["Component"] == "LEC"
+
+
+def test_enrich_threads_component_onto_matched_record():
+    enrollment = {(2248, "17818"): {"Cap Enrl": 30, "Tot Enrl": 25,
+                                    "Wait Tot": 5, "Component": "LAB"}}
+    records = [{"term": 2248, "course": "BIOLOGY 003", "class_nbr": "17818 (LEC)"}]
+    out = enrich_sections(records, enrollment)
+    assert out[0]["Component"] == "LAB"
+
+
+def test_unmatched_record_keeps_no_component():
+    enrollment = {(2248, "17818"): {"Cap Enrl": 30, "Tot Enrl": 25,
+                                    "Wait Tot": 5, "Component": "LEC"}}
+    records = [{"term": 2248, "course": "MATH 245", "class_nbr": "99999 (LEC)"}]
+    out = enrich_sections(records, enrollment)
+    assert "Component" not in out[0]
 
 
 # --- CRN-suffix-strip join (the load-bearing test) -------------------------

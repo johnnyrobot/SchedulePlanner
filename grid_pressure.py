@@ -31,8 +31,9 @@ _END_TIME_REASON = (
     "per-week, so meeting duration cannot be derived from units — it would false-"
     "flag labs, clinicals and activities")
 _CALENDAR_REASON = (
-    "no machine-readable academic/holiday calendar is ingested; the live API's "
-    "session `dates` are dropped at parse time and `woi` is unused")
+    "no machine-readable academic/holiday calendar is ingested; the per-section "
+    "session `dates` and `woi` are now CAPTURED on the section records but remain "
+    "unused — activating a holiday/session-date check still needs that calendar")
 
 
 def _bucket(start_min):

@@ -83,7 +83,12 @@ def fetch_sections(campus, terms=None, *, client=None):
                         "class_nbr": section.get("classNbr", ""),
                         "status": section.get("status", ""),
                         "seats": section.get("seats", ""),
+                        # Weeks-of-instruction + the per-section session date range
+                        # (e.g. "08/31/26 - 12/20/26"). CAPTURE-ONLY (FF5): carried
+                        # so a future calendar/duration check can read them; nothing
+                        # consumes them yet. Tolerant default "" when absent.
                         "woi": section.get("woi", ""),
+                        "dates": section.get("dates", ""),
                         "modality": section.get("classType", []),
                         "days": meeting.get("days", ""),
                         "times": meeting.get("times", ""),

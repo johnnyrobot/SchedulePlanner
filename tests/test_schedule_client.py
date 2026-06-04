@@ -37,6 +37,21 @@ def test_fetch_sections_flattens_relsections(make_client):
     assert records[1]["class_nbr"] == "13956 (LAB)"
 
 
+def test_fetch_sections_carries_session_dates_and_woi(make_client):
+    # FF5 (capture-only): the live API exposes a per-section session `dates` range
+    # and `woi` (weeks of instruction). Both must SURVIVE onto the section record
+    # so a future calendar/duration check can use them; nothing consumes them yet.
+    client = make_client({"/listing/LAMC/2268": LISTING_2268})
+    records = schedule.fetch_sections("LAMC", [2268], client=client)
+    lec = records[0]
+    assert lec["dates"] == "08/31/26 - 12/20/26"
+    assert lec["woi"] == "16"
+    # A relsection with no `dates` key fails open to "" (never a crash/KeyError).
+    lab = records[1]
+    assert lab["dates"] == ""
+    assert lab["woi"] == "16"
+
+
 def test_fetch_sections_requests_each_term(make_client):
     client = make_client({"/listing/LAMC/": LISTING_2268})
     schedule.fetch_sections("LAMC", [2264, 2268], client=client)

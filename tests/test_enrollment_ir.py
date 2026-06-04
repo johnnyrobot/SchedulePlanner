@@ -60,14 +60,34 @@ def test_parse_term_blank_or_unparseable_raises():
 
 # --- CSV real-shape ingest -------------------------------------------------
 
+def _counts_only(v):
+    return {k: v[k] for k in ("Cap Enrl", "Tot Enrl", "Wait Tot")}
+
+
 def test_csv_aliases_term_string_and_dedups_meeting_patterns():
     m, summary = load_ir_export_with_report(CSV)
     # 'Class Number' aliased, "2024 Fall" -> 2248, the duplicate 30001 row deduped.
-    assert m[(2248, "30001")] == {"Cap Enrl": 40, "Tot Enrl": 10, "Wait Tot": 0}
-    assert m[(2248, "30002")] == {"Cap Enrl": 40, "Tot Enrl": 40, "Wait Tot": 18}
-    assert m[(2248, "30003")] == {"Cap Enrl": 35, "Tot Enrl": 33, "Wait Tot": 3}
+    assert _counts_only(m[(2248, "30001")]) == {"Cap Enrl": 40, "Tot Enrl": 10, "Wait Tot": 0}
+    assert _counts_only(m[(2248, "30002")]) == {"Cap Enrl": 40, "Tot Enrl": 40, "Wait Tot": 18}
+    assert _counts_only(m[(2248, "30003")]) == {"Cap Enrl": 35, "Tot Enrl": 33, "Wait Tot": 3}
     assert summary == {"rows_in": 4, "sections_out": 3, "dropped_cancelled": 0,
                        "combined_rows": 0, "terms": [2248], "total_tot_enrl": 83}
+
+
+# --- FF5: IR Component (contact category) preserved (capture-only) ----------
+
+def test_csv_carries_component():
+    # The CSV fixture's first dedup-winning row for 30001 is the LEC component.
+    m = load_ir_export(CSV)
+    assert m[(2248, "30001")]["Component"] == "LEC"
+    assert m[(2248, "30003")]["Component"] == "LEC"
+
+
+def test_component_fails_open_when_column_absent():
+    # The xlsx adapter fixture has NO Component column -> fail open to "" (never
+    # a crash, never invented).
+    m = load_ir_export(XLSX)
+    assert m[(2248, "40001")]["Component"] == ""
 
 
 # --- xlsx real-shape ingest (sheet pick, cancelled, combined) --------------
@@ -168,10 +188,11 @@ def test_pii_columns_are_ignored_not_emitted(tmp_path):
                    "Name": "DOE,JANE", "Emails": "jane@example.invalid"}]
                  ).to_csv(withpii, index=False)
     m = load_ir_export(str(withpii))
-    assert m[(2248, "30001")] == {"Cap Enrl": 40, "Tot Enrl": 10, "Wait Tot": 0}
-    # the map values carry only counts -- no instructor PII leaks through
+    assert _counts_only(m[(2248, "30001")]) == {"Cap Enrl": 40, "Tot Enrl": 10, "Wait Tot": 0}
+    # the map values carry only counts + the (non-PII) Component contact category
+    # -- no instructor PII (Name/Emails) leaks through.
     for counts in m.values():
-        assert set(counts) == {"Cap Enrl", "Tot Enrl", "Wait Tot"}
+        assert set(counts) == {"Cap Enrl", "Tot Enrl", "Wait Tot", "Component"}
 
 
 @pytest.mark.parametrize("path", [CSV, XLSX])

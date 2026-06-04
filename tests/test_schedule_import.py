@@ -78,6 +78,48 @@ def test_xlsx_shape_string_term_and_meetings():
     assert by["40004"]["Comb Sects ID"] == "C100"   # combined cross-list carried
 
 
+# --- FF5: session dates + woi survive the parse (capture-only) -------------
+
+def test_records_carry_woi_and_dates_keys_failing_open():
+    # Capture-only: every record must carry `woi` + `dates` keys so a future
+    # calendar/duration check can read them. The committed fixture has no WOI /
+    # date columns, so they fail OPEN to "" (never a crash, never invented).
+    records, _ = load_schedule_export(CSV)
+    for r in records:
+        assert r["woi"] == ""
+        assert r["dates"] == ""
+
+
+def test_woi_and_session_dates_are_captured_when_present(tmp_path):
+    # When the export DOES carry weeks-of-instruction + start/end dates, both
+    # survive onto the record (woi passthrough; dates as a "start - end" range).
+    exp = tmp_path / "with_woi.csv"
+    pd.DataFrame([{
+        "Term": "2258", "Subject": "ACCTG", "Catalog": "001", "Class Nbr": "30001",
+        "Class Status": "Active", "DAYS": "MW", "Mtg Start": "09:00:00",
+        "Mtg End": "10:25:00", "WOI": "16",
+        "Class Start Date": "08/25/2025", "Class End Date": "12/14/2025",
+    }]).to_csv(exp, index=False)
+    records, _ = load_schedule_export(str(exp))
+    r = records[0]
+    assert r["woi"] == "16"
+    assert r["dates"] == "08/25/2025 - 12/14/2025"
+
+
+def test_single_session_dates_column_is_captured(tmp_path):
+    # A single combined date-range column (some exports ship one) is captured as-is.
+    exp = tmp_path / "single_dates.csv"
+    pd.DataFrame([{
+        "Term": "2258", "Subject": "ENGL", "Catalog": "101", "Class Nbr": "30009",
+        "Class Status": "Active", "DAYS": "TR", "Mtg Start": "11:00:00",
+        "Mtg End": "12:25:00", "Weeks of Instruction": "8",
+        "Session Dates": "10/20/2025 - 12/14/2025",
+    }]).to_csv(exp, index=False)
+    r = load_schedule_export(str(exp))[0][0]
+    assert r["woi"] == "8"
+    assert r["dates"] == "10/20/2025 - 12/14/2025"
+
+
 # --- error paths -----------------------------------------------------------
 
 def test_missing_term_column_raises(tmp_path):

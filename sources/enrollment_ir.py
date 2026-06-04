@@ -190,6 +190,10 @@ def load_ir_export_with_report(path, *, sheet=None):
                 "Cap Enrl": _to_int(rd.get("Cap Enrl")),
                 "Tot Enrl": _to_int(rd.get("Tot Enrl")),
                 "Wait Tot": _to_int(rd.get("Wait Tot")),
+                # FF5 CAPTURE-ONLY: PeopleSoft Component (contact category, e.g.
+                # LEC/LAB). Carried so a future Title-5 category map can read it;
+                # no check consumes it yet. Not PII. "" when the export omits it.
+                "Component": str(rd.get("Component") or "").strip(),
             }
         except SourceDataError:
             raise
