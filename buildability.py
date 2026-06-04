@@ -93,7 +93,7 @@ def offered_by_course(sections):
     """Map normalized course id -> list of section dicts, **deduped on
     (term, class_nbr)** so meeting-pattern rows never double-count.
 
-    Each section dict: ``{term, class_nbr, meeting, status, cap, tot, facil_id}``.
+    Each section dict: ``{term, class_nbr, meeting, status, cap, tot, wait, facil_id}``.
     Rows without a class number fall back to a (term, days, times) dedup key.
     ``facil_id`` is carried for the F2 bottleneck leaderboard's lab-scarcity
     amplifier (F1 ignores it)."""
@@ -116,6 +116,7 @@ def offered_by_course(sections):
             "status": str(r.get("status", "") or r.get("Avail Status", "") or "").strip(),
             "cap": _int(r.get("Cap Enrl")),
             "tot": _int(r.get("Tot Enrl")),
+            "wait": _int(r.get("Wait Tot")),
             "facil_id": str(r.get("facil_id", "") or "").strip(),
         })
     return out

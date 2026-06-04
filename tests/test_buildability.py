@@ -274,3 +274,20 @@ def test_score_ge_can_raise_when_major_has_gaps():
     blended = B._score(4, ["X", "Y"], [], tc, [], [], ge_required=4, ge_missing=0)  # (8-2)/8 = 75
     assert major == 50 and blended == 75
     assert blended > major          # GE folding RAISED the score (positive delta)
+
+
+# --- F5: wait key on offered_by_course ------------------------------------
+
+def test_offered_by_course_carries_wait():
+    secs = [{"course": "MATH 227", "term": 2268, "class_nbr": "30001",
+             "Cap Enrl": 40, "Tot Enrl": 40, "Wait Tot": 22, "status": "Closed"}]
+    s = B.offered_by_course(secs)[NORM("MATH 227")][0]
+    assert s["wait"] == 22
+    assert s["cap"] == 40 and s["tot"] == 40        # existing keys unchanged
+
+
+def test_offered_by_course_wait_tolerant_when_missing():
+    secs = [{"course": "X 1", "term": 2268, "class_nbr": "1",
+             "Cap Enrl": 10, "Tot Enrl": 5}]
+    s = B.offered_by_course(secs)[NORM("X 1")][0]
+    assert s["wait"] is None                        # tolerant, like cap/tot
