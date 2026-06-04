@@ -177,6 +177,31 @@ def test_report_omits_buildability_when_absent():
     assert "Program buildability" not in doc
 
 
+def test_report_renders_ge_inclusive_buildability():
+    """An active GE block renders the GE-inclusive framing: major-only score, signed
+    delta, GE areas schedulable, the gap, and the DRAFT caveat — all escaped."""
+    results = {"analysis": {"buildability": {
+        "status": "active", "label": "Structural-feasibility PROXY ...",
+        "ge_label": "GE-inclusive buildability — a structural-coverage PROXY ...",
+        "horizon_terms": [2268],
+        "programs": [{
+            "code": "BIOL", "title": "Biology AS-T", "required_total": 4, "available": 3,
+            "missing": ["PHYSICS 6"], "dead_requirements": [], "single_section_required": [],
+            "choice_groups": [], "season_mismatches": [], "seat_pressure": [],
+            "by_design_excluded": [],
+            "time_conflict": {"feasible": True, "pairwise_hard": [], "term_clashes": []},
+            "score": 47, "score_major_only": 55, "score_delta": -8,
+            "ge": {"status": "active", "areas_in_denominator": 2, "areas_schedulable": 1,
+                   "gaps": ["4"], "draft": True},
+        }]}}}
+    doc = report_export.render_report(results)
+    assert "GE-inclusive" in doc
+    assert "major-only 55/100" in doc
+    assert "1/2 GE areas schedulable" in doc
+    assert "-8" in doc                  # the signed delta
+    assert "DRAFT" in doc
+
+
 def test_report_renders_bottlenecks_section():
     """An active bottlenecks block renders the Cross-program bottlenecks card:
     ranked rows, the gaps, the unmatched count, the PROXY label; data escaped."""

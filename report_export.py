@@ -334,15 +334,28 @@ def _buildability(results: dict) -> str:
     cards = []
     for p in block.get("programs", []):
         lis = "".join(f"<li>{r}</li>" for r in reasons(p)) or "<li>no blockers found</li>"
+        ge = p.get("ge") or {}
+        ge_html = ""
+        if ge.get("status") == "active":
+            delta = _esc(f"{p.get('score_delta', 0):+d}")
+            gaps = (", gaps " + ", ".join(_esc(g) for g in ge.get("gaps", []))) if ge.get("gaps") else ""
+            draft = " (DRAFT GE counts)" if ge.get("draft") else ""
+            ge_html = (f'<p class="muted">GE-inclusive: major-only '
+                       f'{_esc(p.get("score_major_only"))}/100, &Delta; {delta}; '
+                       f'{_esc(ge.get("areas_schedulable"))}/{_esc(ge.get("areas_in_denominator"))} '
+                       f'GE areas schedulable{gaps}{draft}.</p>')
         cards.append(
             '<div class="a">'
             f'<h3>{_esc(p.get("title") or p.get("code"))} — score {_esc(p.get("score"))}/100</h3>'
+            f'{ge_html}'
             f'<p>{_esc(p.get("summary"))}</p>'
             f'<ul>{lis}</ul></div>')
     terms = ", ".join(_esc(t) for t in block.get("horizon_terms", []))
+    ge_label = _esc(block.get("ge_label", ""))
+    ge_label_html = f'<p class="muted">{ge_label}</p>' if ge_label else ""
     return (f'<section class="card" aria-labelledby="build"><h2 id="build">Program buildability '
             f'(terms {terms})</h2>'
-            f'<p class="muted">{label}</p>'
+            f'<p class="muted">{label}</p>{ge_label_html}'
             f'<div class="analysis">{"".join(cards)}</div></section>')
 
 
