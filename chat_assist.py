@@ -225,6 +225,33 @@ def _context(results: dict) -> str:
         extra += ["", "CROSS-PROGRAM BOTTLENECKS (supply-vs-demand PROXY, NOT a measured "
                   "completion rate)", *nl]
 
+    dsl = (results.get("analysis") or {}).get("demand_supply")
+    if dsl and dsl.get("status") == "active":
+        trunc = dsl.get("truncated") or {}
+        adds = dsl.get("add_list") or []
+        dl = []
+        for r in adds[:8]:
+            dl.append(f"- {r.get('course')} (score {r.get('action_score')}, demand "
+                      f"{r.get('demand_ratio')}x): {r.get('wait_total')} waitlisted, "
+                      f"{r.get('n_sections')} section(s) — add a section.")
+        hidden = max(0, len(adds) - 8) + (trunc.get("add_list") or 0)
+        if hidden:
+            dl.append(f"(+{hidden} more add-a-section course(s) not shown.)")
+        slack = dsl.get("capacity_slack") or []
+        if slack:
+            dl.append("Capacity slack (review only — NOT a cut recommendation): "
+                      + ", ".join(f"{s.get('course')} (fill {s.get('fill')})"
+                                  for s in slack[:8]) + ".")
+            hidden_slack = max(0, len(slack) - 8) + (trunc.get("capacity_slack") or 0)
+            if hidden_slack:
+                dl.append(f"(+{hidden_slack} more capacity-slack course(s) not shown.)")
+        if dsl.get("not_assessed"):
+            dl.append(f"({dsl['not_assessed']} required course(s) had no seat counts "
+                      "— excluded, not silently counted.)")
+        # Honest framing rides with the ranking so the assistant never overclaims.
+        extra += ["", "DEMAND-VS-SUPPLY ACTION LIST (supply-vs-demand PROXY, NOT a "
+                  "measured completion rate)", *dl]
+
     gp = (results.get("analysis") or {}).get("grid_pressure")
     if gp and gp.get("status") == "active":
         conf = gp.get("conformance") or {}
