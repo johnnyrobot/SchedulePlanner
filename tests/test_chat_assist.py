@@ -100,6 +100,37 @@ def test_context_bottleneck_surfaces_truncation():
     assert "+3 more required-but-not-offered course(s) not shown" in ctx  # (9-8)+2
 
 
+def test_context_includes_grid_pressure_block():
+    results = {"analysis": {"grid_pressure": {
+        "status": "active",
+        "label": "Grid-conformance & morning-compression — a structural time-block "
+                 "PROXY, not a measured completion rate.",
+        "conformance": {"on_grid_rate": 0.9},
+        "morning_compression": {"prime_share": 0.7, "morning_locked_count": 3},
+        "mutual_exclusions": [{"courses": ["MATH 2", "CHEM 1"], "reason": "x"}],
+        "truncated": {"pairs": 0}, "not_assessed": {}}}}
+    ctx = chat_assist._context(results)
+    assert "GRID CONFORMANCE" in ctx
+    assert "PROXY" in ctx
+    assert "MATH 2" in ctx and "CHEM 1" in ctx
+
+
+def test_context_omits_grid_pressure_when_inert():
+    ctx = chat_assist._context({"analysis": {"grid_pressure": {"status": "inert",
+                                                               "reason": "x"}}})
+    assert "GRID CONFORMANCE" not in ctx
+
+
+def test_context_grid_pressure_surfaces_truncation():
+    pairs = [{"courses": [f"A{i}", f"B{i}"], "reason": "x"} for i in range(7)]
+    ctx = chat_assist._context({"analysis": {"grid_pressure": {
+        "status": "active", "label": "PROXY",
+        "conformance": {"on_grid_rate": 0.5},
+        "morning_compression": {"prime_share": 0.5, "morning_locked_count": 1},
+        "mutual_exclusions": pairs, "truncated": {"pairs": 4}, "not_assessed": {}}}})
+    assert "+5 more mutually-exclusive pair(s) not shown" in ctx   # (7-6)+4
+
+
 # ------------------------------------------------------------------ router
 def test_route_parses_offering_and_fills_defaults(monkeypatch):
     _patch_chat(monkeypatch, lambda *a, **k: '{"lookup":"offering","courses":["BIOLOGY 6"]}')
