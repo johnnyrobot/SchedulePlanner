@@ -179,7 +179,18 @@ def _context(results: dict) -> str:
                         else "has time conflicts")
             if p.get("single_section_required"):
                 bits.append(f"{len(p['single_section_required'])} single-section")
-            bl.append(f"- {p.get('title') or p.get('code')} (score {p.get('score')}/100): "
+            ge = p.get("ge") or {}
+            if ge.get("status") == "active":
+                gaps = (f", gaps {', '.join(ge.get('gaps', []))}") if ge.get("gaps") else ""
+                draft = " [DRAFT GE]" if ge.get("draft") else ""
+                bits.append(f"GE {ge.get('areas_schedulable')}/{ge.get('areas_in_denominator')} "
+                            f"areas schedulable{gaps}{draft}")
+                score_line = (f"score {p.get('score')}/100 GE-inclusive; "
+                              f"major-only {p.get('score_major_only')}, "
+                              f"Δ {p.get('score_delta'):+d}")
+            else:
+                score_line = f"score {p.get('score')}/100"
+            bl.append(f"- {p.get('title') or p.get('code')} ({score_line}): "
                       + "; ".join(bits) + ".")
         # The honest framing must travel with the numbers (structural proxy, not a
         # measured completion rate) so the assistant never overclaims.
