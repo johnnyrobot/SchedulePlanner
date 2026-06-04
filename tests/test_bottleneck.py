@@ -187,6 +187,22 @@ def test_subject_alias_collapses_engl_english_to_one_match():
     assert rep["unmatched_program_courses"] == 0
 
 
+def test_subject_alias_rescues_reverse_direction():
+    """The SYMMETRIC case: the program list uses the canonical spelling
+    ``ENGLISH 101`` while the schedule offers it under the aliased short form
+    ``ENGL 101``. The match must be rescued via the alias INDEX (the
+    ``alias_idx.get(course)`` fallback the forward ENGL->ENGLISH test never hits),
+    so the course ranks, is not a gap, and is not counted unmatched."""
+    secs = [sec("ENGL 101", 2268, "1")]               # offered under the short form
+    d = demand({"ENGLISH 101": ["P1", "P2"]})         # required under the long form
+    rep = B.bottleneck_report(d, secs)
+    assert rep["status"] == "active"
+    # rescued via the alias index -> on the board, NOT a gap, NOT unmatched
+    assert any(r["course"] == "ENGLISH 101" for r in rep["leaderboard"])
+    assert all(g["course"] != "ENGLISH 101" for g in rep["gaps"])
+    assert rep["unmatched_program_courses"] == 0
+
+
 def test_subject_alias_does_not_force_match_ambiguous_eng():
     """GUARD: ``ENG`` is the classic ambiguous code (English vs Engineering) and is
     NOT in the verified crosswalk, so an ``ENG 101`` demand must stay honestly

@@ -175,7 +175,8 @@ def _sample_titles(plans, titles):
     return sorted(titles.get(p, p) for p in plans)[:_TITLE_SAMPLE]
 
 
-def leaderboard(demand, sections, facility=None, *, top=20, offered=None):
+def leaderboard(demand, sections, facility=None, *, top=20, offered=None,
+                alias_idx=None):
     """Rank required-AND-offered courses by bottleneck risk.
 
     Returns ``(rows, truncated)`` where ``rows`` is the top-``top`` leaderboard
@@ -185,11 +186,14 @@ def leaderboard(demand, sections, facility=None, *, top=20, offered=None):
 
     ``offered`` is an already-computed :func:`offered_by_course` map; passing it
     lets :func:`bottleneck_report` parse the meeting patterns once and share the
-    result (mirrors :func:`buildability.audit_program`). The required<->offered
-    join is matched on canonical subject (FF1 :func:`_canonicalize_offered`) so a
-    source-side subject-spelling alias (``ENGL`` vs ``ENGLISH``) is not a miss."""
+    result (mirrors :func:`buildability.audit_program`). ``alias_idx`` is the
+    matching pre-computed FF1 :func:`_alias_index`; it is likewise threaded by
+    :func:`bottleneck_report` so the canonical-subject crosswalk is built once.
+    The required<->offered join is matched on canonical subject (FF1
+    :func:`_offered_match`) so a source-side subject-spelling alias (``ENGL`` vs
+    ``ENGLISH``) is not a miss."""
     offered = offered_by_course(sections) if offered is None else offered
-    alias_idx = _alias_index(offered)
+    alias_idx = _alias_index(offered) if alias_idx is None else alias_idx
     rows = []
     for course, plans in demand.required.items():
         matched, secs = _offered_match(course, offered, alias_idx)
@@ -217,16 +221,17 @@ def leaderboard(demand, sections, facility=None, *, top=20, offered=None):
     return rows[:top], max(0, len(rows) - top)
 
 
-def cross_program_gaps(demand, sections, *, top=20, offered=None):
+def cross_program_gaps(demand, sections, *, top=20, offered=None, alias_idx=None):
     """Required-by-many courses with NO offered section in the window — the
     'missing across N programs' companion to the leaderboard. Returns
     ``(rows, truncated)`` sorted by ``n_programs`` desc, then ``course`` asc.
     ``offered`` may be a pre-computed :func:`offered_by_course` map (shared by
-    :func:`bottleneck_report` to avoid re-parsing meeting patterns). The join is
-    matched on canonical subject (FF1) so an aliased course (``ENGL`` vs
-    ``ENGLISH``) that IS offered is not mis-reported as a gap."""
+    :func:`bottleneck_report` to avoid re-parsing meeting patterns), and
+    ``alias_idx`` the matching pre-computed FF1 :func:`_alias_index` (shared the
+    same way). The join is matched on canonical subject (FF1) so an aliased course
+    (``ENGL`` vs ``ENGLISH``) that IS offered is not mis-reported as a gap."""
     offered = offered_by_course(sections) if offered is None else offered
-    alias_idx = _alias_index(offered)
+    alias_idx = _alias_index(offered) if alias_idx is None else alias_idx
     rows = [{"course": course, "n_programs": len(plans),
              "programs": _sample_titles(plans, demand.titles)}
             for course, plans in demand.required.items()
@@ -253,22 +258,25 @@ def bottleneck_report(demand, sections, facility=None, *, top=20):
         return {"status": "inert", "label": LABEL,
                 "reason": "no offered sections to rank the required courses against"}
 
-    # Parse the meeting patterns ONCE and share the map across both passes + the
-    # unmatched count (mirrors buildability.audit_program — F2 is institution-wide,
-    # so re-parsing thousands of sections three times would be wasteful).
+    # Parse the meeting patterns ONCE and build the FF1 alias index ONCE, sharing
+    # both across both passes + the unmatched count (mirrors
+    # buildability.audit_program — F2 is institution-wide, so re-parsing thousands
+    # of sections or rebuilding the crosswalk index three times would be wasteful).
     offered = offered_by_course(sections)
-    board, board_trunc = leaderboard(demand, sections, facility, top=top, offered=offered)
+    alias_idx = _alias_index(offered)
+    board, board_trunc = leaderboard(demand, sections, facility, top=top,
+                                     offered=offered, alias_idx=alias_idx)
     if not board:
         return {"status": "inert", "label": LABEL,
                 "reason": ("no program-required course matched an offered section — "
                            "the required<->offered join is empty (are the demand map "
                            "and the schedule for the same campus / term?)")}
 
-    gaps, gaps_trunc = cross_program_gaps(demand, sections, top=top, offered=offered)
+    gaps, gaps_trunc = cross_program_gaps(demand, sections, top=top,
+                                          offered=offered, alias_idx=alias_idx)
     # Count unmatched on the SAME direct-first + FF1-crosswalk-fallback join the
     # leaderboard/gaps use: a program course offered only under an aliased subject
     # spelling (ENGL vs ENGLISH) is matched, not inflated into the unmatched tally.
-    alias_idx = _alias_index(offered)
     unmatched = sum(1 for c in demand.required
                     if not _offered_match(c, offered, alias_idx)[1])
     return {"status": "active", "label": LABEL,
