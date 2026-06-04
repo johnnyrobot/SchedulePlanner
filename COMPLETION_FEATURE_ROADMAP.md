@@ -41,7 +41,7 @@ completion target** (no student-level outcome exists in any LACCD source, so eve
 |---|---|---|
 | Guided-pathway course maps ✅; "57% can't get required courses" ✅ + shutout ✅; "enroll in all required courses in one term" | **F1 Program-Map Buildability Audit** | ✅ **SHIPPED** (branch `feat/program-buildability-audit`) |
 | Bottleneck / single-section courses ✅ | **F2 Cross-Program Bottleneck Leaderboard** | ✅ **SHIPPED** (branch `feat/cross-program-bottleneck`) |
-| Standardized meeting-time blocks ✅; UCF 45% fewer conflicts ❓ | **F3 Grid-Conformance + Morning-Compression Pressure** | planned |
+| Standardized meeting-time blocks ✅; UCF 45% fewer conflicts ❓ | **F3 Grid-Conformance + Morning-Compression Pressure** | ✅ **SHIPPED** (branch `feat/grid-conformance-morning`) |
 | Guided-pathway maps **include GE** ✅ | **F4 GE in the Program Denominator (ASSIST id 47)** | planned |
 | Demand-driven / predictive scheduling (⚠️/❓) | **F5 Demand-vs-Supply Action List** | planned (IR adapter unblocks it) |
 | Equity gains for working/parent/URM ✅ | **F6 Equity / Archetype Exposure View** | planned |
@@ -102,15 +102,52 @@ binding constraint.
   library pandas probes as an optional dependency.)* The named-but-deferred fast-follows: a subject
   crosswalk to shrink `unmatched`, and a live-path fan-out for cross-program demand.
 
-## F3 — Grid-Conformance + Morning-Compression Pressure
+## F3 — Grid-Conformance + Morning-Compression Pressure  ✅ shipped
 
-Upgrade off-grid detection from start-time-only to **end-time conformance** (durations =
-units×60÷meetings/wk), add session-date/holiday awareness, and a **"morning-compression conflict
-pressure"** metric + a what-if ("if these off-grid sections moved on-grid, N conflicts dissolve").
-Evidence: standardized blocks reduce forced choices ✅; UCF 45% fewer conflicts ❓. Data: a hard grid
-(only ~120 distinct start-times across ~2,642 timed rows) with a detectable off-grid tail, and 9am–1pm
-morning compression (Fall24 morning 1,445 vs evening 285) as the core conflict driver. Fit: extends
-`_off_grid_sections` + `timeblocks.on_grid`/`load_grid`.
+**What:** A time-block schedule-quality scorecard — *how standardized are this schedule's meeting
+times, and where does morning compression force required-course collisions?* Deterministic; advisory;
+attaches to `results["analysis"]["grid_pressure"]` **outside `engine.run`** (the determinism gate
+stays green). It computes three structural signals: (1) an **on-grid START-time conformance rate**
+over deduped timed sections, reusing the already-fail-open `timeblocks.on_grid`; (2) a **9 AM–1 PM
+"morning-compression" time-of-day distribution** (early/prime/afternoon/evening buckets) plus a
+`morning_locked` count of required courses whose every timed section starts in that window; and
+(3) a structural **mutual-exclusivity what-if** — two required courses are mutually exclusive when
+*every* section of each is morning-locked, so a non-morning section *would* break the conflict (room
+/ instructor feasibility unverified). Every surface carries the label *"structural time-block PROXY,
+not a measured completion rate."*
+
+- **Why (blend):** standardized blocks are a ✅ well-grounded forced-choice reducer; the mutual-
+  exclusivity fact is backed by the course-conflict-graph literature (arXiv 2102.06743). The morning
+  window is **this institution's** measured Fall-2024 concentration (morning 1,445 vs evening 285) —
+  descriptive and correlational, NOT causal; registrar "prime time" is more precisely a ~9:30 AM–2:30
+  PM midday band. We deliberately do **not** cite the "UCF −45% conflicts" headline: research found it
+  conflates a Miami prime-time cap with an Ad Astra section-underutilization stat (it stays ❓ in the
+  evidence table).
+- **Implementation (shipped on `feat/grid-conformance-morning`):** new pure module
+  **`grid_pressure.py`** (stdlib only — no network, solver, or pandas; mirrors F1 `buildability.py` /
+  F2 `cross_program_bottleneck.py`), reading the raw section days/times the engine workbook drops and
+  reusing `timeblocks.on_grid` + `buildability.required_set`. Detector entry **`grid_pressure`**; wired
+  into the live build path **outside `engine.run`**; surfaced in `report_export`, the `ui.html` live
+  panel, and `chat_assist` — each carrying the PROXY label.
+- **What ships INERT (deliberately not built), with honest reasons** — surfaced in a `not_assessed`
+  block so the gaps are visible, not silent:
+  - **End-time / duration conformance** — NOT built. Contact hours are not recoverable from `units`
+    without the activity **category** (Title 5 §55002.5: Lecture 1:2, Activity 2:1, Lab 3:0
+    contact:outside ratios → a 3-unit *lab* carries ~9 weekly contact hours vs ~3 for a *lecture*).
+    The live LACCD API exposes only a binary LEC/LAB token (stripped on the import path) and no
+    contact-hours field, so a `units×60÷meetings` duration check would systematically false-flag
+    labs, clinicals, activities, and compressed-calendar sections.
+  - **Holiday / session-date awareness** — NOT built. No machine-readable academic/holiday calendar
+    is ingested (LACCD publishes only PDF/HTML); the live API's per-section `dates` field is dropped
+    at parse time and `woi` is unused.
+- **Open data dependencies (would let the inert pieces activate honestly later):** per-section contact
+  category (the IR export's **`Component`** column — activate by extending
+  `sources/schedule_import.py` / `sources/enrollment_ir.py` to preserve it); meetings-per-week; the
+  dropped session `dates` / `woi`; a machine-readable academic-holiday calendar; standardized block
+  durations; and validated external completion/conflict evidence to replace the unverified UCF claim.
+- **Tests:** a new **`tests/test_grid_pressure.py`** (11 tests) plus wiring/surface assertions; the
+  determinism gate stays green (F3 lives outside `engine.run`). Full suite green (571 passed, 5
+  pre-existing platform-coupled fixtures deselected).
 
 ## F4 — GE in the Program Denominator (ASSIST id 47)
 
