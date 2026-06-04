@@ -440,3 +440,55 @@ def test_analyze_live_demand_supply_active_with_counts(tmp_path):
     det = next(d for d in report["inert_detectors"] if d["detector"] == "demand_supply")
     assert det["status"] == "active"
     json.dumps(report)
+
+
+# --- FF4: bounded live cross-program demand fan-out activates F2 --------------
+def test_analyze_live_bottleneck_inert_without_fanout(lamc_routes, make_client, tmp_path):
+    """A bare live fetch (no fan-out requested) keeps F2 honestly INERT — the
+    live path resolves one program per run, so there is no cross-program demand."""
+    report = build_live_workbook.analyze_live(
+        "LAMC", [2268], "Biology", str(tmp_path / "no_fanout.xlsx"),
+        client=make_client(lamc_routes))
+    block = report["results"]["analysis"]["bottlenecks"]
+    assert block["status"] == "inert"
+    det = next(d for d in report["inert_detectors"] if d["detector"] == "program_bottleneck")
+    assert det["status"] == "inert"
+    json.dumps(report)
+
+
+def test_analyze_live_bottleneck_active_with_fanout(lamc_routes, make_client, tmp_path):
+    """Opting into the fan-out (a bounded list of program ids) populates the
+    cross-program demand map on the LIVE path, flipping F2 to ACTIVE — no
+    offline Program Course Lists upload needed."""
+    home = load_fixture("pm_home_page_content_LAMC.json")
+    # Resolve the two real LAMC programs that have committed program-map fixtures
+    # (both Biology variants share the STEM group; only the AS-T has a map route),
+    # so we fan out over the AS-T Biology id plus itself-by-title resolution is
+    # avoided by passing explicit ids. Use the Biology AS-T id from conftest.
+    from conftest import BIOLOGY_PID
+    fanout_ids = [{"program_id": BIOLOGY_PID, "title": "Biology",
+                   "award": "Associate in Science for Transfer"}]
+    report = build_live_workbook.analyze_live(
+        "LAMC", [2268], "Biology", str(tmp_path / "fanout.xlsx"),
+        client=make_client(lamc_routes), demand_program_ids=fanout_ids)
+    block = report["results"]["analysis"]["bottlenecks"]
+    assert block["status"] == "active", block.get("reason")
+    assert block["leaderboard"]            # at least one required-AND-offered course
+    det = next(d for d in report["inert_detectors"] if d["detector"] == "program_bottleneck")
+    assert det["status"] == "active"
+    json.dumps(report)
+
+
+def test_analyze_live_fanout_failopen_stays_inert(lamc_routes, make_client, tmp_path):
+    """If the fan-out yields nothing (every requested id errors), F2 fails OPEN
+    to its honest inert envelope — never a fabricated demand map."""
+    routes = dict(lamc_routes)
+    report = build_live_workbook.analyze_live(
+        "LAMC", [2268], "Biology", str(tmp_path / "fanout_fail.xlsx"),
+        client=make_client(routes),
+        demand_program_ids=[{"program_id": "no-such-program-id", "title": "X"}])
+    block = report["results"]["analysis"]["bottlenecks"]
+    assert block["status"] == "inert"
+    det = next(d for d in report["inert_detectors"] if d["detector"] == "program_bottleneck")
+    assert det["status"] == "inert"
+    json.dumps(report)
