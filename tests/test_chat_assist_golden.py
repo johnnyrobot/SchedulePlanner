@@ -123,6 +123,27 @@ def _maximal_results() -> dict:
                 "mutual_exclusions": pairs,
                 "truncated": {"pairs": 4}, "not_assessed": {},
             },
+            "equity_exposure": {
+                "status": "active", "label": "Archetype exposure PROXY label",
+                "by_design_count": 0, "truncated": {"newly_unavailable": 2},
+                "archetypes": [
+                    {"key": "evening", "name": "Evening-only (start ≥ 5:00 PM)",
+                     "computable": True, "sections_kept": 1, "sections_total": 3,
+                     "programs": [{"code": "BIOL", "title": "Biology AS-T",
+                                   "score": 48, "baseline_score": 71,
+                                   "score_delta": -23, "collapsed": True,
+                                   "newly_unavailable": ["CHEM 101", "MATH 261"]}]},
+                    {"key": "online", "name": "Online-only", "computable": False,
+                     "reason": "section modality (classType) is not present on the "
+                               "imported records"},
+                    {"key": "two_day", "name": "Two days a week (≤ 2 meeting days)",
+                     "computable": True, "sections_kept": 2, "sections_total": 3,
+                     "programs": [{"code": "BIOL", "title": "Biology AS-T",
+                                   "score": 71, "baseline_score": 71,
+                                   "score_delta": 0, "collapsed": False,
+                                   "newly_unavailable": []}]},
+                ],
+            },
         },
         "reconciliation": {
             "matched_count": 6, "unmatched_count": 2,

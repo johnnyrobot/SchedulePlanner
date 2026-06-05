@@ -175,6 +175,50 @@ def test_context_omits_demand_supply_when_inert():
     assert "DEMAND-VS-SUPPLY" not in blob
 
 
+def test_context_includes_equity_exposure_proxy_framing():
+    results = {"analysis": {"equity_exposure": {
+        "status": "active", "label": "L", "by_design_count": 0,
+        "truncated": {"newly_unavailable": 0},
+        "archetypes": [
+            {"key": "evening", "name": "Evening-only (start ≥ 5:00 PM)",
+             "computable": True, "sections_kept": 1, "sections_total": 3,
+             "programs": [{"code": "BIOL", "title": "Bio", "score": 48,
+                           "baseline_score": 71, "score_delta": -23,
+                           "collapsed": True, "newly_unavailable": ["CHEM 1"]}]},
+            {"key": "online", "name": "Online-only", "computable": False,
+             "reason": "section modality not present on import"},
+        ]}}}
+    ctx = chat_assist._context(results)
+    blob = "\n".join(ctx) if isinstance(ctx, list) else str(ctx)
+    assert "EQUITY" in blob and "PROXY" in blob
+    assert "Evening-only" in blob and "Bio" in blob and "CHEM 1" in blob
+    assert "-23" in blob                          # signed delta carried
+    assert "not assessed" in blob.lower()         # online non-computable surfaced
+
+
+def test_context_omits_equity_exposure_when_inert():
+    results = {"analysis": {"equity_exposure": {
+        "status": "inert", "label": "L", "reason": "baseline inert"}}}
+    ctx = chat_assist._context(results)
+    blob = "\n".join(ctx) if isinstance(ctx, list) else str(ctx)
+    assert "EQUITY" not in blob
+
+
+def test_context_equity_exposure_surfaces_truncation():
+    results = {"analysis": {"equity_exposure": {
+        "status": "active", "label": "L", "by_design_count": 0,
+        "truncated": {"newly_unavailable": 7},
+        "archetypes": [
+            {"key": "evening", "name": "Evening-only", "computable": True,
+             "sections_kept": 0, "sections_total": 3,
+             "programs": [{"code": "B", "title": "B", "score": 0,
+                           "baseline_score": 71, "score_delta": -71, "collapsed": True,
+                           "newly_unavailable": ["A 1"]}]}]}}}
+    ctx = chat_assist._context(results)
+    blob = "\n".join(ctx) if isinstance(ctx, list) else str(ctx)
+    assert "7 more" in blob
+
+
 # ------------------------------------------------------------------ router
 def test_route_parses_offering_and_fills_defaults(monkeypatch):
     _patch_chat(monkeypatch, lambda *a, **k: '{"lookup":"offering","courses":["BIOLOGY 6"]}')
