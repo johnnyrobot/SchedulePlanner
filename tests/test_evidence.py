@@ -255,3 +255,30 @@ def test_every_number_is_sourced():
         for fig in fig_re.findall(surface):
             assert fig in sourced, (
                 f"{surface_name} emitted figure {fig!r} not traceable to a CLAIMS field")
+
+
+def test_no_flags_inert_chat_grounding_is_positive_only():
+    """REALISTIC inert path: when analyze_live attaches a status:"inert" no-flags
+    evidence block (the 2 positive claims), the chat grounding emits the caveated
+    WHY-THIS-MATTERS block with guided_pathways + standardized_blocks ONLY — and
+    NEVER leaks a problem-claim (shutout / 57% / +5.41pp persistence) into a build
+    where nothing was flagged. The existing inert chat golden only exercises the
+    no-evidence-key short-circuit, so this is the regression that would otherwise
+    go uncaught."""
+    res = _inert_with_evidence()
+    assert res["analysis"]["evidence"]["status"] == "inert"
+    ctx = chat_assist._context(res)
+
+    # the caveated positive block IS grounded
+    assert "WHY THIS MATTERS" in ctx
+    assert "NOT a measurement or prediction of this campus" in ctx
+    # both positive claims present (by their unambiguous attribution text)
+    assert "Central Arizona" in ctx       # guided_pathways
+    assert "Odessa" in ctx and "Kilgore" in ctx  # standardized_blocks
+
+    # the no-flags surface must NOT contain ANY problem-claim text — a leak here
+    # would mean the no-flags default started implying a problem that isn't present.
+    f7_ctx = ctx[ctx.index("WHY THIS MATTERS"):]
+    for problem in ("57%", "shutout", "5.41", "stop-out", "7.39"):
+        assert problem not in f7_ctx, (
+            f"problem-claim text {problem!r} leaked into the no-flags chat grounding")

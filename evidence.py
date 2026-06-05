@@ -33,6 +33,12 @@ EVIDENCE_LABEL = (
 # ``supports`` tuple is the single source of truth for the condition→citation map
 # (its inverse is the table in the F7 spec). Equity sub-figures (Kilgore Black
 # 9%→25%, BCTC URM 16.2%→27%) are deliberately deferred to F6 and kept OUT here.
+#
+# TRUST ROOT: this list is the honesty trust root. Adding an entry ASSERTS a vetted
+# human source review — the automated guards (the banned-token blocklist + the
+# every-number-is-sourced check) only catch known-bad citations and stray rendered
+# numbers; they cannot detect a NOVEL fabricated-but-self-consistent claim added
+# directly here. Every new claim must be backed by a real, named, checked source.
 CLAIMS = [
     {
         "id": "guided_pathways",
