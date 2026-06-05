@@ -780,20 +780,45 @@ function showResult(res){
   document.getElementById('out').scrollIntoView({behavior:'smooth', block:'start'});
 }
 
-// Render the live-data-only panel: course reconciliation (matched/unmatched
-// counts + the unmatched course codes) and the inert-detector notes (each
-// reason/remedy). ALL data-derived strings are run through escapeHtml().
-function renderLivePanel(res){
-  let html='';
-  // Plain-English disclosure: what the API-only live path can and can't measure,
-  // and the two honest ways to reach capacity/fill depth.
-  html+='<div class="card"><div class="disclosure"><h4>What live data covers</h4>'+
+// Plain-language names for the machine detector keys (the panel avoids raw
+// jargon like "modality_mismatch"). Any future key falls back to itself.
+// Hoisted to module scope so the LIVE_CARDS render closures can reference it.
+const DET_LABELS={
+  modality_mismatch:'Capacity / fill-rate analysis',
+  prerequisite_ordering:'Prerequisite ordering',
+  time_block_conflict:'Time-block conflicts',
+  room_conflict:'Room conflicts & capacity',
+  program_buildability:'Program buildability',
+  program_bottleneck:'Cross-program bottlenecks',
+  grid_pressure:'Grid conformance & morning compression',
+  demand_supply:'Demand-vs-supply action list',
+};
+// GE-coverage card maps, hoisted to module scope for the same reason.
+const PNAME = {igetc:'IGETC', 'cal-getc':'Cal-GETC', 'csu-ge':'CSU GE', local:'Local AA/AS GE'};
+const FLAGLBL = {no_assist_data:'no ASSIST data', no_offering:'not offered this window',
+                 unknown_area:'unknown area', pm_no_ge:'no program GE'};
+const PLAN = {shared:'met by major', concrete:'concrete', reserve:'reserve'};
+
+// Append-only registry of the live-panel cards. Each entry's render(res) OWNS its
+// own include/skip guard and returns '' to skip (NEVER null/undefined). target
+// 'html' goes into the innerHTML bucket; the single 'append' entry (ge_coverage)
+// is insertAdjacentHTML'd 'beforeend' AFTER the html bucket is flushed — exactly
+// the two-flush behaviour the hand-written chain had. To add a future card (F6),
+// append ONE entry here instead of editing renderLivePanel.
+const LIVE_CARDS = [
+  // (a) Plain-English disclosure: what the API-only live path can and can't measure,
+  // and the two honest ways to reach capacity/fill depth. UNCONDITIONAL.
+  { target:'html', render:(res)=>
+    '<div class="card"><div class="disclosure"><h4>What live data covers</h4>'+
     '<p>Live mode reads the public LACCD schedule + program map: you get the full '+
     '2-year schedule plus rotation, single-section and <b>waitlist</b> signals. '+
     'Enrollment / capacity counts aren’t published by any LACCD API, so '+
     '<b>capacity / fill-rate analysis needs those numbers</b> — add an '+
     'enrollment export on the live form (experimental), or use <b>Option 1</b> and '+
-    'upload a workbook that already includes them.</p></div></div>';
+    'upload a workbook that already includes them.</p></div></div>'
+  },
+  // (b) Live data reconciliation.
+  { target:'html', render:(res)=>{
   const rec=res.reconciliation;
   if(rec){
     const codes=(rec.unmatched||[]).map(c=>'<span class="code">'+escapeHtml(c)+'</span>').join('');
@@ -804,16 +829,19 @@ function renderLivePanel(res){
       prog=' · '+escapeHtml(res.program_info.title||'')+
            (res.program_info.award?' ('+escapeHtml(res.program_info.award)+')':'');
     }
-    html+='<div class="card"><h3>Live data reconciliation</h3>'+
+    return '<div class="card"><h3>Live data reconciliation</h3>'+
       '<div class="recon">'+campus+' · terms '+terms+prog+'</div>'+
       '<div class="recon"><b>'+escapeHtml(String(rec.matched_count))+'</b> program courses offered in the fetched terms · '+
       '<b>'+escapeHtml(String(rec.unmatched_count))+'</b> not offered</div>'+
       (codes?'<div class="hint">Not offered in the fetched terms:</div><div class="codes">'+codes+'</div>':'')+
       '</div>';
   }
-  // Program-map buildability (F1): is the required path schedulable? Per-program
+  return '';
+  } },
+  // (c) Program-map buildability (F1): is the required path schedulable? Per-program
   // score + the blocking reasons. Honest framing ("structural-feasibility proxy,
   // not a measured completion rate") carried in bld.label. All data escaped.
+  { target:'html', render:(res)=>{
   const bld = res.analysis && res.analysis.buildability;
   if(bld && bld.status==='active'){
     const cards=(bld.programs||[]).map(p=>{
@@ -846,14 +874,17 @@ function renderLivePanel(res){
         '<div class="why">'+escapeHtml(p.summary||'')+'</div><ul>'+lis+'</ul></div>';
     }).join('');
     const terms=(bld.horizon_terms||[]).map(escapeHtml).join(', ');
-    html+='<div class="card"><h3>Program buildability'+(terms?' (terms '+terms+')':'')+'</h3>'+
+    return '<div class="card"><h3>Program buildability'+(terms?' (terms '+terms+')':'')+'</h3>'+
       '<p class="hint">'+escapeHtml(bld.label||'')+'</p>'+
       (bld.ge_label?'<p class="hint">'+escapeHtml(bld.ge_label)+'</p>':'')+cards+'</div>';
   }
-  // Cross-program bottleneck leaderboard (F2): required courses ranked by how many
+  return '';
+  } },
+  // (d) Cross-program bottleneck leaderboard (F2): required courses ranked by how many
   // programs depend on each vs how little supply (sections / seats / lab rooms)
   // exists. Active only with a Program Course Lists demand map (Option 1); the
   // honest "supply-vs-demand proxy" framing rides in bnk.label. All data escaped.
+  { target:'html', render:(res)=>{
   const bnk = res.analysis && res.analysis.bottlenecks;
   if(bnk && bnk.status==='active'){
     const rows=(bnk.leaderboard||[]).map(r=>{
@@ -881,9 +912,13 @@ function renderLivePanel(res){
     if(tr.gaps)
       fp.push(escapeHtml(String(tr.gaps))+' more required-but-not-offered course(s) beyond those shown.');
     const foot=fp.length?'<p class="hint">'+fp.join(' ')+'</p>':'';
-    html+='<div class="card"><h3>Cross-program bottlenecks</h3>'+
+    return '<div class="card"><h3>Cross-program bottlenecks</h3>'+
       '<p class="hint">'+escapeHtml(bnk.label||'')+'</p>'+rows+gaps+foot+'</div>';
   }
+  return '';
+  } },
+  // (e) Grid conformance & morning compression (F3).
+  { target:'html', render:(res)=>{
   const gp = res.analysis && res.analysis.grid_pressure;
   if(gp && gp.status==='active'){
     const conf=gp.conformance||{}, comp=gp.morning_compression||{}, b=comp.buckets||{};
@@ -900,7 +935,7 @@ function renderLivePanel(res){
     if(tr.pairs) fp.push(escapeHtml(String(tr.pairs))+' more mutually-exclusive pair(s) beyond those shown.');
     if(conf.off_grid_truncated) fp.push(escapeHtml(String(conf.off_grid_truncated))+' more off-grid section(s) beyond those shown.');
     const foot=fp.length?'<p class="hint">'+fp.join(' ')+'</p>':'';
-    html+='<div class="card"><h3>Grid conformance &amp; morning compression</h3>'+
+    return '<div class="card"><h3>Grid conformance &amp; morning compression</h3>'+
       '<p class="hint">'+escapeHtml(gp.label||'')+'</p>'+
       '<div class="why">On-grid start times: '+escapeHtml(rate)+
       ' · time-of-day: early '+escapeHtml(String(b.early||0))+
@@ -911,11 +946,14 @@ function renderLivePanel(res){
       '<p class="hint">'+escapeHtml(gp.what_if_caveat||'')+'</p>'+rows+
       (naL?'<div class="why">Not assessed:</div><ul>'+naL+'</ul>':'')+foot+'</div>';
   }
-  // Demand-vs-supply action list (F5): offered courses whose seat SUPPLY falls
+  return '';
+  } },
+  // (f) Demand-vs-supply action list (F5): offered courses whose seat SUPPLY falls
   // short of enrolled+waitlisted DEMAND -> a ranked "add a section" list, plus a
   // neutral capacity-slack observation (NEVER a cut order). Active only when seat
   // counts are present (IR upload on the live path, or a counts-carrying import).
   // The honest supply-vs-demand-proxy framing rides in dsl.label. All data escaped.
+  { target:'html', render:(res)=>{
   const dsl = res.analysis && res.analysis.demand_supply;
   if(dsl && dsl.status==='active'){
     const adds=(dsl.add_list||[]).map(r=>{
@@ -944,23 +982,16 @@ function renderLivePanel(res){
     if(tr.capacity_slack)
       fp.push(escapeHtml(String(tr.capacity_slack))+' more capacity-slack course(s) beyond those shown.');
     const foot=fp.length?'<p class="hint">'+fp.join(' ')+'</p>':'';
-    html+='<div class="card"><h3>Demand-vs-supply action list</h3>'+
+    return '<div class="card"><h3>Demand-vs-supply action list</h3>'+
       '<p class="hint">'+escapeHtml(dsl.label||'')+'</p>'+
       '<div class="why">Add a section — highest demand-vs-supply pressure:</div>'+
       addBlock+slack+foot+'</div>';
   }
-  // Plain-language names for the machine detector keys (the panel avoids raw
-  // jargon like "modality_mismatch"). Any future key falls back to itself.
-  const DET_LABELS={
-    modality_mismatch:'Capacity / fill-rate analysis',
-    prerequisite_ordering:'Prerequisite ordering',
-    time_block_conflict:'Time-block conflicts',
-    room_conflict:'Room conflicts & capacity',
-    program_buildability:'Program buildability',
-    program_bottleneck:'Cross-program bottlenecks',
-    grid_pressure:'Grid conformance & morning compression',
-    demand_supply:'Demand-vs-supply action list',
-  };
+  return '';
+  } },
+  // (g) Inert-detector notes ("What this live build can measure") — the only
+  // consumer of DET_LABELS.
+  { target:'html', render:(res)=>{
   const inert=res.inert_detectors||[];
   if(inert.length){
     // Each entry is either inert (carries reason/remedy) or — when an
@@ -992,21 +1023,20 @@ function renderLivePanel(res){
         (why?'<div class="why">'+escapeHtml(why)+'</div>':'')+
         (rem?'<div class="rem">'+(active?'how: ':'to enable: ')+escapeHtml(rem)+'</div>':'')+'</div>';
     }).join('');
-    html+='<div class="card"><h3>What this live build can measure</h3>'+
+    return '<div class="card"><h3>What this live build can measure</h3>'+
       '<p class="hint">These depend on data the public schedule API doesn’t include. '+
       'An empty result here means “not yet measurable,” not “all clear.”</p>'+
       notes+'</div>';
   }
-  document.getElementById('live').innerHTML=html;
-
+  return '';
+  } },
+  // (h) General Education coverage (the ONLY 'append' card — insertAdjacentHTML
+  // 'beforeend' lands it AFTER everything in the html bucket).
+  { target:'append', render:(res)=>{
   const ge = (res && res.ge_coverage) || null;
   if (ge && ge.requested) {
-    const PNAME = {igetc:'IGETC', 'cal-getc':'Cal-GETC', 'csu-ge':'CSU GE', local:'Local AA/AS GE'};
     const pname = PNAME[ge.pattern] || String(ge.pattern||'').toUpperCase();
-    const FLAGLBL = {no_assist_data:'no ASSIST data', no_offering:'not offered this window',
-                     unknown_area:'unknown area', pm_no_ge:'no program GE'};
     const flabel = f => FLAGLBL[f] || String(f).replace(/_/g,' ');
-    const PLAN = {shared:'met by major', concrete:'concrete', reserve:'reserve'};
     let h = '<div class="card"><h3>General Education — '+escapeHtml(pname)+'</h3>';
     // Content-review gate: an unreviewed pattern is a DRAFT. Show the backend's
     // draft_warning (one source of truth) so placeholder counts are never
@@ -1045,8 +1075,26 @@ function renderLivePanel(res){
            escapeHtml(areas.join(' / '))+': '+courses+'</div>';
     }
     h += '</div>';
-    document.getElementById('live').insertAdjacentHTML('beforeend', h);
+    return h;
   }
+  return '';
+  } },
+];
+
+// Render the live-data-only panel by walking the LIVE_CARDS registry: each card's
+// render(res) owns its include/skip guard (returns '' to skip). 'html'-target
+// chunks are concatenated and set as innerHTML; the 'append'-target chunk (GE
+// coverage) is insertAdjacentHTML'd 'beforeend' AFTER, but only when non-empty —
+// preserving the original two-flush behaviour exactly (no append call when GE is
+// absent). ALL data-derived strings are escaped inside the render closures.
+function renderLivePanel(res){
+  let html='', append='';
+  for(const card of LIVE_CARDS){
+    const chunk = card.render(res);
+    if(card.target==='append') append += chunk; else html += chunk;
+  }
+  document.getElementById('live').innerHTML = html;
+  if(append) document.getElementById('live').insertAdjacentHTML('beforeend', append);
 }
 
 function badge(p){
