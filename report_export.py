@@ -107,6 +107,8 @@ main{padding:1.6rem;max-width:60rem;margin:0 auto}
 .analysis ul{list-style:none}
 .analysis li{font-family:var(--mono);font-size:.75rem;color:var(--dim);padding:.12rem 0}
 .note{font-size:.8125rem;line-height:1.55;color:var(--dim);margin:.3rem 0}
+.evidence-claim{font-size:.8125rem;line-height:1.55;color:var(--ink);margin-top:.5rem}
+.evidence-claim .src{display:block;font-size:.75rem;color:var(--dim);margin-top:.15rem}
 .recon{font-family:var(--mono);font-size:.75rem;color:var(--dim);margin-top:.4rem}
 .recon b{color:var(--ink);font-weight:600}
 .codes{display:flex;flex-wrap:wrap;gap:.4rem;margin-top:.5rem}
@@ -727,6 +729,33 @@ def _ge(results: dict) -> str:
             f'{caveat_html}{err}{table}{shared_html}</section>')
 
 
+def _evidence(results: dict) -> str:
+    """Evidence appendix (F7): the curated, source-mapped ✅ research findings that
+    explain WHY the structural conditions this build flagged plausibly matter. This
+    is sector-wide published evidence from OTHER institutions — NOT a measurement of
+    this campus (the caveat rides in block.label). Empty when no analysis ran; an
+    honest 'general context only' note when no flags fired. Every figure shown is a
+    verbatim curated claim; all data HTML-escaped."""
+    block = (results.get("analysis") or {}).get("evidence")
+    if not block:
+        return ""
+    claims = block.get("claims") or []
+    if not claims:
+        return ""
+    label = _esc(block.get("label", ""))
+    intro = ('<p class="note">No structural flags fired — general guided-pathways '
+             'context only.</p>') if block.get("status") != "active" else ""
+    items = "".join(
+        '<li class="evidence-claim">'
+        f'<b>{_esc(c.get("metric"))}</b> — {_esc(c.get("statement"))}'
+        f'<span class="src">Source: {_esc(c.get("source"))}</span></li>'
+        for c in claims)
+    return ('<section class="card" aria-labelledby="evidence">'
+            '<h2 id="evidence">Why this matters — research evidence</h2>'
+            f'<p class="muted">{label}</p>{intro}'
+            f'<ul class="issues">{items}</ul></section>')
+
+
 # Ordered registry of the <main> section renderers. Each entry is a
 # ``fn(results) -> str`` that returns a full ``<section>…</section>`` or ``""``
 # (skip). To add a report section, append ONE renderer here — render_report
@@ -744,6 +773,7 @@ SECTION_RENDERERS = [
     _reconciliation,
     _detectors,
     _ge,
+    _evidence,
 ]
 
 

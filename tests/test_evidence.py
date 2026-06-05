@@ -239,15 +239,19 @@ def test_every_number_is_sourced():
     # cut at the next </section> close after the marker
     end = f7_html.index("</section>") + len("</section>")
     f7_html = f7_html[:end]
+    # strip HTML numeric character references (e.g. &#x27; for an apostrophe) — they
+    # are escaping noise, NOT research figures, and must not false-flag the guard.
+    f7_html = re.sub(r"&#x?[0-9a-fA-F]+;", "", f7_html)
 
     # isolate just the F7 grounding block of the chat context
     gmarker = "WHY THIS MATTERS"
     assert gmarker in ctx
     f7_ctx = ctx[ctx.index(gmarker):]
 
+    # Every digit-bearing token F7 emits must be a substring of the curated
+    # metric/statement corpus — no hand-maintained skip list, so a future stray
+    # number (a computed/fabricated figure) cannot slip through.
     for surface_name, surface in (("report-F7", f7_html), ("context-F7", f7_ctx)):
         for fig in fig_re.findall(surface):
-            if fig in ("1", "2", "5", "4"):  # bare structural digits (list/area indices)
-                continue
             assert fig in sourced, (
                 f"{surface_name} emitted figure {fig!r} not traceable to a CLAIMS field")

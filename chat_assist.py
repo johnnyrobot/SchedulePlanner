@@ -326,9 +326,26 @@ def _ground_equity_exposure(results: dict) -> list[str]:
     return []
 
 
-# Append-only registry: source order is load-bearing (grid_pressure then
-# equity_exposure LAST — do NOT sort by feature number). A future block adds
-# ONE entry here instead of editing _context.
+def _ground_evidence(results: dict) -> list[str]:
+    block = (results.get("analysis") or {}).get("evidence")
+    if not block:
+        return []
+    claims = block.get("claims") or []
+    if not claims:
+        return []
+    el = [f"- {c.get('metric')}: {c.get('statement')} [Source: {c.get('source')}]"
+          for c in claims]
+    # The honest envelope rides in the header so the model never reports these as
+    # this campus's measured outcomes — they are sector-wide published findings
+    # from OTHER institutions explaining why a flagged condition matters.
+    return ["", "WHY THIS MATTERS — SECTOR-WIDE RESEARCH EVIDENCE (published findings "
+            "from OTHER institutions explaining why a flagged condition matters; NOT a "
+            "measurement or prediction of this campus)", *el]
+
+
+# Append-only registry: source order is load-bearing (grid_pressure, then
+# equity_exposure, then the F7 evidence appendix CLOSES last — do NOT sort by
+# feature number). A future block adds ONE entry here instead of editing _context.
 GROUNDERS = [
     _ground_build,
     _ground_term_plans,
@@ -340,6 +357,7 @@ GROUNDERS = [
     _ground_demand_supply,
     _ground_grid_pressure,
     _ground_equity_exposure,
+    _ground_evidence,
 ]
 
 
