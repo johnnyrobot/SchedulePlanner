@@ -297,8 +297,37 @@ def _ground_grid_pressure(results: dict) -> list[str]:
     return []
 
 
-# Append-only registry: source order is load-bearing (grid_pressure LAST,
-# demand_supply BEFORE it — do NOT sort by feature number). A future block adds
+def _ground_equity_exposure(results: dict) -> list[str]:
+    eq = (results.get("analysis") or {}).get("equity_exposure")
+    if eq and eq.get("status") == "active":
+        el = []
+        for a in eq.get("archetypes", []):
+            if not a.get("computable", True):
+                el.append(f"- {a.get('name')}: not assessed ({a.get('reason')}).")
+                continue
+            collapsed = [p for p in a.get("programs", []) if p.get("collapsed")]
+            el.append(f"- {a.get('name')} (kept {a.get('sections_kept')}/"
+                      f"{a.get('sections_total')} sections): "
+                      f"{len(collapsed)} program(s) collapse.")
+            for p in collapsed[:6]:
+                na = ", ".join(p.get("newly_unavailable", []))
+                delta = p.get("score_delta")
+                dtxt = "" if delta is None else f", Δ {delta:+d}"
+                el.append(f"  - {p.get('title') or p.get('code')}: score "
+                          f"{p.get('score')}{dtxt}"
+                          + (f"; loses {na}" if na else "") + ".")
+        # Honest count of newly-unavailable courses the per-program lists capped.
+        hidden = (eq.get("truncated") or {}).get("newly_unavailable") or 0
+        if hidden:
+            el.append(f"(+{hidden} more newly-unavailable required course(s) not shown.)")
+        # Honest framing rides with the numbers so the assistant never overclaims.
+        return ["", "EQUITY / ARCHETYPE EXPOSURE (structural exposure PROXY, NOT a "
+                "measured equity outcome)", *el]
+    return []
+
+
+# Append-only registry: source order is load-bearing (grid_pressure then
+# equity_exposure LAST — do NOT sort by feature number). A future block adds
 # ONE entry here instead of editing _context.
 GROUNDERS = [
     _ground_build,
@@ -310,6 +339,7 @@ GROUNDERS = [
     _ground_bottlenecks,
     _ground_demand_supply,
     _ground_grid_pressure,
+    _ground_equity_exposure,
 ]
 
 
