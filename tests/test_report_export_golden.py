@@ -22,6 +22,7 @@ The default run asserts equality.
 import os
 import pathlib
 
+import evidence
 import report_export
 
 FIX = pathlib.Path(__file__).parent / "fixtures"
@@ -379,9 +380,17 @@ def _demand_empty_results() -> dict:
 
 
 # ------------------------------------------------------------------------ tests
+def _with_evidence(results: dict) -> dict:
+    """Attach the F7 evidence appendix exactly as the live post-pass does, so the
+    golden pins the rendered evidence section the same way production builds it."""
+    results.setdefault("analysis", {})["evidence"] = evidence.evidence_appendix(results)
+    return results
+
+
 def test_report_maximal_golden():
+    # The maximal fixture fires every F7 condition → an ACTIVE evidence appendix.
     rendered = report_export.render_report(
-        _maximal_results(), briefing=BRIEFING, generated_at=GEN)
+        _with_evidence(_maximal_results()), briefing=BRIEFING, generated_at=GEN)
     _assert_golden("golden_report_maximal.html", rendered)
 
 
@@ -396,7 +405,9 @@ def test_report_mixed_golden():
 
 
 def test_report_inert_each_section_golden():
-    rendered = report_export.render_report(_inert_each_section_results(),
+    # No feature flag fires → an INERT evidence appendix (positive guided-pathways
+    # context only), pinning the no-flags default rendering.
+    rendered = report_export.render_report(_with_evidence(_inert_each_section_results()),
                                            generated_at=GEN)
     _assert_golden("golden_report_inert.html", rendered)
 

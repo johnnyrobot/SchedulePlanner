@@ -28,6 +28,7 @@ import os
 import pathlib
 
 import chat_assist
+import evidence
 
 FIX = pathlib.Path(__file__).parent / "fixtures"
 
@@ -200,12 +201,24 @@ def _inert_results() -> dict:
 
 
 # ------------------------------------------------------------------------ tests
+def _with_evidence(results: dict) -> dict:
+    """Attach the F7 evidence appendix exactly as the live post-pass does."""
+    results.setdefault("analysis", {})["evidence"] = evidence.evidence_appendix(results)
+    return results
+
+
 def test_context_maximal_golden():
-    rendered = chat_assist._context(_maximal_results())
+    # The maximal fixture fires F7 conditions → an ACTIVE evidence grounding block
+    # CLOSES the grounding text (pins it LAST, after GRID CONFORMANCE).
+    rendered = chat_assist._context(_with_evidence(_maximal_results()))
     _assert_golden("golden_context_maximal.txt", rendered)
 
 
 def test_context_inert_golden():
+    # The inert fixture deliberately carries NO analysis.evidence key, so
+    # _ground_evidence returns [] and `extra` stays empty: this still pins the
+    # empty-extra short-circuit (bare `base`, no trailing newline). The no-flags
+    # positive-context grounding path is covered by test_evidence.py instead.
     rendered = chat_assist._context(_inert_results())
     _assert_golden("golden_context_inert.txt", rendered)
 
