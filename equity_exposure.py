@@ -80,24 +80,40 @@ def _start_min(r):
 def _fits_evening(r):
     """An async/TBA section (no meeting) fits the evening window — it imposes no
     morning constraint, mirroring how async sections never conflict
-    (timeblocks.pairwise_hard_conflict). A timed section fits iff it starts >= 5 PM."""
+    (timeblocks.pairwise_hard_conflict). A timed section fits iff it starts >= 5 PM.
+
+    Note: a row with a time but blank/unparseable days yields no meeting blocks
+    (parse_meeting maps over parse_days), so it reads as async/TBA and is kept —
+    intentional (an unschedulable-day row is not a morning lock), not a parse gap."""
     start = _start_min(r)
     return start is None or start >= EVENING_START
 
 
 def _fits_two_day(r):
-    """A section meeting on <= 2 distinct weekdays fits. Async/TBA -> 0 days -> fits."""
+    """A section meeting on <= 2 distinct weekdays fits. Async/TBA -> 0 days -> fits.
+
+    Note: a time-present-but-blank-days row parses to 0 days here too, so it is
+    treated as async/TBA (kept by every window) — intentional, not a parse gap."""
     return len(set(timeblocks.parse_days(r.get("days", "")))) <= MAX_DAYS_PER_WEEK
 
 
 def _is_online(r):
     """True when a section is explicitly ONLINE. Reads the live API's ``modality``
     (classType) token list; HYBRID/HYFLEX are excluded (they require in-person
-    attendance). Falls back to a roomless online-labelled room (the live
-    ``Mission-Online`` / ``MONLINE`` sentinel) when modality is absent on a row."""
+    attendance).
+
+    The room-label fallback (a roomless ``Mission-Online`` / ``MONLINE`` sentinel)
+    only applies when modality is ABSENT / EMPTY — never when an explicit HYBRID /
+    HYFLEX (or any non-ONLINE) modality is present. A HYBRID section that happens to
+    carry an online room label for its async half is still in-person-bearing and
+    must lose the online-only window; inferring online from its room would
+    over-count availability (real fixture: 9 such non-ONLINE rows)."""
     mods = {str(t).strip().upper() for t in (r.get("modality") or [])}
     if mods & _ONLINE_TOKENS:
         return True
+    if mods:
+        return False  # explicit non-ONLINE modality (e.g. HYBRID/HYFLEX) -> not online
+    # modality absent/empty: fall back to the online room sentinel on a roomless row.
     if not timeblocks.parse_meeting(r.get("days", ""), r.get("times", "")):
         if "ONLINE" in str(r.get("room", "") or "").upper():
             return True

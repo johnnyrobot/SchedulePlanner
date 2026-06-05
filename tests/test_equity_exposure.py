@@ -172,6 +172,49 @@ def test_online_active_on_live_modality_excludes_hybrid():
     assert "HYB 1" in p["newly_unavailable"]     # HYBRID excluded from online
 
 
+def test_online_excludes_hybrid_hyflex_with_online_room():
+    # MUST-FIX regression: a roomless HYBRID/HYFLEX section with an explicit modality
+    # and an ONLINE room label must NOT be inferred online. The room-from-label
+    # fallback is only for ABSENT modality; an explicit HYBRID/HYFLEX always loses
+    # (it requires in-person attendance), so these collapse the online window.
+    prog = {"code": "H", "title": "H", "courses": [
+        {"course_id": "ONL 1"}, {"course_id": "HYB 1"}, {"course_id": "HYF 1"}]}
+    secs = [
+        {"course": "ONL 1", "term": 2268, "class_nbr": "1", "days": "", "times": "",
+         "modality": ["ONLINE"], "room": "Mission-Online"},
+        # roomless HYBRID with an online ROOM label -> the buggy fallback fired here
+        {"course": "HYB 1", "term": 2268, "class_nbr": "2", "days": "", "times": "",
+         "modality": ["HYBRID", "OER"], "room": "Mission-Online"},
+        {"course": "HYF 1", "term": 2268, "class_nbr": "3", "days": "", "times": "",
+         "modality": ["HYFLEX"], "room": "Mission-Online Live"},
+    ]
+    on = _arch(E.equity_exposure_report([prog], secs), "online")
+    assert on["computable"] is True
+    p = _prog(on, "H")
+    assert "ONL 1" not in p["newly_unavailable"]      # genuinely online -> survives
+    assert "HYB 1" in p["newly_unavailable"]          # explicit HYBRID -> excluded
+    assert "HYF 1" in p["newly_unavailable"]          # explicit HYFLEX -> excluded
+
+
+def test_online_by_room_still_works_when_modality_absent():
+    # The legitimate "modality ABSENT (or empty []) + online room -> infer online"
+    # path must NOT regress: a roomless section with NO modality key and an online
+    # room label is still treated as online.
+    prog = {"code": "R", "title": "R", "courses": [
+        {"course_id": "NOMOD 1"}, {"course_id": "EMPTY 1"}]}
+    secs = [
+        {"course": "NOMOD 1", "term": 2268, "class_nbr": "1", "days": "", "times": "",
+         "room": "Mission-Online"},                            # modality key absent
+        {"course": "EMPTY 1", "term": 2268, "class_nbr": "2", "days": "", "times": "",
+         "modality": [], "room": "Mission-Online"},            # empty modality list
+    ]
+    on = _arch(E.equity_exposure_report([prog], secs), "online")
+    assert on["computable"] is True
+    p = _prog(on, "R")
+    assert "NOMOD 1" not in p["newly_unavailable"]    # inferred online by room
+    assert "EMPTY 1" not in p["newly_unavailable"]    # inferred online by room
+
+
 def test_online_inert_on_import_no_modality():
     # Import-shape records carry no 'modality' key and no online room label ->
     # online archetype reports NOT ASSESSED, but evening/two_day still computable.
