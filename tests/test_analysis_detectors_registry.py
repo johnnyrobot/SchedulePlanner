@@ -27,15 +27,18 @@ EXPECTED = [
     ("bottlenecks", "program_bottleneck"),
     ("demand_supply", "demand_supply"),
     ("grid_pressure", "grid_pressure"),
+    ("equity_exposure", "equity_exposure"),
 ]
 
 
-def test_registry_has_exactly_four_entries_in_order():
-    # Pins the slot order the inert_detectors [5..8] sequence + the determinism
-    # gate depend on. Reordering or appending in the wrong slot fails here.
+def test_registry_has_exactly_five_entries_in_order():
+    # Pins the slot order the inert_detectors [5..9] sequence + the determinism
+    # gate depend on. Reordering or appending in the wrong slot fails here. F6
+    # (equity_exposure) is APPENDED LAST — never reordering F1-F5.
     assert [d.analysis_key for d in ANALYSIS_DETECTORS] == [
-        "buildability", "bottlenecks", "demand_supply", "grid_pressure"]
-    assert len(ANALYSIS_DETECTORS) == 4
+        "buildability", "bottlenecks", "demand_supply", "grid_pressure",
+        "equity_exposure"]
+    assert len(ANALYSIS_DETECTORS) == 5
 
 
 def test_each_entry_compute_and_entry_are_callable():
@@ -60,11 +63,13 @@ def test_buildability_compute_wraps_program_in_a_list(monkeypatch):
     # Pins the [program] list-wrap on the F1+F4 compute: drop it and this bites.
     captured = {}
 
-    def _fake_report(programs, sections, *, ge_coverage=None, active_courses=None):
+    def _fake_report(programs, sections, *, ge_coverage=None, active_courses=None,
+                     by_design=None):
         captured["programs"] = programs
         captured["sections"] = sections
         captured["ge_coverage"] = ge_coverage
         captured["active_courses"] = active_courses
+        captured["by_design"] = by_design
         return {"status": "inert"}
 
     monkeypatch.setattr(build_live_workbook.buildability,
@@ -74,9 +79,11 @@ def test_buildability_compute_wraps_program_in_a_list(monkeypatch):
     sections = object()
     ge_coverage = object()
     active_courses = object()
+    by_design = object()
     ctx = SimpleNamespace(
         program=program, sections=sections, ge_coverage=ge_coverage,
-        active_courses=active_courses, program_demand=None, facility=None)
+        active_courses=active_courses, program_demand=None, facility=None,
+        by_design=by_design)
 
     block = ANALYSIS_DETECTORS[0].compute(ctx)
 
@@ -89,3 +96,32 @@ def test_buildability_compute_wraps_program_in_a_list(monkeypatch):
     assert captured["sections"] is sections
     assert captured["ge_coverage"] is ge_coverage
     assert captured["active_courses"] is active_courses
+    assert captured["by_design"] is by_design
+
+
+def test_equity_exposure_compute_wraps_program_and_threads_by_design(monkeypatch):
+    # Pins the F6 [program] list-wrap + by_design threading (the 5th entry).
+    captured = {}
+
+    def _fake_report(programs, sections, *, ge_coverage=None, active_courses=None,
+                     by_design=None):
+        captured["programs"] = programs
+        captured["sections"] = sections
+        captured["by_design"] = by_design
+        return {"status": "inert"}
+
+    monkeypatch.setattr(build_live_workbook.equity_exposure,
+                        "equity_exposure_report", _fake_report)
+
+    program, sections, by_design = object(), object(), object()
+    ctx = SimpleNamespace(
+        program=program, sections=sections, ge_coverage=None,
+        active_courses=None, program_demand=None, facility=None,
+        by_design=by_design)
+
+    block = ANALYSIS_DETECTORS[4].compute(ctx)
+
+    assert block == {"status": "inert"}
+    assert captured["programs"] == [program]
+    assert captured["sections"] is sections
+    assert captured["by_design"] is by_design

@@ -106,7 +106,8 @@ def test_build_live_workbook_emits_structured_report(lamc_routes, make_client,
     assert {d["detector"] for d in inert} == {
         "modality_mismatch", "prerequisite_ordering", "ge_scheduling",
         "time_block_conflict", "room_conflict", "program_buildability",
-        "program_bottleneck", "grid_pressure", "demand_supply"}
+        "program_bottleneck", "grid_pressure", "demand_supply",
+        "equity_exposure"}
     for d in inert:
         if d["detector"] == "ge_scheduling" or d.get("status") == "active":
             continue  # ge_scheduling / active detectors carry "reason" but no "remedy"
@@ -491,4 +492,51 @@ def test_analyze_live_fanout_failopen_stays_inert(lamc_routes, make_client, tmp_
     assert block["status"] == "inert"
     det = next(d for d in report["inert_detectors"] if d["detector"] == "program_bottleneck")
     assert det["status"] == "inert"
+    json.dumps(report)
+
+
+# --- F6: equity / archetype exposure -----------------------------------------
+def test_analyze_live_equity_exposure_active_online_computable(tmp_path):
+    """Records carrying modality (live shape) -> F6 active, all three archetypes;
+    online is computable and an in-person-only required course collapses under it."""
+    records = [
+        {"course": "MATH 227", "term": 2268, "class_nbr": "1", "days": "MW",
+         "times": "9:00 AM - 10:15 AM", "modality": ["IN-PERSON"], "units": 5},
+        {"course": "ENGLISH 101", "term": 2268, "class_nbr": "2", "days": "",
+         "times": "", "modality": ["ONLINE"], "room": "Mission-Online", "units": 3},
+    ]
+    program = {"code": "TEST", "title": "Test", "award": "AS", "courses": [
+        {"course_id": "MATH 227", "recommended_semester": 1},
+        {"course_id": "ENGLISH 101", "recommended_semester": 1}], "major_choices": []}
+    out = tmp_path / "imp.xlsx"
+    report = build_live_workbook.analyze_live(
+        "LAMC", [2268], "(test)", str(out),
+        sections_override=records, program_override=program)
+    block = report["results"]["analysis"]["equity_exposure"]
+    assert block["status"] == "active"
+    assert [a["key"] for a in block["archetypes"]] == ["evening", "online", "two_day"]
+    online = next(a for a in block["archetypes"] if a["key"] == "online")
+    assert online["computable"] is True
+    p = next(p for p in online["programs"] if p["code"] == "TEST")
+    assert "MATH 227" in p["newly_unavailable"]      # in-person drops under online
+    assert "ENGLISH 101" not in p["newly_unavailable"]  # online survives
+    det = next(d for d in report["inert_detectors"] if d["detector"] == "equity_exposure")
+    assert det["status"] == "active"
+    json.dumps(report)
+
+
+def test_analyze_import_equity_online_inert_no_modality(tmp_path):
+    """A real schedule export carries no modality -> F6 active with evening/two_day
+    computable but the online archetype NOT ASSESSED (computable:False)."""
+    out = tmp_path / "imp.xlsx"
+    report = build_live_workbook.analyze_import(
+        "files/lamc_schedule_sample.xlsx", str(out))
+    block = report["results"]["analysis"]["equity_exposure"]
+    assert block["status"] == "active"
+    assert block["by_design_count"] == 0          # no Notes column on the import path
+    online = next(a for a in block["archetypes"] if a["key"] == "online")
+    assert online["computable"] is False
+    assert "modality" in online["reason"]
+    for key in ("evening", "two_day"):
+        assert next(a for a in block["archetypes"] if a["key"] == key)["computable"] is True
     json.dumps(report)
