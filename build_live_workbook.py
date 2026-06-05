@@ -76,6 +76,7 @@ import httpx
 import buildability
 import cross_program_bottleneck
 import demand_supply
+import equity_exposure
 import grid_pressure
 import engine
 from sources import (assist, catalog_ge, course_master, elumen, elumen_client,
@@ -874,22 +875,47 @@ def _grid_pressure_detector_entry(block):
     }
 
 
-# Append-only registry of the feature-analysis detectors (F1+F4, F2, F5, F3).
+def _equity_exposure_detector_entry(block):
+    """Honest active/inert entry for the equity / archetype-exposure view (F6;
+    mirrors ``_grid_pressure_detector_entry``). ``found`` counts collapsing
+    (program, archetype) pairs."""
+    if not block or block.get("status") != "active":
+        return {
+            "detector": "equity_exposure", "status": "inert",
+            "reason": ((block or {}).get("reason")
+                       or "no program / no sections / baseline audit inert"),
+        }
+    n_collapsed = sum(1 for a in block.get("archetypes", [])
+                      for p in a.get("programs", []) if p.get("collapsed"))
+    return {
+        "detector": "equity_exposure", "status": "active",
+        "found": n_collapsed,
+        "reason": ("re-runs the buildability audit under evening-only / online-only "
+                   "/ two-days-a-week windows and flags programs whose required path "
+                   "collapses (becomes structurally unbuildable) under the "
+                   "constraint — a structural exposure PROXY, not a measured equity "
+                   "outcome"),
+    }
+
+
+# Append-only registry of the feature-analysis detectors (F1+F4, F2, F5, F3, F6).
 # Each entry pairs a results["analysis"] key with a compute fn(ctx) -> block and
 # the block's inert-detector entry helper; analyze_live runs them in ONE loop
 # below the five heterogeneous detectors (modality/prereq/ge/time_block/room),
 # preserving the exact compute + inject + append ORDER (the determinism gate is
 # byte-identity on the canonicalized results + inert_detectors). To add a future
-# feature (F6), APPEND one AnalysisDetector here — do NOT reorder existing ones.
+# feature, APPEND one AnalysisDetector here — do NOT reorder existing ones.
 # Note: analysis_key ("bottlenecks") is intentionally DISTINCT from the detector
 # key ("program_bottleneck", which lives inside the entry dict).
+# F1 and F6 both honor ``c.by_design`` (FF2 intentional-gap exclusions): None/empty
+# on the live path (no Notes column) -> byte-identical to the pre-FF2 output.
 AnalysisDetector = namedtuple("AnalysisDetector", "analysis_key compute entry")
 ANALYSIS_DETECTORS = (
     AnalysisDetector(
         "buildability",
         lambda c: buildability.buildability_report(
             [c.program], c.sections, ge_coverage=c.ge_coverage,
-            active_courses=c.active_courses),
+            active_courses=c.active_courses, by_design=c.by_design),
         _buildability_detector_entry),
     AnalysisDetector(
         "bottlenecks",
@@ -906,6 +932,12 @@ ANALYSIS_DETECTORS = (
         lambda c: grid_pressure.grid_pressure_report(
             c.sections, program=c.program, program_demand=c.program_demand),
         _grid_pressure_detector_entry),
+    AnalysisDetector(
+        "equity_exposure",
+        lambda c: equity_exposure.equity_exposure_report(
+            [c.program], c.sections, ge_coverage=c.ge_coverage,
+            active_courses=c.active_courses, by_design=c.by_design),
+        _equity_exposure_detector_entry),
 )
 
 
@@ -918,7 +950,7 @@ def analyze_live(campus, terms, program_query, out_path, *, client=None,
                  catalog_pdf=None, odl_json=None, facility=None,
                  active_courses=None, program_demand=None,
                  demand_program_ids=None,
-                 sections_override=None, program_override=None):
+                 sections_override=None, program_override=None, by_design=None):
     """Run the full live pipeline and return a structured, JSON-serializable report.
 
     The report carries the reconciliation (matched/unmatched program courses)
@@ -1250,7 +1282,7 @@ def analyze_live(campus, terms, program_query, out_path, *, client=None,
     ctx = SimpleNamespace(
         sections=sections, program=program, ge_coverage=ge_coverage,
         active_courses=active_courses, program_demand=program_demand,
-        facility=facility)
+        facility=facility, by_design=by_design)
     for d in ANALYSIS_DETECTORS:
         block = d.compute(ctx)
         if isinstance(report["results"], dict) and isinstance(report["results"].get("analysis"), dict):
@@ -1320,6 +1352,38 @@ def _program_from_workbook(path, course_units=None):
     return {"code": code, "title": title, "award": "", "courses": courses}
 
 
+def _by_design_from_workbook(path):
+    """FF2: by-design exclusions from the program workbook's OPTIONAL 'Notes' column.
+
+    A course whose 'Notes' cell says "by design" (case-insensitive substring) is an
+    INTENTIONAL gap — F1/F6 must not flag it. Returns the set of such Course IDs.
+
+    Honest about the real data: the shipped LACCD programs sheet has NO Notes column
+    (Program Code / Program Title / GE Pattern / Course ID / Requirement Type /
+    Recommended Semester), so this stays EMPTY on the available data — it is a
+    fully-wired HOOK, never fabricated. Fails OPEN to an empty set on any read error
+    or missing sheet/column (never raises)."""
+    import pandas as pd
+
+    try:
+        xl = pd.ExcelFile(path)
+        if "programs" not in xl.sheet_names:
+            return set()
+        df = xl.parse("programs")
+    except Exception:  # noqa: BLE001 - by_design is advisory; never break the run
+        return set()
+    if "Notes" not in df.columns or "Course ID" not in df.columns:
+        return set()
+    out = set()
+    for _, r in df.iterrows():
+        note = str(r.get("Notes", "") or "").lower()
+        if "by design" in note:
+            cid = mapping._norm(r["Course ID"])
+            if cid:
+                out.add(cid)
+    return out
+
+
 def analyze_import(schedule_path, out_path, *, program=None, program_path=None,
                    facility_path=None, course_master_path=None,
                    program_lists_path=None, sheet=None, transfer_goal="none",
@@ -1366,6 +1430,10 @@ def analyze_import(schedule_path, out_path, *, program=None, program_path=None,
             if cid in course_units and "units" not in r:
                 r["units"] = course_units[cid]
 
+    # FF2: by-design (intentional-gap) exclusions from the program workbook's
+    # optional Notes column. The live path has no Notes, so this is import-only; it
+    # stays an honestly EMPTY set on the real LACCD workbook (no Notes column).
+    by_design = _by_design_from_workbook(program_path) if program_path else None
     if program is None and program_path:
         program = _program_from_workbook(program_path, course_units)
     if program is None:
@@ -1383,7 +1451,7 @@ def analyze_import(schedule_path, out_path, *, program=None, program_path=None,
         "LAMC", terms, "(historical import)", out_path,
         sections_override=records, program_override=program,
         facility=facility, active_courses=active_courses,
-        program_demand=program_demand,
+        program_demand=program_demand, by_design=by_design,
         # FF3: overlay an IR enrollment export onto the imported schedule. The
         # join is merge-not-strip (enrollment.enrich_sections), so unmatched
         # sections keep the schedule export's own native counts — F5
