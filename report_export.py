@@ -187,6 +187,7 @@ _DET_LABELS = {
     "modality_mismatch": "Capacity / fill-rate analysis",
     "prerequisite_ordering": "Prerequisite ordering",
     "time_block_conflict": "Time-block conflicts",
+    "equity_exposure": "Equity / archetype exposure",
 }
 _PLAN_LABELS = {"shared": "met by major", "concrete": "concrete", "reserve": "reserve"}
 _GE_PATTERN_NAMES = {"igetc": "IGETC", "cal-getc": "Cal-GETC", "csu-ge": "CSU GE"}
@@ -551,6 +552,67 @@ def _demand_supply(results: dict) -> str:
             f'{table}{slack_html}{footnote}</section>')
 
 
+def _equity_exposure(results: dict) -> str:
+    """Equity / archetype exposure (F6): re-runs the buildability audit under
+    constrained windows (evening / online / two-days-a-week) and shows which
+    programs collapse (become structurally unbuildable) under each. Empty when
+    absent; honest inert note when there was no baseline to constrain; each
+    non-computable archetype (e.g. online on the import path) surfaces as 'Not
+    assessed'. All data HTML-escaped."""
+    block = (results.get("analysis") or {}).get("equity_exposure")
+    if not block:
+        return ""
+    label = _esc(block.get("label", ""))
+    if block.get("status") != "active":
+        return ('<section class="card" aria-labelledby="equity"><h2 id="equity">'
+                'Equity / archetype exposure</h2>'
+                f'<p>Not computed: '
+                f'{_esc(block.get("reason", "no baseline to constrain"))}</p>'
+                f'<p class="note">{label}</p></section>')
+
+    sub = []
+    for a in block.get("archetypes", []):
+        name = _esc(a.get("name"))
+        if not a.get("computable", True):
+            sub.append(f'<p class="note">Not assessed: {name} — '
+                       f'{_esc(a.get("reason"))}</p>')
+            continue
+        rows = []
+        for p in a.get("programs", []):
+            na = ", ".join(_esc(c) for c in p.get("newly_unavailable", [])) or "—"
+            collapse = "yes" if p.get("collapsed") else "no"
+            delta = p.get("score_delta")
+            delta_txt = "—" if delta is None else f"{delta:+d}"
+            rows.append(
+                "<tr>"
+                f'<td class="area">{_esc(p.get("title") or p.get("code"))}</td>'
+                f'<td>{_esc(p.get("score"))}</td>'
+                f'<td>{_esc(delta_txt)}</td>'
+                f'<td>{na}</td>'
+                f'<td>{collapse}</td>'
+                "</tr>")
+        body = "".join(rows) or ('<tr><td colspan="5">no program assessed</td></tr>')
+        kept = (f' (kept {_esc(a.get("sections_kept"))}/'
+                f'{_esc(a.get("sections_total"))} sections)')
+        sub.append(
+            '<div class="tablewrap"><table>'
+            f'<caption>{name}{kept}</caption>'
+            '<tr><th>Program</th><th>Score</th><th>&Delta;</th>'
+            '<th>Newly unavailable</th><th>Collapses?</th></tr>'
+            f'{body}</table></div>')
+
+    foot = []
+    tr = block.get("truncated") or {}
+    if tr.get("newly_unavailable"):
+        foot.append(f'{_esc(tr["newly_unavailable"])} more newly-unavailable '
+                    'required course(s) beyond those shown.')
+    footnote = f'<p class="note">{" ".join(foot)}</p>' if foot else ""
+    return ('<section class="card" aria-labelledby="equity"><h2 id="equity">'
+            'Equity / archetype exposure</h2>'
+            f'<p class="note">{label}</p>'
+            f'{"".join(sub)}{footnote}</section>')
+
+
 def _reconciliation(results: dict) -> str:
     rec = results.get("reconciliation")
     if not rec:
@@ -678,6 +740,7 @@ SECTION_RENDERERS = [
     _bottlenecks,
     _grid_pressure,
     _demand_supply,
+    _equity_exposure,
     _reconciliation,
     _detectors,
     _ge,

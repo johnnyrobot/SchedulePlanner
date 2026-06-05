@@ -49,8 +49,10 @@ def _maximal_results() -> dict:
     buildability with an active F4 GE sub-block, active bottlenecks with both
     truncation footnotes, active grid_pressure with mutual exclusions +
     not_assessed + truncation, active demand_supply with add_list + capacity_slack
-    + not_assessed + truncation, reconciliation (with unmatched), inert_detectors
-    (active + inert mix), and ge_coverage (requested, with draft + areas + shared).
+    + not_assessed + truncation, active equity_exposure (F6) with a collapsing
+    archetype + a non-computable (online) archetype + truncation, reconciliation
+    (with unmatched), inert_detectors (active + inert mix), and ge_coverage
+    (requested, with draft + areas + shared).
 
     Every dict shape is reused from the existing per-feature tests — no invented
     field names."""
@@ -176,6 +178,29 @@ def _maximal_results() -> dict:
                                     "note": "review only — not a cut recommendation"}],
                 "sections_with_counts": 4, "program_weighted": True,
                 "not_assessed": 1, "truncated": {"add_list": 3, "capacity_slack": 0},
+            },
+            "equity_exposure": {
+                "status": "active", "label": "Archetype exposure PROXY label",
+                "horizon_terms": [2268], "by_design_count": 0,
+                "truncated": {"newly_unavailable": 2},
+                "archetypes": [
+                    {"key": "evening", "name": "Evening-only (start ≥ 5:00 PM)",
+                     "computable": True, "sections_kept": 1, "sections_total": 3,
+                     "programs": [{"code": "BIOL", "title": "Bio <AS>", "score": 48,
+                                   "baseline_score": 71, "score_delta": -23,
+                                   "collapsed": True,
+                                   "newly_unavailable": ["CHEM <1>", "MATH 261"],
+                                   "still_available": 1, "required_total": 3}]},
+                    {"key": "online", "name": "Online-only", "computable": False,
+                     "reason": "section modality (classType) is not present on the "
+                               "imported records"},
+                    {"key": "two_day", "name": "Two days a week (≤ 2 meeting days)",
+                     "computable": True, "sections_kept": 2, "sections_total": 3,
+                     "programs": [{"code": "BIOL", "title": "Bio <AS>", "score": 71,
+                                   "baseline_score": 71, "score_delta": 0,
+                                   "collapsed": False, "newly_unavailable": [],
+                                   "still_available": 3, "required_total": 3}]},
+                ],
             },
         },
         "reconciliation": {
