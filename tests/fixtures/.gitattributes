@@ -1,0 +1,6 @@
+# The golden_* fixtures are byte-exact characterization snapshots: the golden
+# tests assert `render(...) == file_bytes`. Treat them as binary (-text) so
+# core.autocrlf / eol can never rewrite line endings on checkout/checkin and
+# spuriously break the byte-identity guardrail on another machine.
+golden_*.html -text
+golden_*.txt -text

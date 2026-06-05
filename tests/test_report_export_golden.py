@@ -275,6 +275,84 @@ def _mixed_results() -> dict:
     }
 
 
+def _inert_each_section_results() -> dict:
+    """Every FEATURE block present in its inert (status != "active") branch in ONE
+    document, so all four "Not computed: …" renderers fire together:
+    buildability-inert, bottlenecks-inert, grid_pressure-inert AND
+    demand_supply-inert. The mixed fixture only byte-pins the first two inert
+    branches; grid_pressure-inert + demand_supply-inert are otherwise
+    substring-only, and the registry refactor moves those inert renderers — this
+    pins them."""
+    return {
+        "campus": "LAMC",
+        "live_terms": [2268],
+        "terms_in_data": 2,
+        "program_info": {"title": "Biology", "award": ""},
+        "programs": {
+            "BIOLOGY": {
+                "title": "Biology",
+                "official_map_issues": [],
+                "cohorts": {
+                    "full_time": {"terms_used": 4, "needs_fix": False,
+                                  "plan": {1: ["BIOLOGY 3"]}, "fixes": []},
+                    "part_time": None,
+                },
+            },
+        },
+        "analysis": {
+            "rotation_gaps": [], "single_section": [],
+            "modality_mismatch": [], "under_supply": [],
+            "buildability": {"status": "inert",
+                             "label": "Structural-feasibility PROXY ...",
+                             "reason": "no program / sections to audit"},
+            "bottlenecks": {"status": "inert", "label": "... bottleneck PROXY ...",
+                            "reason": "no program-lists demand map supplied"},
+            "grid_pressure": {"status": "inert", "label": "... grid PROXY ...",
+                              "reason": "no timed sections"},
+            "demand_supply": {"status": "inert", "label": "... demand PROXY ...",
+                              "reason": "no seat counts available"},
+        },
+    }
+
+
+def _demand_empty_results() -> dict:
+    """An ACTIVE demand_supply block whose `add_list` is empty, so the fallback
+    string "No course currently shows add-a-section pressure." renders. That
+    branch (report_export.py:522-523) had no test at all (only the `== ""` absent
+    case) — this byte-pins it. capacity_slack is non-empty so the active envelope
+    still has content to show."""
+    return {
+        "campus": "LAMC",
+        "live_terms": [2268],
+        "terms_in_data": 2,
+        "program_info": {"title": "Biology", "award": ""},
+        "programs": {
+            "BIOLOGY": {
+                "title": "Biology",
+                "official_map_issues": [],
+                "cohorts": {
+                    "full_time": {"terms_used": 4, "needs_fix": False,
+                                  "plan": {1: ["BIOLOGY 3"]}, "fixes": []},
+                    "part_time": None,
+                },
+            },
+        },
+        "analysis": {
+            "rotation_gaps": [], "single_section": [],
+            "modality_mismatch": [], "under_supply": [],
+            "demand_supply": {
+                "status": "active", "label": "Demand-vs-supply PROXY label",
+                "add_list": [],
+                "capacity_slack": [{"course": "ART 101", "fill": 0.14,
+                                    "n_sections": 2,
+                                    "note": "review only — not a cut recommendation"}],
+                "sections_with_counts": 2, "program_weighted": False,
+                "not_assessed": 0, "truncated": {"add_list": 0, "capacity_slack": 0},
+            },
+        },
+    }
+
+
 # ------------------------------------------------------------------------ tests
 def test_report_maximal_golden():
     rendered = report_export.render_report(
@@ -290,3 +368,15 @@ def test_report_absent_golden():
 def test_report_mixed_golden():
     rendered = report_export.render_report(_mixed_results(), generated_at=GEN)
     _assert_golden("golden_report_mixed.html", rendered)
+
+
+def test_report_inert_each_section_golden():
+    rendered = report_export.render_report(_inert_each_section_results(),
+                                           generated_at=GEN)
+    _assert_golden("golden_report_inert.html", rendered)
+
+
+def test_report_demand_empty_golden():
+    rendered = report_export.render_report(_demand_empty_results(),
+                                           generated_at=GEN)
+    _assert_golden("golden_report_demand_empty.html", rendered)
