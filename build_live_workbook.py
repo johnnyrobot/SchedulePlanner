@@ -68,6 +68,8 @@ from __future__ import annotations
 import argparse
 import json
 import os
+from collections import namedtuple
+from types import SimpleNamespace
 
 import httpx
 
@@ -872,6 +874,41 @@ def _grid_pressure_detector_entry(block):
     }
 
 
+# Append-only registry of the feature-analysis detectors (F1+F4, F2, F5, F3).
+# Each entry pairs a results["analysis"] key with a compute fn(ctx) -> block and
+# the block's inert-detector entry helper; analyze_live runs them in ONE loop
+# below the five heterogeneous detectors (modality/prereq/ge/time_block/room),
+# preserving the exact compute + inject + append ORDER (the determinism gate is
+# byte-identity on the canonicalized results + inert_detectors). To add a future
+# feature (F6), APPEND one AnalysisDetector here — do NOT reorder existing ones.
+# Note: analysis_key ("bottlenecks") is intentionally DISTINCT from the detector
+# key ("program_bottleneck", which lives inside the entry dict).
+AnalysisDetector = namedtuple("AnalysisDetector", "analysis_key compute entry")
+ANALYSIS_DETECTORS = (
+    AnalysisDetector(
+        "buildability",
+        lambda c: buildability.buildability_report(
+            [c.program], c.sections, ge_coverage=c.ge_coverage,
+            active_courses=c.active_courses),
+        _buildability_detector_entry),
+    AnalysisDetector(
+        "bottlenecks",
+        lambda c: cross_program_bottleneck.bottleneck_report(
+            c.program_demand, c.sections, c.facility),
+        _bottleneck_detector_entry),
+    AnalysisDetector(
+        "demand_supply",
+        lambda c: demand_supply.demand_supply_report(
+            c.sections, program_demand=c.program_demand, facility=c.facility),
+        _demand_supply_detector_entry),
+    AnalysisDetector(
+        "grid_pressure",
+        lambda c: grid_pressure.grid_pressure_report(
+            c.sections, program=c.program, program_demand=c.program_demand),
+        _grid_pressure_detector_entry),
+)
+
+
 def analyze_live(campus, terms, program_query, out_path, *, client=None,
                  enrollment_path=None, elumen_fixture=None, elumen_live=False,
                  enrollment_map=None, prereq_max_clauses=None,
@@ -1168,54 +1205,25 @@ def analyze_live(campus, terms, program_query, out_path, *, client=None,
         sections, room_conflicts, facility_used=bool(facility),
         capacity=room_capacity, lab_stats=_lab_pool_stats(sections, facility)))
 
-    # Program-map buildability (F1 + F4): is the program's required path schedulable
-    # against the fetched sections, and — when a GE goal is selected — does the GE
-    # requirement set fold into the denominator? Deterministic, advisory, computed
-    # HERE outside engine.run. ge_coverage carries the per-area pre-sweep offered
-    # counts the GE denominator needs; active_courses enables the dead-requirement
-    # check; the horizon defaults to the fetched section terms.
-    buildability_block = buildability.buildability_report(
-        [program], sections, ge_coverage=ge_coverage, active_courses=active_courses)
-    if isinstance(report["results"], dict) and isinstance(report["results"].get("analysis"), dict):
-        report["results"]["analysis"]["buildability"] = buildability_block
-    report["inert_detectors"].append(_buildability_detector_entry(buildability_block))
-
-    # Cross-program bottleneck leaderboard (F2): which required courses are the
-    # most dangerous institution-wide bottlenecks (many programs depending, few
-    # sections / seats / lab rooms)? Needs the multi-program demand map; INERT on
-    # a bare live fetch (the live path resolves one program per run), ACTIVE on
-    # the import path when a Program Course Lists export is supplied. Deterministic,
-    # advisory, computed HERE outside engine.run.
-    bottleneck_block = cross_program_bottleneck.bottleneck_report(
-        program_demand, sections, facility)
-    if isinstance(report["results"], dict) and isinstance(report["results"].get("analysis"), dict):
-        report["results"]["analysis"]["bottlenecks"] = bottleneck_block
-    report["inert_detectors"].append(_bottleneck_detector_entry(bottleneck_block))
-
-    # Demand-vs-supply action list (F5): offered courses whose seat SUPPLY falls
-    # short of enrolled+waitlisted DEMAND -> a ranked "add a section" list, plus a
-    # neutral capacity-slack observation. Reads Cap/Tot/Wait off the sections
-    # (IR-joined on the live path, or carried natively by an imported schedule
-    # export); INERT until seat counts exist (a bare live fetch has none).
-    # Cross-program demand is an OPTIONAL weight. Computed HERE outside engine.run.
-    demand_supply_block = demand_supply.demand_supply_report(
-        sections, program_demand=program_demand, facility=facility)
-    if isinstance(report["results"], dict) and isinstance(report["results"].get("analysis"), dict):
-        report["results"]["analysis"]["demand_supply"] = demand_supply_block
-    report["inert_detectors"].append(_demand_supply_detector_entry(demand_supply_block))
-
-    # Grid-conformance + morning-compression pressure (F3): how concentrated the
-    # schedule's required courses are in the 9 AM-1 PM window, and which required-
-    # course pairs are mutually exclusive because every section is morning-locked.
-    # Deterministic, advisory, computed HERE outside engine.run. Start-time
-    # conformance only — end-time/duration and holiday/session-date awareness ship
-    # inert (no honest contact category / no academic calendar). The structural
-    # mutual-exclusivity fact, NOT a snapping simulation.
-    grid_block = grid_pressure.grid_pressure_report(
-        sections, program=program, program_demand=program_demand)
-    if isinstance(report["results"], dict) and isinstance(report["results"].get("analysis"), dict):
-        report["results"]["analysis"]["grid_pressure"] = grid_block
-    report["inert_detectors"].append(_grid_pressure_detector_entry(grid_block))
+    # Feature-analysis detectors (F1+F4 buildability, F2 bottlenecks, F5
+    # demand_supply, F3 grid_pressure): each is deterministic, advisory, and
+    # computed HERE outside engine.run from the raw fetched sections + program /
+    # demand / facility context. They share one compute + inject + append shape,
+    # so they live in the append-only ANALYSIS_DETECTORS registry and run in ONE
+    # loop below — IN REGISTRY ORDER, which keeps the inert_detectors append
+    # sequence (and the byte-identity determinism gate) unchanged. The detector
+    # entry is appended UNCONDITIONALLY; the analysis injection is guarded by the
+    # same presence check the heterogeneous detectors above use, so a results-less
+    # run still appends the detector but skips the analysis assignment.
+    ctx = SimpleNamespace(
+        sections=sections, program=program, ge_coverage=ge_coverage,
+        active_courses=active_courses, program_demand=program_demand,
+        facility=facility)
+    for d in ANALYSIS_DETECTORS:
+        block = d.compute(ctx)
+        if isinstance(report["results"], dict) and isinstance(report["results"].get("analysis"), dict):
+            report["results"]["analysis"][d.analysis_key] = block
+        report["inert_detectors"].append(d.entry(block))
     return report
 
 
