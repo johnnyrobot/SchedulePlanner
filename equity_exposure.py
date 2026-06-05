@@ -162,10 +162,9 @@ def _assess_archetype(programs, key, sections, baseline, *, ge_coverage,
     # collapse signal is honest rather than swallowed by the inert envelope.
     if filtered.get("status") == "active":
         filt_missing = _missing_set(filtered)
-        filt_score = _score_by_code(filtered)
         filt_audits = {p.get("code"): p for p in filtered.get("programs", [])}
     else:
-        filt_missing, filt_score, filt_audits = {}, {}, {}
+        filt_missing, filt_audits = {}, {}
 
     truncated = 0
     rows = []
