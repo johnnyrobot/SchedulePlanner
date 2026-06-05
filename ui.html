@@ -792,6 +792,7 @@ const DET_LABELS={
   program_bottleneck:'Cross-program bottlenecks',
   grid_pressure:'Grid conformance & morning compression',
   demand_supply:'Demand-vs-supply action list',
+  equity_exposure:'Equity / archetype exposure',
 };
 // GE-coverage card maps, hoisted to module scope for the same reason.
 const PNAME = {igetc:'IGETC', 'cal-getc':'Cal-GETC', 'csu-ge':'CSU GE', local:'Local AA/AS GE'};
@@ -986,6 +987,43 @@ const LIVE_CARDS = [
       '<p class="hint">'+escapeHtml(dsl.label||'')+'</p>'+
       '<div class="why">Add a section — highest demand-vs-supply pressure:</div>'+
       addBlock+slack+foot+'</div>';
+  }
+  return '';
+  } },
+  // (f2) Equity / archetype exposure (F6): re-runs the buildability audit under
+  // constrained windows (evening / online / two-days-a-week) and shows which
+  // programs collapse (become structurally unbuildable) under each. Non-computable
+  // archetypes (online on the import path) surface as "Not assessed". The honest
+  // "structural exposure proxy, not a measured equity outcome" framing rides in
+  // eq.label. All data escaped.
+  { target:'html', render:(res)=>{
+  const eq = res.analysis && res.analysis.equity_exposure;
+  if(eq && eq.status==='active'){
+    const subs=(eq.archetypes||[]).map(a=>{
+      if(!a.computable){
+        return '<div class="why">Not assessed: '+escapeHtml(a.name||'')+' — '+
+          escapeHtml(a.reason||'')+'</div>';
+      }
+      const rows=(a.programs||[]).map(p=>{
+        const d=p.score_delta;
+        const dtxt=(d==null)?'—':((d>0?'+':'')+escapeHtml(String(d)));
+        const na=(p.newly_unavailable||[]).map(escapeHtml).join(', ')||'—';
+        const ok=!p.collapsed;
+        return '<div class="inert"><div class="det'+(ok?' on':'')+'">'+(ok?'✓ ':'⊘ ')+
+          escapeHtml(p.title||p.code)+' — score '+escapeHtml(String(p.score))+
+          ' (Δ '+dtxt+')'+(p.collapsed?' · collapses':'')+'</div>'+
+          '<div class="why">Newly unavailable: '+na+'</div></div>';
+      }).join('');
+      const kept=' (kept '+escapeHtml(String(a.sections_kept))+'/'+
+        escapeHtml(String(a.sections_total))+' sections)';
+      return '<div class="why">'+escapeHtml(a.name||'')+kept+':</div>'+rows;
+    }).join('');
+    const tr=eq.truncated||{};
+    const foot=tr.newly_unavailable?
+      '<p class="hint">'+escapeHtml(String(tr.newly_unavailable))+
+      ' more newly-unavailable required course(s) beyond those shown.</p>':'';
+    return '<div class="card"><h3>Equity / archetype exposure</h3>'+
+      '<p class="hint">'+escapeHtml(eq.label||'')+'</p>'+subs+foot+'</div>';
   }
   return '';
   } },

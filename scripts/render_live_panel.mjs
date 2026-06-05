@@ -44,9 +44,11 @@ const chromium = await loadChromium();
 
 // Maximal fixture: activates the reconciliation card, the buildability card
 // (incl. the F4 GE-inclusive geLine), the bottlenecks card, the grid_pressure
-// card, the demand_supply card, the inert_detectors card (active + inert mix via
-// DET_LABELS), AND the ge_coverage card. Field shapes mirror the engine /
-// build_live_workbook report exactly as the Python goldens use them.
+// card, the demand_supply card, the equity_exposure card (F6: a collapsing
+// archetype + a non-computable online archetype + truncation), the
+// inert_detectors card (active + inert mix via DET_LABELS), AND the ge_coverage
+// card. Field shapes mirror the engine / build_live_workbook report exactly as
+// the Python goldens use them.
 const res = {
   campus: 'LAMC',
   live_terms: [2268, 2272],
@@ -127,6 +129,26 @@ const res = {
                          note: 'review only — not a cut recommendation' }],
       sections_with_counts: 4, program_weighted: true, not_assessed: 1,
       truncated: { add_list: 3, capacity_slack: 0 },
+    },
+    equity_exposure: {
+      status: 'active', label: 'Archetype exposure PROXY label',
+      horizon_terms: [2268], by_design_count: 0,
+      truncated: { newly_unavailable: 2 },
+      archetypes: [
+        { key: 'evening', name: 'Evening-only (start ≥ 5:00 PM)',
+          computable: true, sections_kept: 1, sections_total: 3,
+          programs: [{ code: 'BIOL', title: 'Bio <AS>', score: 48,
+                       baseline_score: 71, score_delta: -23, collapsed: true,
+                       newly_unavailable: ['CHEM <1>', 'MATH 261'],
+                       still_available: 1, required_total: 3 }] },
+        { key: 'online', name: 'Online-only', computable: false,
+          reason: 'section modality (classType) is not present on the imported records' },
+        { key: 'two_day', name: 'Two days a week (≤ 2 meeting days)',
+          computable: true, sections_kept: 2, sections_total: 3,
+          programs: [{ code: 'BIOL', title: 'Bio <AS>', score: 71,
+                       baseline_score: 71, score_delta: 0, collapsed: false,
+                       newly_unavailable: [], still_available: 3, required_total: 3 }] },
+      ],
     },
   },
   inert_detectors: [
