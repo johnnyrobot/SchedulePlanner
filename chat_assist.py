@@ -111,14 +111,12 @@ def _clean_terms(value):
     return out[:6]
 
 
-# ----------------------------------------------------------------- grounding text
-def _context(results: dict) -> str:
-    """Rich, compact plain-text grounding: the template summary (programs +
-    diagnostics) plus what it omits — per-term plans, GE coverage, reconciliation,
-    and live build metadata. This is the single source of truth fed to the model."""
-    base = llm_assist._template_summary(results) or "No analysis is loaded yet."
-    extra = []
-
+# ----------------------------------------------------------------- grounding blocks
+# Each grounder is fn(results) -> list[str]: it returns the lines this block
+# contributes to the grounding text, or [] when the current _context would skip it.
+# All but _ground_build keep a leading "" element so the join inserts a blank line
+# between sections. To add a chat-grounding block, append ONE entry to GROUNDERS.
+def _ground_build(results: dict) -> list[str]:
     meta = []
     if results.get("campus"):
         meta.append(f"campus {results['campus']}")
@@ -129,8 +127,11 @@ def _context(results: dict) -> str:
         award = f" ({pi.get('award')})" if pi.get("award") else ""
         meta.append(f"program {pi.get('title', '')}{award}")
     if meta:
-        extra += ["BUILD: " + " · ".join(meta)]
+        return ["BUILD: " + " · ".join(meta)]
+    return []
 
+
+def _ground_term_plans(results: dict) -> list[str]:
     plan_lines = []
     for _code, p in (results.get("programs") or {}).items():
         for ck, label in (("full_time", "Full-time"), ("part_time", "Part-time")):
@@ -141,8 +142,11 @@ def _context(results: dict) -> str:
                     for t, v in sorted(c["plan"].items(), key=lambda kv: int(kv[0])))
                 plan_lines.append(f"- {p.get('title')} [{label}]: {terms}")
     if plan_lines:
-        extra += ["", "TERM-BY-TERM PLANS", *plan_lines]
+        return ["", "TERM-BY-TERM PLANS", *plan_lines]
+    return []
 
+
+def _ground_ge_coverage(results: dict) -> list[str]:
     ge = results.get("ge_coverage")
     if ge and ge.get("requested"):
         gl = [f"Pattern {ge.get('pattern')} (ASSIST status: {ge.get('assist_status')})."]
@@ -153,21 +157,30 @@ def _context(results: dict) -> str:
         if shared:
             gl.append("Met by major: "
                       + ", ".join(sorted({s.get("course", "") for s in shared})))
-        extra += ["", "GENERAL EDUCATION", *gl]
+        return ["", "GENERAL EDUCATION", *gl]
+    return []
 
+
+def _ground_reconciliation(results: dict) -> list[str]:
     rec = results.get("reconciliation")
     if rec:
         line = (f"{rec.get('matched_count')} program courses offered in the fetched "
                 f"terms, {rec.get('unmatched_count')} not offered.")
         if rec.get("unmatched"):
             line += " Not offered: " + ", ".join(rec["unmatched"]) + "."
-        extra += ["", "LIVE RECONCILIATION", line]
+        return ["", "LIVE RECONCILIATION", line]
+    return []
 
+
+def _ground_time_conflicts(results: dict) -> list[str]:
     tbc = (results.get("analysis") or {}).get("time_block_collisions") or []
     if tbc:
-        extra += ["", "TIME CONFLICTS (required courses that clash by meeting time)",
-                  *[f"- {f.get('summary')}" for f in tbc]]
+        return ["", "TIME CONFLICTS (required courses that clash by meeting time)",
+                *[f"- {f.get('summary')}" for f in tbc]]
+    return []
 
+
+def _ground_buildability(results: dict) -> list[str]:
     bld = (results.get("analysis") or {}).get("buildability")
     if bld and bld.get("status") == "active":
         bl = []
@@ -194,9 +207,12 @@ def _context(results: dict) -> str:
                       + "; ".join(bits) + ".")
         # The honest framing must travel with the numbers (structural proxy, not a
         # measured completion rate) so the assistant never overclaims.
-        extra += ["", "PROGRAM BUILDABILITY (structural-feasibility PROXY, NOT a measured "
-                  "completion rate)", *bl]
+        return ["", "PROGRAM BUILDABILITY (structural-feasibility PROXY, NOT a measured "
+                "completion rate)", *bl]
+    return []
 
+
+def _ground_bottlenecks(results: dict) -> list[str]:
     bnk = (results.get("analysis") or {}).get("bottlenecks")
     if bnk and bnk.get("status") == "active":
         trunc = bnk.get("truncated") or {}
@@ -222,9 +238,12 @@ def _context(results: dict) -> str:
                           "not shown.)")
         # Honest framing rides with the ranking so the assistant never overclaims:
         # it is a structural supply-vs-demand proxy, not a measured completion rate.
-        extra += ["", "CROSS-PROGRAM BOTTLENECKS (supply-vs-demand PROXY, NOT a measured "
-                  "completion rate)", *nl]
+        return ["", "CROSS-PROGRAM BOTTLENECKS (supply-vs-demand PROXY, NOT a measured "
+                "completion rate)", *nl]
+    return []
 
+
+def _ground_demand_supply(results: dict) -> list[str]:
     dsl = (results.get("analysis") or {}).get("demand_supply")
     if dsl and dsl.get("status") == "active":
         trunc = dsl.get("truncated") or {}
@@ -249,9 +268,12 @@ def _context(results: dict) -> str:
             dl.append(f"({dsl['not_assessed']} required course(s) had no seat counts "
                       "— excluded, not silently counted.)")
         # Honest framing rides with the ranking so the assistant never overclaims.
-        extra += ["", "DEMAND-VS-SUPPLY ACTION LIST (supply-vs-demand PROXY, NOT a "
-                  "measured completion rate)", *dl]
+        return ["", "DEMAND-VS-SUPPLY ACTION LIST (supply-vs-demand PROXY, NOT a "
+                "measured completion rate)", *dl]
+    return []
 
+
+def _ground_grid_pressure(results: dict) -> list[str]:
     gp = (results.get("analysis") or {}).get("grid_pressure")
     if gp and gp.get("status") == "active":
         conf = gp.get("conformance") or {}
@@ -270,9 +292,36 @@ def _context(results: dict) -> str:
         hidden = max(0, len(pairs) - 6) + ((gp.get("truncated") or {}).get("pairs") or 0)
         if hidden:
             gl.append(f"(+{hidden} more mutually-exclusive pair(s) not shown.)")
-        extra += ["", "GRID CONFORMANCE & MORNING COMPRESSION (structural PROXY, NOT "
-                  "a measured completion rate)", *gl]
+        return ["", "GRID CONFORMANCE & MORNING COMPRESSION (structural PROXY, NOT "
+                "a measured completion rate)", *gl]
+    return []
 
+
+# Append-only registry: source order is load-bearing (grid_pressure LAST,
+# demand_supply BEFORE it — do NOT sort by feature number). A future block adds
+# ONE entry here instead of editing _context.
+GROUNDERS = [
+    _ground_build,
+    _ground_term_plans,
+    _ground_ge_coverage,
+    _ground_reconciliation,
+    _ground_time_conflicts,
+    _ground_buildability,
+    _ground_bottlenecks,
+    _ground_demand_supply,
+    _ground_grid_pressure,
+]
+
+
+# ----------------------------------------------------------------- grounding text
+def _context(results: dict) -> str:
+    """Rich, compact plain-text grounding: the template summary (programs +
+    diagnostics) plus what it omits — per-term plans, GE coverage, reconciliation,
+    and live build metadata. This is the single source of truth fed to the model."""
+    base = llm_assist._template_summary(results) or "No analysis is loaded yet."
+    extra: list[str] = []
+    for ground in GROUNDERS:
+        extra += ground(results)
     return base + ("\n" + "\n".join(extra) if extra else "")
 
 
