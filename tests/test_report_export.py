@@ -362,3 +362,51 @@ def test_demand_supply_section_inert_note():
         "status": "inert", "label": "L", "reason": "no seat counts to assess"}}}
     html = report_export._demand_supply(results)
     assert "Not computed" in html and "no seat counts" in html
+
+
+def _equity_block():
+    return {"status": "active", "label": "Archetype exposure PROXY label",
+            "horizon_terms": [2268], "by_design_count": 0,
+            "truncated": {"newly_unavailable": 0},
+            "archetypes": [
+                {"key": "evening", "name": "Evening-only (start ≥ 5:00 PM)",
+                 "computable": True, "sections_kept": 1, "sections_total": 3,
+                 "programs": [{"code": "BIOL", "title": "Bio <AS>", "score": 48,
+                               "baseline_score": 71, "score_delta": -23,
+                               "collapsed": True,
+                               "newly_unavailable": ["CHEM <1>", "MATH 261"],
+                               "still_available": 1, "required_total": 3}]},
+                {"key": "online", "name": "Online-only", "computable": False,
+                 "reason": "section modality (classType) is not present"},
+            ]}
+
+
+def test_equity_exposure_section_renders_and_escapes():
+    results = {"analysis": {"equity_exposure": _equity_block()}}
+    html = report_export._equity_exposure(results)
+    assert "Equity / archetype exposure" in html
+    assert "Evening-only" in html
+    assert "Bio &lt;AS&gt;" in html and "Bio <AS>" not in html       # escaped
+    assert "CHEM &lt;1&gt;" in html                                   # course escaped
+    assert "PROXY" in html
+    assert "Not assessed" in html and "modality" in html             # online inert-archetype
+    assert "-23" in html or "−23" in html or "23" in html            # signed delta
+
+
+def test_equity_exposure_section_empty_when_absent():
+    assert report_export._equity_exposure({"analysis": {}}) == ""
+
+
+def test_equity_exposure_section_inert_note():
+    results = {"analysis": {"equity_exposure": {
+        "status": "inert", "label": "L",
+        "reason": "the baseline buildability audit is itself inert"}}}
+    html = report_export._equity_exposure(results)
+    assert "Not computed" in html and "baseline" in html
+
+
+def test_equity_exposure_truncation_footnote():
+    blk = _equity_block()
+    blk["truncated"]["newly_unavailable"] = 5
+    html = report_export._equity_exposure({"analysis": {"equity_exposure": blk}})
+    assert "5 more" in html
