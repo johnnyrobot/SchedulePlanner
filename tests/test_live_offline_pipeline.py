@@ -171,6 +171,46 @@ def test_analyze_live_buildability_folds_ge(lamc_routes, make_client, tmp_path):
     json.dumps(report)  # still JSON-serializable end to end
 
 
+def test_analyze_live_emits_evidence_appendix(lamc_routes, make_client, tmp_path):
+    """The F7 evidence appendix is attached to results['analysis']['evidence'] by
+    the post-detector pass — a PURE consumer, with NO detector entry (Q3) and the
+    sector-wide / not-this-campus caveat in its label."""
+    client = make_client(lamc_routes)
+    out = tmp_path / "live.xlsx"
+    report = build_live_workbook.analyze_live(
+        "LAMC", [2268], "Biology", str(out), client=client)
+
+    block = report["results"]["analysis"]["evidence"]
+    assert block["status"] in ("active", "inert")
+    # honesty caveat travels with it (sector-wide, NOT this campus)
+    assert "NOT a measurement of this campus" in block["label"]
+    assert block["claims"], "even the no-flags default carries positive context"
+    # every emitted claim is graded 'vetted' (the curated ✅ set only)
+    assert all(c["grade"] == "vetted" for c in block["claims"])
+    # F7 adds NO detector entry — it is static curated evidence, not a signal.
+    assert not any(d.get("detector") == "evidence"
+                   for d in report["inert_detectors"])
+    json.dumps(report)  # still JSON-serializable end to end
+
+
+def test_analyze_live_evidence_stays_outside_engine_run(lamc_routes, make_client,
+                                                        tmp_path):
+    """F7 writes only the JSON 'evidence' key — the engine.run analysis (the
+    workbook-derived dict) is untouched, so the determinism gate stays green."""
+    client = make_client(lamc_routes)
+    out = tmp_path / "live.xlsx"
+    report = build_live_workbook.analyze_live(
+        "LAMC", [2268], "Biology", str(out), client=client)
+    # The workbook the engine wrote knows nothing about 'evidence': re-running the
+    # engine over it yields the four engine-native analysis keys only.
+    engine_analysis = engine.run(str(out))["analysis"]
+    assert "evidence" not in engine_analysis
+    assert set(engine_analysis) == {
+        "rotation_gaps", "single_section", "modality_mismatch", "under_supply"}
+    # but the live report DOES carry the F7 appendix (added outside engine.run).
+    assert "evidence" in report["results"]["analysis"]
+
+
 def test_build_live_workbook_report_program_not_found(lamc_routes, make_client,
                                                        tmp_path):
     client = make_client(lamc_routes)

@@ -77,6 +77,7 @@ import buildability
 import cross_program_bottleneck
 import demand_supply
 import equity_exposure
+import evidence
 import grid_pressure
 import engine
 from sources import (assist, catalog_ge, course_master, elumen, elumen_client,
@@ -1288,6 +1289,13 @@ def analyze_live(campus, terms, program_query, out_path, *, client=None,
         if isinstance(report["results"], dict) and isinstance(report["results"].get("analysis"), dict):
             report["results"]["analysis"][d.analysis_key] = block
         report["inert_detectors"].append(d.entry(block))
+    # F7: map the now-fully-computed structural flags to curated ✅ research
+    # evidence (PURE consumer — reads results["analysis"][...] / ge_coverage, writes
+    # only this JSON key, OUTSIDE engine.run → the workbook bytes are untouched, so
+    # the determinism gate stays green). No detector entry: F7 is static curated
+    # evidence, not a data-derived detector signal.
+    if isinstance(report["results"], dict) and isinstance(report["results"].get("analysis"), dict):
+        report["results"]["analysis"]["evidence"] = evidence.evidence_appendix(report["results"])
     return report
 
 
