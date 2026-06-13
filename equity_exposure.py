@@ -29,7 +29,7 @@ Archetype computability is honest and path-dependent:
 from __future__ import annotations
 
 from buildability import audit_program, buildability_report
-from sources import timeblocks
+from sources import mapping, timeblocks
 
 # Evening = a section whose earliest meeting starts at/after 5:00 PM. The value
 # reuses grid_pressure.AFTERNOON_END (the codebase already calls >= 5 PM "evening";
@@ -47,7 +47,9 @@ EQUITY_LABEL = (
     "Archetype exposure — a STRUCTURAL availability PROXY, not a measured "
     "equity outcome. It re-runs the buildability audit using ONLY the offered "
     "sections that fit a constrained window (evening start ≥ 5 PM, online-only, "
-    "or ≤ 2 meeting days). 'Collapse' means the published required path is not "
+    "or ≤ 2 meeting days) — the GE-area schedulability folded into the score is "
+    "re-counted against the SAME window, so the score reflects both the major path "
+    "and GE under the constraint. 'Collapse' means the published required path is not "
     "schedulable from sections in that window — it does NOT claim that any real "
     "working / parent / URM student fails, drops out, or is harmed (no "
     "student-level outcome exists in any LACCD source). Online detection needs the "
@@ -141,6 +143,34 @@ _FILTERS = {
 
 
 # ----------------------------------------------------------------- assembly
+def _window_ge_coverage(ge_coverage, kept):
+    """Re-count each GE area's ``offered_eligible`` against ONLY the sections that
+    fit the constrained window (M3).
+
+    Each area carries ``offered_eligible_ids`` — the PRE-sweep list of offered
+    articulating course ids (from ge.resolve). We keep only those whose course is
+    offered in ``kept`` and re-count, so the windowed GE schedulability matches the
+    windowed major path; otherwise the constrained score would count GE as fully
+    available regardless of the window (overstating a GE-goal program's score).
+
+    Returns a fresh coverage (the input is never mutated). Fail-open and additive:
+    ``ge_coverage`` is None / has no areas -> returned unchanged; an area lacking
+    ``offered_eligible_ids`` (older coverage shape) passes through untouched."""
+    if not ge_coverage or not ge_coverage.get("areas"):
+        return ge_coverage
+    kept_courses = {mapping._norm(r.get("course", "")) for r in kept}
+    areas = []
+    for a in ge_coverage["areas"]:
+        ids = a.get("offered_eligible_ids")
+        if ids is None:
+            areas.append(a)
+            continue
+        windowed = [c for c in ids if mapping._norm(c) in kept_courses]
+        areas.append({**a, "offered_eligible": len(windowed),
+                      "offered_eligible_ids": windowed})
+    return {**ge_coverage, "areas": areas}
+
+
 def _missing_set(audit_block):
     """The set of required course ids reported missing by a buildability audit's
     single program scorecard (status-active block)."""
@@ -166,8 +196,13 @@ def _assess_archetype(programs, key, sections, baseline, *, ge_coverage,
         }
     predicate = _FILTERS[key]
     kept = [r for r in sections if predicate(r)]
+    # Window the GE coverage to the SAME constrained sections (M3): GE-area
+    # schedulability is re-counted against ``kept`` so the constrained score is not
+    # propped up by GE availability the window removed (the major path is already
+    # constrained via ``kept``). ge_coverage=None / legacy coverage -> unchanged.
+    windowed_ge = _window_ge_coverage(ge_coverage, kept)
     filtered = buildability_report(
-        programs, kept, ge_coverage=ge_coverage, active_courses=active_courses,
+        programs, kept, ge_coverage=windowed_ge, active_courses=active_courses,
         horizon_terms=horizon_terms, by_design=by_design)
 
     base_missing = _missing_set(baseline)
@@ -195,7 +230,7 @@ def _assess_archetype(programs, key, sections, baseline, *, ge_coverage,
             # Per-program self-contained re-audit on the filtered sections so an
             # inert filtered envelope still yields an honest score, not a None.
             fa = audit_program(_program_by_code(programs, code), kept,
-                               ge_coverage=ge_coverage, active_courses=active_courses,
+                               ge_coverage=windowed_ge, active_courses=active_courses,
                                horizon_terms=horizon_terms, by_design=by_design)
             score = fa.get("score")
             still = fa.get("available")
