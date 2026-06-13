@@ -326,6 +326,21 @@ def _ground_equity_exposure(results: dict) -> list[str]:
     return []
 
 
+def _ground_room(results: dict) -> list[str]:
+    a = results.get("analysis") or {}
+    conflicts = a.get("room_conflicts") or []
+    capacity = a.get("room_capacity") or []
+    # Only surface when there is something to say (like _ground_time_conflicts); an
+    # empty/absent result adds no line, never a silent drop of a real finding.
+    if not conflicts and not capacity:
+        return []
+    lines = [f"- {f.get('summary')}" for f in conflicts]
+    lines += [f"- {f.get('summary')}" for f in capacity]
+    return ["", "ROOM CONFLICTS & OVER-CAPACITY (physical room double-bookings, and "
+            "sections enrolled beyond room seats, from the section room + meeting time)",
+            *lines]
+
+
 def _ground_evidence(results: dict) -> list[str]:
     block = (results.get("analysis") or {}).get("evidence")
     if not block:
@@ -357,6 +372,7 @@ GROUNDERS = [
     _ground_demand_supply,
     _ground_grid_pressure,
     _ground_equity_exposure,
+    _ground_room,
     _ground_evidence,
 ]
 

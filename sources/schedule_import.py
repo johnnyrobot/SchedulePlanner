@@ -168,7 +168,7 @@ def load_schedule_export(path, *, sheet=None):
     has_comb = "Comb Sects ID" in df.columns
     has_counts = "Tot Enrl" in df.columns or "Cap Enrl" in df.columns
 
-    records, seen = [], set()
+    records, seen = [], {}
     rows_in = dropped_cancelled = with_counts = total_tot = 0
     for i, rd in enumerate(df.to_dict("records")):
         if _empty(rd.get("Term")) and _empty(rd.get(class_col)):
@@ -186,20 +186,33 @@ def load_schedule_export(path, *, sheet=None):
             term = parse_term(rd.get("Term"))
         except SourceDataError:
             raise
-        key = (term, crn)
-        if key in seen:
-            continue  # meeting-pattern grain: counts/room constant within a section
-        seen.add(key)
-
         days_raw = rd.get("DAYS") if not _empty(rd.get("DAYS")) else rd.get("Meetings")
-        rec = {
-            "term": term,
-            "course": _course_id(rd),
-            "class_nbr": crn,
+        block = {
             "days": norm_days(days_raw),
             "times": _times(rd),
             "room": _first(rd, _ROOM_COLUMNS),
             "facil_id": str(rd.get("Facil ID") or "").strip(),
+        }
+        key = (term, crn)
+        if key in seen:
+            # Secondary meeting pattern for an already-captured section (same Term +
+            # Class Nbr, different days/times/room): KEEP the block (M1 — never silently
+            # drop it). counts / comb / room of the first row stand; the meeting block
+            # is additive and only the outside-engine detectors read it.
+            seen[key]["meetings"].append(block)
+            continue
+
+        rec = {
+            "term": term,
+            "course": _course_id(rd),
+            "class_nbr": crn,
+            "days": block["days"],
+            "times": block["times"],
+            "room": block["room"],
+            "facil_id": block["facil_id"],
+            # All meeting blocks (>=1); the flat days/times/room above are block[0],
+            # so the engine workbook is byte-identical. See timeblocks.section_meeting.
+            "meetings": [block],
             # FF5 CAPTURE-ONLY: weeks-of-instruction + session date range survive
             # so a future calendar/duration check can read them (the live fetch
             # already carries these keys). No consumer reads them yet.
@@ -219,6 +232,7 @@ def load_schedule_export(path, *, sheet=None):
             else:
                 with_counts += 1
                 total_tot += rec["Tot Enrl"]
+        seen[key] = rec
         records.append(rec)
 
     summary = {
@@ -228,6 +242,10 @@ def load_schedule_export(path, *, sheet=None):
         "terms": sorted({r["term"] for r in records}),
         "with_counts": with_counts,
         "total_tot_enrl": total_tot,
+        # Honest count of sections that collapsed >1 meeting-pattern row into one
+        # section record (the secondary blocks are kept in record["meetings"], not
+        # silently dropped). 0 when every section meets on a single pattern.
+        "multi_block_sections": sum(1 for r in records if len(r.get("meetings", [])) > 1),
     }
     return records, summary
 

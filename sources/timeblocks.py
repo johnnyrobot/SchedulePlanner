@@ -89,6 +89,56 @@ def parse_meeting(days, times):
     return [(d, span[0], span[1]) for d in parse_days(days)]
 
 
+def section_meeting(record):
+    """Full ``(day, start, end)`` block list for a SECTION, unioning EVERY meeting
+    block it carries.
+
+    Reads ``record['meetings']`` — the list of ``{days, times, …}`` block dicts the
+    live and import sources now capture — when present; otherwise falls back to the
+    flat ``record['days']`` / ``record['times']`` (synthetic / pre-capture records).
+    Use this OUTSIDE engine.run: the engine still reads the single workbook Days/Times
+    column (the FIRST block), so this never changes the byte-identical solve. It exists
+    because a section can meet on more than one day/time pattern and ``meetings[1:]``
+    used to be silently dropped at ingest, blinding the conflict detectors.
+    """
+    blocks = record.get("meetings")
+    if blocks:
+        out = []
+        for b in blocks:
+            out.extend(parse_meeting(b.get("days", ""), b.get("times", "")))
+        return out
+    return parse_meeting(record.get("days", ""), record.get("times", ""))
+
+
+def iter_section_blocks(record):
+    """Yield ``(block, meeting)`` for each meeting block of a section, so room-level
+    detectors can pair each physical room with its OWN time block (a section may
+    occupy a different room in each block). Falls back to the flat record as a single
+    synthetic block for pre-capture / synthetic records (no ``meetings`` key)."""
+    blocks = record.get("meetings")
+    if blocks:
+        for b in blocks:
+            yield b, parse_meeting(b.get("days", ""), b.get("times", ""))
+    else:
+        yield record, parse_meeting(record.get("days", ""), record.get("times", ""))
+
+
+def section_days(record):
+    """Distinct meeting days across ALL of a section's blocks, order-preserving, so a
+    'two days a week' style check counts every meeting pattern (M1). Falls back to the
+    flat ``record['days']`` for pre-capture / synthetic records (no ``meetings`` key)."""
+    blocks = record.get("meetings")
+    if not blocks:
+        return parse_days(record.get("days", ""))
+    seen, out = set(), []
+    for b in blocks:
+        for d in parse_days(b.get("days", "")):
+            if d not in seen:
+                seen.add(d)
+                out.append(d)
+    return out
+
+
 def _blocks_overlap(a, b):
     # (day, start, end) tuples: same day and time intervals intersect.
     return a[0] == b[0] and a[1] < b[2] and b[1] < a[2]

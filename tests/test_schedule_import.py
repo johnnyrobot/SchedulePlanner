@@ -46,8 +46,11 @@ def test_norm_days_maps_thursday(raw, canon):
 def test_csv_shape_records_and_summary():
     records, summary = load_schedule_export(CSV)
     by = {r["class_nbr"]: r for r in records}
+    # multi_block_sections=1: one section in the fixture meets on two patterns; its
+    # secondary meeting row is now KEPT as a 2nd block (M1) instead of silently dropped.
     assert summary == {"rows_in": 6, "sections_out": 4, "dropped_cancelled": 1,
-                       "terms": [2258], "with_counts": 4, "total_tot_enrl": 128}
+                       "terms": [2258], "with_counts": 4, "total_tot_enrl": 128,
+                       "multi_block_sections": 1}
     r = by["30001"]
     assert r["course"] == "ACCTG 001" and r["term"] == 2258
     assert r["days"] == "MW" and r["times"] == "9:00 AM - 10:25 AM"
@@ -118,6 +121,44 @@ def test_single_session_dates_column_is_captured(tmp_path):
     r = load_schedule_export(str(exp))[0][0]
     assert r["woi"] == "8"
     assert r["dates"] == "10/20/2025 - 12/14/2025"
+
+
+def test_secondary_meeting_rows_are_captured_not_dropped(tmp_path):
+    """A section listed on TWO meeting-pattern rows (same Term+Class Nbr, different
+    DAYS/times/room) keeps BOTH blocks (M1) instead of silently dropping the 2nd; the
+    summary surfaces the merged count so the collapse is honest, and the flat
+    days/times stay the FIRST row so the engine workbook is byte-identical."""
+    exp = tmp_path / "multi.csv"
+    pd.DataFrame([
+        {"Term": "2248", "Subject": "BIOLOGY", "Catalog": "3", "Class Nbr": "20001",
+         "Class Status": "Active", "DAYS": "MW", "Mtg Start": "10:00:00",
+         "Mtg End": "11:25:00", "Room Descr": "INST 2007"},
+        {"Term": "2248", "Subject": "BIOLOGY", "Catalog": "3", "Class Nbr": "20001",
+         "Class Status": "Active", "DAYS": "F", "Mtg Start": "14:00:00",
+         "Mtg End": "16:50:00", "Room Descr": "AMP 101"},
+    ]).to_csv(exp, index=False)
+    records, summary = load_schedule_export(str(exp))
+    assert len(records) == 1                       # still ONE section
+    r = records[0]
+    assert r["days"] == "MW" and r["times"] == "10:00 AM - 11:25 AM"   # flat = first row
+    assert r["room"] == "INST 2007"
+    assert len(r["meetings"]) == 2                 # both meeting blocks kept
+    assert r["meetings"][1]["days"] == "F"
+    assert r["meetings"][1]["times"] == "2:00 PM - 4:50 PM"
+    assert r["meetings"][1]["room"] == "AMP 101"
+    assert summary["multi_block_sections"] == 1    # honest count of merged rows
+
+
+def test_single_meeting_section_reports_zero_multi_block(tmp_path):
+    exp = tmp_path / "single.csv"
+    pd.DataFrame([{
+        "Term": "2248", "Subject": "BIOLOGY", "Catalog": "3", "Class Nbr": "20002",
+        "Class Status": "Active", "DAYS": "MW", "Mtg Start": "10:00:00",
+        "Mtg End": "11:25:00", "Room Descr": "INST 2007",
+    }]).to_csv(exp, index=False)
+    records, summary = load_schedule_export(str(exp))
+    assert len(records[0]["meetings"]) == 1
+    assert summary["multi_block_sections"] == 0
 
 
 # --- error paths -----------------------------------------------------------
