@@ -259,3 +259,18 @@ def test_resolve_exposes_pre_sweep_offered_eligible():
     assert "no_offering" in by_area[starved[0]]["flags"]    # post-sweep would false-flag
     assert by_area[starved[0]]["offered_eligible"] == 1     # pre-sweep tells the truth
     assert by_area[claimed[0]]["offered_eligible"] == 1
+
+
+def test_resolve_exposes_pre_sweep_offered_eligible_ids():
+    """coverage['areas'][i]['offered_eligible_ids'] carries the PRE-sweep LIST of
+    offered articulating course ids (not just the count), so a windowed re-audit
+    (F6 equity) can re-count GE schedulability against a constrained section subset
+    without re-running the resolver."""
+    pattern = {"areas": [{"code": "3A", "title": "Arts", "count": 1, "units_min": 3}]}
+    assist = {"3A": {"title": "Arts", "courses": ["ART 101", "ART 105"]}}
+    offered = {"ART 101", "ART 105"}
+    _rows, cov = ge.resolve(pattern, assist, offered,
+                            {"courses": [], "ge_requirements": []}, concrete_threshold=3)
+    area = next(a for a in cov["areas"] if a["area"] == "3A")
+    assert area["offered_eligible"] == 2
+    assert sorted(area["offered_eligible_ids"]) == ["ART 101", "ART 105"]
