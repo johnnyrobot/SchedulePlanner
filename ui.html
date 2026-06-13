@@ -1154,7 +1154,8 @@ function badge(p){
 
 function cohortCard(label, c){
   if(!c) return '<div class="cohort"><div class="lab">'+label+'</div><div class="big">—</div></div>';
-  const yrs=Math.ceil(c.terms_used/2);
+  const tpy=c.terms_per_year||2;   // cadence length (2 Fall/Spring, 3 w/ Summer); engine.run supplies it
+  const yrs=Math.ceil(c.terms_used/tpy);
   const terms=Object.entries(c.plan).map(([t,cs])=>
     '<div class="term"><b>T'+t+'</b> '+cs.map(escapeHtml).join(', ')+'</div>').join('');
   const fix=(c.fixes&&c.fixes.length)?
