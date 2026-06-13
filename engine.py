@@ -180,22 +180,35 @@ def build_model(sec, cat, prog, llm=None):
     return active, course_seasons, units, prereqs
 
 
-def _hard_conflict_pairs(sec):
+def _hard_conflict_pairs(sec, relevant=None):
     """Course pairs that can NEVER be co-scheduled — every section of one overlaps
     every section of the other — derived from the OPTIONAL Days/Times columns.
 
     Returns a set of ``frozenset({course_a, course_b})``. Empty when the workbook
     carries no meeting data (no Days/Times columns), so the solver stays
     byte-identical to the pre-feature behavior.
+
+    ``relevant`` optionally restricts the scan to a set of course ids — the union
+    of every program's schedulable items. ``solve_cohort`` already discards any
+    pair whose endpoints are not BOTH schedulable items of the program it is
+    solving, so a pair touching a course no program can schedule is never
+    applied: skipping it here is byte-identical, while avoiding an O(N^2) sweep
+    over the thousands of courses an institutional ("ALL") workbook carries.
+    ``None`` scans every active course (legacy behavior). Meeting-list order does
+    not matter — ``pairwise_hard_conflict`` is a symmetric AND over all section
+    pairs — so the column-wise build below is equivalent to the old per-row one.
     """
     if "Days" not in sec.columns or "Times" not in sec.columns:
         return set()
     from sources import timeblocks
     active = sec[sec["Class Status"] == "Active"]
+    cls_str = active["CLASS"].astype(str)
+    if relevant is not None:
+        keep = cls_str.isin(relevant)
+        active, cls_str = active[keep], cls_str[keep]
     by_course = {}
-    for _, r in active.iterrows():
-        by_course.setdefault(str(r["CLASS"]), []).append(
-            timeblocks.parse_meeting(r.get("Days", ""), r.get("Times", "")))
+    for cls, days, times in zip(cls_str, active["Days"], active["Times"]):
+        by_course.setdefault(cls, []).append(timeblocks.parse_meeting(days, times))
     courses = sorted(by_course)
     pairs = set()
     for i in range(len(courses)):
@@ -227,8 +240,18 @@ def analyze(active, prog, n_terms):
     # live waitlist signal even with no IR enrollment counts; absent (demo / IR
     # workbooks) under_supply falls back to the Wait Tot headcount alone.
     has_avail = "Avail Status" in active.columns
+    # Group ONCE instead of a full-frame boolean scan per required course
+    # (O(courses x sections) -> O(sections)). Filter to the required courses
+    # FIRST so a program needing 40 of thousands of offered courses does not
+    # materialize a sub-frame per OFFERED course; non-required groups are never
+    # read. Each remaining group is exactly the rows ``active[active["CLASS"] ==
+    # cid]`` would select, in the same row order, so every count is
+    # byte-identical. An absent required course falls back to an empty
+    # same-columns frame (read-only below).
+    groups = dict(tuple(active[active["CLASS"].isin(required)].groupby("CLASS")))
+    empty = active.iloc[0:0]
     for cid in sorted(required):
-        d = active[active["CLASS"] == cid]
+        d = groups.get(cid, empty)
         offered = d["Term"].nunique()
         if offered < n_terms:
             out["rotation_gaps"].append({"course": cid, "offered": int(offered),
@@ -424,8 +447,24 @@ def run(path: str, llm=None) -> dict:
     active, course_seasons, units, prereqs = build_model(sec, cat, prog, llm)
     ge_rows = _load_ge(path)
     n_terms = sec["Term"].nunique()
+    # The conflict scan only needs courses some program can actually schedule:
+    # the union over programs of (prereq closure of the major) + concrete GE
+    # candidates. This mirrors solve_cohort's ``item_ids`` exactly, so every
+    # APPLIED constraint is unchanged while the O(N^2) sweep skips the rest.
+    # INVARIANT: relevant_items holds the SAME raw Course ID values solve_cohort's
+    # item_ids use, and _hard_conflict_pairs compares str(CLASS) against them just
+    # as solve_cohort's ``a in item_ids`` guard does — so the scoping filter can
+    # never drop a pair the solver would apply (true even for non-string ids).
+    # Keep these two membership bases in lock-step if either side's typing changes.
+    relevant_items = set()
+    for pcode in prog["Program Code"].unique():
+        relevant_items |= closure(
+            list(prog[prog["Program Code"] == pcode]["Course ID"]), prereqs)
+        for r in ge_rows:
+            if r["program_code"] == pcode and r["resolution"] == "concrete":
+                relevant_items.update(r["candidates"])
     # Empty unless the workbook carries Days/Times columns -> solver byte-identical.
-    hard_conflicts = _hard_conflict_pairs(sec)
+    hard_conflicts = _hard_conflict_pairs(sec, relevant_items)
 
     results = {"terms_in_data": int(n_terms),
                "analysis": analyze(active, prog, n_terms),
