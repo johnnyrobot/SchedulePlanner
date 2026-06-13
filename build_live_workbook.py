@@ -78,6 +78,7 @@ import cross_program_bottleneck
 import demand_supply
 import equity_exposure
 import evidence
+import gateway_momentum
 import grid_pressure
 import engine
 from sources import (assist, catalog_ge, course_master, elumen, elumen_client,
@@ -899,7 +900,35 @@ def _equity_exposure_detector_entry(block):
     }
 
 
-# Append-only registry of the feature-analysis detectors (F1+F4, F2, F5, F3, F6).
+def _gateway_momentum_detector_entry(block):
+    """Honest active/inert entry for the first-year gateway-momentum detector (F8;
+    mirrors ``_equity_exposure_detector_entry``). Inert carries the report's own
+    reason + remedy (no sections, or neither English/Math gateway identifiable).
+    ``found`` counts the gateways that are schedulable in the first-year window."""
+    if not block or block.get("status") != "active":
+        return {
+            "detector": "gateway_momentum", "status": "inert",
+            "remedy": ((block or {}).get("remedy")
+                       or "supply a program whose GE requirements name a "
+                          "transfer-level English/Math course, or a required "
+                          "ENGL/MATH major course"),
+            "reason": ((block or {}).get("reason")
+                       or "no gateway course identifiable / no offered sections"),
+        }
+    found = sum(1 for k in ("english", "math")
+                if (block.get(k) or {}).get("schedulable_year1"))
+    return {
+        "detector": "gateway_momentum", "status": "active",
+        "found": found,
+        "reason": ("checks whether each program's English-Composition (GE Area 1A) "
+                   "and Math (Area 2) gateway course can be SCHEDULED in the first "
+                   "year of the analyzed schedule — an OFFERING proxy, not a measured "
+                   "completion rate; a gateway found via the ENGL/MATH subject "
+                   "fallback is discipline-level, not verified transfer-level"),
+    }
+
+
+# Append-only registry of the feature-analysis detectors (F1+F4, F2, F5, F3, F6, F8).
 # Each entry pairs a results["analysis"] key with a compute fn(ctx) -> block and
 # the block's inert-detector entry helper; analyze_live runs them in ONE loop
 # below the five heterogeneous detectors (modality/prereq/ge/time_block/room),
@@ -939,6 +968,11 @@ ANALYSIS_DETECTORS = (
             [c.program], c.sections, ge_coverage=c.ge_coverage,
             active_courses=c.active_courses, by_design=c.by_design),
         _equity_exposure_detector_entry),
+    AnalysisDetector(
+        "gateway_momentum",
+        lambda c: gateway_momentum.gateway_momentum_report(
+            c.sections, program=c.program),
+        _gateway_momentum_detector_entry),
 )
 
 

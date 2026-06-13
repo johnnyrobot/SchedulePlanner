@@ -107,7 +107,7 @@ def test_build_live_workbook_emits_structured_report(lamc_routes, make_client,
         "modality_mismatch", "prerequisite_ordering", "ge_scheduling",
         "time_block_conflict", "room_conflict", "program_buildability",
         "program_bottleneck", "grid_pressure", "demand_supply",
-        "equity_exposure"}
+        "equity_exposure", "gateway_momentum"}
     for d in inert:
         if d["detector"] == "ge_scheduling" or d.get("status") == "active":
             continue  # ge_scheduling / active detectors carry "reason" but no "remedy"
@@ -562,6 +562,38 @@ def test_analyze_live_equity_exposure_active_online_computable(tmp_path):
     assert "ENGLISH 101" not in p["newly_unavailable"]  # online survives
     det = next(d for d in report["inert_detectors"] if d["detector"] == "equity_exposure")
     assert det["status"] == "active"
+    json.dumps(report)
+
+
+# --- F8: first-year gateway momentum -----------------------------------------
+def test_analyze_live_gateway_momentum_active_identifies_english_and_math(tmp_path):
+    """End-to-end through the registry: a program with required ENGL/MATH courses
+    offered in the first-year window -> F8 active, both gateways identified via the
+    major-subject fallback and schedulable, with an active inert-detector entry."""
+    records = [
+        {"course": "ENGLISH 101", "term": 2268, "class_nbr": str(i),
+         "days": "MW", "times": "9:00 AM - 10:15 AM", "units": 3} for i in (1, 2)
+    ] + [
+        {"course": "MATH 227", "term": 2268, "class_nbr": str(i),
+         "days": "TTh", "times": "11:00 AM - 12:15 PM", "units": 5} for i in (3, 4)
+    ]
+    program = {"code": "TEST", "title": "Test", "award": "AS", "courses": [
+        {"course_id": "ENGLISH 101", "recommended_semester": 1},
+        {"course_id": "MATH 227", "recommended_semester": 1}], "major_choices": []}
+    out = tmp_path / "gw.xlsx"
+    report = build_live_workbook.analyze_live(
+        "LAMC", [2268], "(test)", str(out),
+        sections_override=records, program_override=program)
+    block = report["results"]["analysis"]["gateway_momentum"]
+    assert block["status"] == "active"
+    assert block["english"]["course"] == "ENGLISH 101"
+    assert block["english"]["via"] == "major_subject"
+    assert block["english"]["schedulable_year1"] is True
+    assert block["math"]["course"] == "MATH 227"
+    assert block["both_gateways_year1"] is True
+    assert "PROXY" in block["label"]
+    det = next(d for d in report["inert_detectors"] if d["detector"] == "gateway_momentum")
+    assert det["status"] == "active" and det["found"] == 2
     json.dumps(report)
 
 
