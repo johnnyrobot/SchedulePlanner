@@ -40,6 +40,36 @@ def test_fixtures_exist_and_are_shape_faithful(lamc_routes):
                for e in pmap["pathwayElements"])
 
 
+def test_live_workbook_carries_multiblock_meetings_no_instructor(
+        lamc_routes, make_client, tmp_path):
+    """The live pipeline carries a section's FULL meeting footprint into the engine
+    workbook. Multi-pattern sections (the LAMC Fall fixture has several — e.g.
+    BIOLOGY 003) get a non-empty ``Meetings`` cell, so the engine separates two
+    required courses that clash only on a SECONDARY block — the gated multi-block
+    wiring, proven end-to-end through write_workbook (not just the synthetic engine
+    unit test).
+
+    PRIVACY DOCTRINE: the column encodes days/times ONLY. The raw blocks carry
+    instructor/room; those must NOT be reintroduced into the workbook — asserted
+    structurally (each encoded block has exactly the keys ``{days, times}``)."""
+    import pandas as pd
+    client = make_client(lamc_routes)
+    sections = schedule.fetch_sections("LAMC", [2268], client=client)
+    program = pm.fetch_program("LAMC", "Biology", client=client)
+    out = tmp_path / "live_meetings.xlsx"
+    mapping.write_workbook(sections, program, str(out))
+
+    sec = pd.read_excel(out, sheet_name="sections")
+    assert "Meetings" in sec.columns
+    nonempty = [str(c) for c in sec["Meetings"].fillna("") if str(c).strip()]
+    assert nonempty, "expected >=1 multi-block section to carry a Meetings cell"
+    for cell in nonempty:
+        blocks = json.loads(cell)
+        assert len(blocks) >= 2, "a non-empty Meetings cell means a multi-block section"
+        # privacy + shape: days/times ONLY, never instructor / room / facility id
+        assert all(set(b) == {"days", "times"} for b in blocks)
+
+
 def test_full_chain_offline_through_engine(lamc_routes, make_client, tmp_path):
     client = make_client(lamc_routes)
 
