@@ -501,3 +501,25 @@ def test_solver_schedules_summer_only_course(tmp_path):
     cadence = engine._cadence({"Fall", "Summer"})
     assert engine.term_season(term_of["B 1"], cadence) == "Summer"
     assert engine.term_season(term_of["A 1"], cadence) == "Fall"
+
+
+def test_solve_cohort_surfaces_terms_per_year(tmp_path):
+    """Every cohort result carries ``terms_per_year`` = len(cadence) — the exact
+    cadence length the solver used to scale the horizon — so the report/UI can turn
+    abstract ``terms_used`` into calendar years for ANY cadence, not a hardcoded 2.
+
+    A Fall+Spring+Summer dataset is a 3-season cadence; a Fall+Spring one is the
+    legacy 2-season cadence."""
+    def tpy(terms):
+        rows = [{"Term": t, "CLASS": cls, "Class Status": "Active",
+                 "Cap Enrl": 0, "Tot Enrl": 0, "Wait Tot": 0}
+                for t in terms for cls in ("A 1", "B 1")]
+        wb = tmp_path / f"cad_{'_'.join(map(str, terms))}.xlsx"
+        _write_wb(str(wb), rows)
+        return engine.run(str(wb))["programs"]["P"]["cohorts"]
+
+    three = tpy((2248, 2252, 2256))            # Fall, Spring, Summer
+    assert three["full_time"]["terms_per_year"] == 3
+    assert three["part_time"]["terms_per_year"] == 3
+    two = tpy((2248, 2252))                     # Fall, Spring (legacy)
+    assert two["full_time"]["terms_per_year"] == 2

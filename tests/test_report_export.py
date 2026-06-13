@@ -112,6 +112,36 @@ def test_export_report_before_analysis_returns_error(tmp_path):
     assert not (tmp_path / "never.html").exists()
 
 
+def _one_program_results(cohort):
+    return {
+        "terms_in_data": cohort.get("terms_used", 0),
+        "analysis": {"rotation_gaps": [], "single_section": [],
+                     "modality_mismatch": [], "under_supply": []},
+        "programs": {"P": {"title": "P", "official_map_issues": [],
+                           "cohorts": {"full_time": cohort, "part_time": None}}},
+    }
+
+
+def test_report_years_uses_terms_per_year_not_hardcoded_two():
+    """The "~N years" label divides terms_used by the cohort's ``terms_per_year``
+    (the cadence length the solver used), not a hardcoded 2. A 6-term plan on a
+    3-season (Fall/Spring/Summer) cadence is ~2 years — NOT the "~3 years" the old
+    ``ceil(terms_used / 2)`` produced."""
+    doc = report_export.render_report(_one_program_results(
+        {"terms_used": 6, "terms_per_year": 3, "plan": {}, "fixes": []}))
+    assert "~2 years" in doc
+    assert "~3 year" not in doc
+
+
+def test_report_years_defaults_to_two_when_terms_per_year_absent():
+    """Backward-compatible: a cohort dict WITHOUT ``terms_per_year`` (a pre-feature
+    or hand-built dict) falls back to the legacy 2-season divisor, so existing
+    2-season plans and goldens render identically."""
+    doc = report_export.render_report(_one_program_results(
+        {"terms_used": 6, "plan": {}, "fixes": []}))
+    assert "~3 years" in doc          # ceil(6/2) == 3, legacy behavior preserved
+
+
 def test_report_renders_time_conflicts_block():
     """A time_block_collisions finding in analysis renders in the Supply-diagnostics card."""
     results = {
