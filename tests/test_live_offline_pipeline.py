@@ -107,7 +107,7 @@ def test_build_live_workbook_emits_structured_report(lamc_routes, make_client,
         "modality_mismatch", "prerequisite_ordering", "ge_scheduling",
         "time_block_conflict", "room_conflict", "program_buildability",
         "program_bottleneck", "grid_pressure", "demand_supply",
-        "equity_exposure", "gateway_momentum"}
+        "equity_exposure", "gateway_momentum", "corequisite_availability"}
     for d in inert:
         if d["detector"] == "ge_scheduling" or d.get("status") == "active":
             continue  # ge_scheduling / active detectors carry "reason" but no "remedy"
@@ -595,6 +595,57 @@ def test_analyze_live_gateway_momentum_active_identifies_english_and_math(tmp_pa
     det = next(d for d in report["inert_detectors"] if d["detector"] == "gateway_momentum")
     assert det["status"] == "active" and det["found"] == 2
     json.dumps(report)
+
+
+# --- F9: AB1705 corequisite co-availability ----------------------------------
+def test_analyze_live_corequisite_availability_active_with_injected_coreq(tmp_path):
+    """End-to-end through the registry: a transfer-level gateway whose injected
+    corequisite is co-offered in the same first-year term -> F9 active, co-offering
+    detected, with an active inert-detector entry. The coreq map is injected (the
+    live path derives the same shape from eLumen --elumen-live)."""
+    records = [
+        {"course": "MATH 227", "term": 2268, "class_nbr": str(i),
+         "days": "MW", "times": "9:00 AM - 10:15 AM", "units": 5} for i in (1, 2)
+    ] + [
+        {"course": "MATH 227L", "term": 2268, "class_nbr": str(i),
+         "days": "TTh", "times": "11:00 AM - 12:15 PM", "units": 1} for i in (3, 4)
+    ]
+    program = {"code": "TEST", "title": "Test", "award": "AS", "courses": [
+        {"course_id": "MATH 227", "recommended_semester": 1}], "major_choices": []}
+    out = tmp_path / "coreq.xlsx"
+    report = build_live_workbook.analyze_live(
+        "LAMC", [2268], "(test)", str(out),
+        sections_override=records, program_override=program,
+        elumen_coreq={"MATH 227": ["MATH 227L"]})
+    block = report["results"]["analysis"]["corequisite_availability"]
+    assert block["status"] == "active"
+    assert block["math"]["course"] == "MATH 227"
+    assert block["math"]["has_corequisite"] is True
+    assert block["math"]["co_offered_year1"] is True
+    assert block["math"]["co_offered_terms"] == ["2268"]
+    assert "STRUCTURE proxy" in block["label"]
+    det = next(d for d in report["inert_detectors"]
+               if d["detector"] == "corequisite_availability")
+    assert det["status"] == "active" and det["found"] == 1
+    json.dumps(report)
+
+
+def test_analyze_live_corequisite_availability_inert_without_coreq_map(tmp_path):
+    """The default path supplies no corequisite linkage (coreqs are excluded from
+    the prereq fetch) -> F9 inert with a remedy naming --elumen-live."""
+    records = [{"course": "MATH 227", "term": 2268, "class_nbr": "1",
+                "days": "MW", "times": "9:00 AM - 10:15 AM", "units": 5}]
+    program = {"code": "TEST", "title": "Test", "award": "AS", "courses": [
+        {"course_id": "MATH 227", "recommended_semester": 1}], "major_choices": []}
+    out = tmp_path / "coreq_inert.xlsx"
+    report = build_live_workbook.analyze_live(
+        "LAMC", [2268], "(test)", str(out),
+        sections_override=records, program_override=program)
+    block = report["results"]["analysis"]["corequisite_availability"]
+    assert block["status"] == "inert"
+    det = next(d for d in report["inert_detectors"]
+               if d["detector"] == "corequisite_availability")
+    assert det["status"] == "inert" and "elumen-live" in det["remedy"].lower()
 
 
 def test_analyze_import_equity_online_inert_no_modality(tmp_path):
