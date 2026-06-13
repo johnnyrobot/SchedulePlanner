@@ -74,6 +74,7 @@ from types import SimpleNamespace
 import httpx
 
 import buildability
+import corequisite_availability
 import cross_program_bottleneck
 import demand_supply
 import equity_exposure
@@ -928,7 +929,35 @@ def _gateway_momentum_detector_entry(block):
     }
 
 
-# Append-only registry of the feature-analysis detectors (F1+F4, F2, F5, F3, F6, F8).
+def _corequisite_availability_detector_entry(block):
+    """Honest active/inert entry for the AB1705 corequisite co-availability detector
+    (F9; mirrors ``_gateway_momentum_detector_entry``). Inert carries the report's
+    own reason + remedy (no sections, no coreq linkage supplied — the default path,
+    no gateway, or no corequisite for the gateway). ``found`` counts the identified
+    gateways whose corequisite is co-offered in a first-year term."""
+    if not block or block.get("status") != "active":
+        return {
+            "detector": "corequisite_availability", "status": "inert",
+            "remedy": ((block or {}).get("remedy")
+                       or "run with --elumen-live so the catalog corequisite "
+                          "(itemType=Co-Requisite) leaves are captured"),
+            "reason": ((block or {}).get("reason")
+                       or "no corequisite linkage / no gateway / no offered sections"),
+        }
+    found = sum(1 for k in ("english", "math")
+                if (block.get(k) or {}).get("co_offered_year1"))
+    return {
+        "detector": "corequisite_availability", "status": "active",
+        "found": found,
+        "reason": ("checks whether a transfer-level English (GE Area 1A) / Math "
+                   "(Area 2) gateway's catalog corequisite (itemType=Co-Requisite) is "
+                   "scheduled in the SAME first-year term — a co-OFFERING STRUCTURE "
+                   "proxy, NOT a measured or causal outcome (per AB1705, direct "
+                   "placement was the dominant lever; corequisite is one supported form)"),
+    }
+
+
+# Append-only registry of the feature-analysis detectors (F1+F4, F2, F5, F3, F6, F8, F9).
 # Each entry pairs a results["analysis"] key with a compute fn(ctx) -> block and
 # the block's inert-detector entry helper; analyze_live runs them in ONE loop
 # below the five heterogeneous detectors (modality/prereq/ge/time_block/room),
@@ -973,6 +1002,11 @@ ANALYSIS_DETECTORS = (
         lambda c: gateway_momentum.gateway_momentum_report(
             c.sections, program=c.program),
         _gateway_momentum_detector_entry),
+    AnalysisDetector(
+        "corequisite_availability",
+        lambda c: corequisite_availability.corequisite_availability_report(
+            c.sections, program=c.program, coreq_map=c.coreq_map),
+        _corequisite_availability_detector_entry),
 )
 
 
@@ -985,7 +1019,8 @@ def analyze_live(campus, terms, program_query, out_path, *, client=None,
                  catalog_pdf=None, odl_json=None, facility=None,
                  active_courses=None, program_demand=None,
                  demand_program_ids=None,
-                 sections_override=None, program_override=None, by_design=None):
+                 sections_override=None, program_override=None, by_design=None,
+                 elumen_coreq=None):
     """Run the full live pipeline and return a structured, JSON-serializable report.
 
     The report carries the reconciliation (matched/unmatched program courses)
@@ -1131,6 +1166,11 @@ def analyze_live(campus, terms, program_query, out_path, *, client=None,
     elumen_source = None
     elumen_live_active = False
     elumen_coverage = None
+    # F9 corequisite linkage: an injected map (offline/test) by default; the live
+    # path DERIVES it from the SAME fetched records below (coreqs ride the same
+    # fetch — itemType=Co-Requisite leaves the prereq filter drops). The FIXTURE
+    # path carries no requisites tree, so it leaves this as-injected (usually None).
+    coreq_map = elumen_coreq
     if elumen_live:
         # The course-id universe we can JOIN a prereq onto: every section course
         # plus every program course, normalized the same way the catalog is.
@@ -1168,6 +1208,8 @@ def analyze_live(campus, terms, program_query, out_path, *, client=None,
         if prereq_max_clauses is not None:
             kwargs["max_clauses"] = prereq_max_clauses
         prereq_map, prereq_results = elumen.build_prereq_map(records, **kwargs)
+        # F9: derive the corequisite map from the SAME records (no extra fetch).
+        coreq_map = elumen_client.corequisite_map(records)
         elumen_coverage = elumen_client.compute_coverage(
             records, known_course_ids, requested_course_ids=requested_course_ids)
         # Surface an aggregate wall-clock-cap truncation honestly: prerequisite
@@ -1317,7 +1359,7 @@ def analyze_live(campus, terms, program_query, out_path, *, client=None,
     ctx = SimpleNamespace(
         sections=sections, program=program, ge_coverage=ge_coverage,
         active_courses=active_courses, program_demand=program_demand,
-        facility=facility, by_design=by_design)
+        facility=facility, by_design=by_design, coreq_map=coreq_map)
     for d in ANALYSIS_DETECTORS:
         block = d.compute(ctx)
         if isinstance(report["results"], dict) and isinstance(report["results"].get("analysis"), dict):

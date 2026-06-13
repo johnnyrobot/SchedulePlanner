@@ -29,17 +29,19 @@ EXPECTED = [
     ("grid_pressure", "grid_pressure"),
     ("equity_exposure", "equity_exposure"),
     ("gateway_momentum", "gateway_momentum"),
+    ("corequisite_availability", "corequisite_availability"),
 ]
 
 
-def test_registry_has_exactly_six_entries_in_order():
-    # Pins the slot order the inert_detectors [5..10] sequence + the determinism
+def test_registry_has_exactly_seven_entries_in_order():
+    # Pins the slot order the inert_detectors [5..11] sequence + the determinism
     # gate depend on. Reordering or appending in the wrong slot fails here. F8
-    # (gateway_momentum) is APPENDED LAST — never reordering F1-F6.
+    # (gateway_momentum) then F9 (corequisite_availability) are APPENDED LAST —
+    # never reordering F1-F6.
     assert [d.analysis_key for d in ANALYSIS_DETECTORS] == [
         "buildability", "bottlenecks", "demand_supply", "grid_pressure",
-        "equity_exposure", "gateway_momentum"]
-    assert len(ANALYSIS_DETECTORS) == 6
+        "equity_exposure", "gateway_momentum", "corequisite_availability"]
+    assert len(ANALYSIS_DETECTORS) == 7
 
 
 def test_each_entry_compute_and_entry_are_callable():
@@ -151,3 +153,31 @@ def test_gateway_momentum_compute_threads_sections_and_program(monkeypatch):
     assert block == {"status": "inert"}
     assert captured["sections"] is sections      # bare, NOT list-wrapped
     assert captured["program"] is program
+
+
+def test_corequisite_availability_compute_threads_sections_program_coreq(monkeypatch):
+    # Pins the F9 (7th) compute: passes c.sections positionally + program=c.program
+    # + coreq_map=c.coreq_map (no list-wrap). Drop/rename any and this bites.
+    captured = {}
+
+    def _fake_report(sections, *, program=None, coreq_map=None, horizon_terms=None):
+        captured["sections"] = sections
+        captured["program"] = program
+        captured["coreq_map"] = coreq_map
+        return {"status": "inert"}
+
+    monkeypatch.setattr(build_live_workbook.corequisite_availability,
+                        "corequisite_availability_report", _fake_report)
+
+    program, sections, coreq_map = object(), object(), object()
+    ctx = SimpleNamespace(
+        program=program, sections=sections, ge_coverage=None,
+        active_courses=None, program_demand=None, facility=None, by_design=None,
+        coreq_map=coreq_map)
+
+    block = ANALYSIS_DETECTORS[6].compute(ctx)
+
+    assert block == {"status": "inert"}
+    assert captured["sections"] is sections      # bare, NOT list-wrapped
+    assert captured["program"] is program
+    assert captured["coreq_map"] is coreq_map
