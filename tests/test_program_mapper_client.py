@@ -66,6 +66,31 @@ def test_get_all_programs_raises_on_missing_programgroups_key(make_client):
     assert "programGroups" in str(ei.value)
 
 
+def test_get_all_programs_raises_on_non_dict_program_group(make_client):
+    # Drift: the per-group /program-groups/{gid} payload came back valid JSON but
+    # the wrong shape (a list). It must raise a NAMED SourceDataError by endpoint,
+    # NOT a bare AttributeError on data.get('programs') — mirroring the home-page
+    # and program-map guards.
+    from sources.http import SourceDataError
+    import pytest
+    routes = {"/home-page-content": HOME, "/program-groups/g1": ["unexpected", "list"]}
+    client = make_client(routes)
+    with pytest.raises(SourceDataError) as ei:
+        pm.get_all_programs("LAMC", client=client)
+    msg = str(ei.value)
+    assert "program-groups/g1" in msg
+    assert "list" in msg          # names the offending type
+
+
+def test_get_all_programs_tolerates_group_without_programs_key(make_client):
+    # A dict group payload that OMITS 'programs' is tolerated (that group simply
+    # contributes no programs), NOT a hard error: only a NON-dict is schema drift.
+    # Preserves the existing data.get('programs', []) default.
+    routes = {"/home-page-content": HOME, "/program-groups/g1": {"somethingElse": 1}}
+    client = make_client(routes)
+    assert pm.get_all_programs("LAMC", client=client) == []
+
+
 def test_get_program_courses_falls_back_to_first_pathway(make_client):
     routes = {
         "/programs/p2": {"pathways": [{"programMapId": "m2"}]},  # no defaultPathway
