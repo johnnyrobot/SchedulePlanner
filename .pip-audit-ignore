@@ -1,0 +1,14 @@
+# pip-audit advisory allowlist — the E4 dependency CVE gate's documented escape hatch.
+#
+# Each non-comment, non-blank line is ONE OSV / PyPI advisory id (e.g. GHSA-xxxx-…
+# or PYSEC-YYYY-…) to ignore, followed by a comment naming WHY it is accepted and
+# WHEN to revisit. Keep this list SHORT and justified.
+#
+# This exists for the one case the gate cannot otherwise handle: an advisory that
+# cannot be remediated WITHOUT breaking the determinism goldens — e.g. an `ortools`
+# bump that changes the CP-SAT search path. Such a bump must go through a
+# human-reviewed lock regen + golden re-pin, NEVER `pip-audit --fix`.
+#
+# format:  <ADVISORY-ID>    # reason / revisit-by
+#
+# (none currently — `pip-audit -r requirements.lock` reports the lock clean.)

@@ -74,6 +74,30 @@ jobs:
         # style on the existing, unformatted codebase.
         run: ruff check --select E9,F63,F7,F82 .
 
+  audit:
+    name: dependency CVE audit (pip-audit, gating)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Install pip-audit (pinned)
+        run: pip install "pip-audit==2.10.1"
+      - name: Audit the hash-pinned lock (report/fail, NEVER --fix)
+        # pip-audit queries the PyPI Advisory DB + OSV over the pinned versions in
+        # requirements.lock and exits non-zero on ANY known vulnerability. We never
+        # auto-fix: a forced bump (especially ortools) would change the CP-SAT
+        # search path and break the determinism goldens, so a real advisory must go
+        # through a human-reviewed lock regen + golden re-pin. Triaged-but-unfixable
+        # advisories are documented one-per-line in .pip-audit-ignore. Runs on every
+        # push/PR (gating) AND the weekly schedule, so a newly-disclosed CVE in an
+        # unchanged lock trips the heartbeat even with no commits.
+        run: |
+          IGNORES=$(grep -vE '^[[:space:]]*(#|$)' .pip-audit-ignore \
+            | awk '{print "--ignore-vuln", $1}' | tr '\n' ' ')
+          pip-audit --requirement requirements.lock --desc $IGNORES
+
   build-verify:
     name: build-resource verifier self-test
     runs-on: ubuntu-latest
