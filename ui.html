@@ -797,6 +797,7 @@ const DET_LABELS={
   corequisite_availability:'Corequisite co-availability',
   infeasibility:'Infeasibility explainer',
   demand_success:'Course success signal',
+  equity_success_gap:'Equity course-success gap',
 };
 // GE-coverage card maps, hoisted to module scope for the same reason.
 const PNAME = {igetc:'IGETC', 'cal-getc':'Cal-GETC', 'csu-ge':'CSU GE', local:'Local AA/AS GE'};
@@ -1130,6 +1131,33 @@ const LIVE_CARDS = [
       escapeHtml(String(ds.matched||0))+' offered course(s); '+
       escapeHtml(String(ds.offered_without_outcome||0))+' without data.</p>'+
       escHtml+all+'</div>';
+  }
+  return '';
+  } },
+  // (f7) Equity course-success gap (E13): MEASURED aggregate subgroup difference in
+  // course success (small cells <10 suppressed) — NOT a completion gap, NOT
+  // student-level, NOT causal (eg.label carries the caveat). All data escaped.
+  { target:'html', render:(res)=>{
+  const eg = res.analysis && res.analysis.equity_success_gap;
+  if(eg && eg.status==='active'){
+    const pct=(v)=> (typeof v==='number')? Math.round(v*100)+'%' : '—';
+    const pp=(g)=> (typeof g==='number')? (g>0?'+':'')+Math.round(g*100)+' pp' : '—';
+    const row=(c)=>{
+      const below=(c.below_reference||[]).map(g=>escapeHtml(g.subgroup||'')+' ('+
+        pct(g.success_rate)+', '+pp(g.gap)+')').join(', ')||'—';
+      const supp=c.suppressed_subgroups||0;
+      const basis=(c.reference_basis==='highest_subgroup')?'highest subgroup — no overall row':'overall row';
+      return '<div class="inert"><div class="det">⚠ '+escapeHtml(c.course||'')+
+        ' (ref '+escapeHtml(c.reference_subgroup||'')+' '+pct(c.reference_rate)+', '+basis+')</div>'+
+        '<div class="why">below-reference: '+below+
+        (supp?' · '+escapeHtml(String(supp))+' suppressed':'')+'</div></div>';
+    };
+    const rows=(eg.courses||[]).map(row).join('');
+    return '<div class="card"><h3>Equity course-success gap</h3>'+
+      '<p class="hint">'+escapeHtml(eg.label||'')+'</p>'+
+      '<p class="hint">Join granularity: '+escapeHtml(eg.granularity||'')+
+      ' · small cells (&lt;'+escapeHtml(String(eg.suppression_min||10))+') suppressed.</p>'+
+      rows+'</div>';
   }
   return '';
   } },

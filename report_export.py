@@ -194,6 +194,7 @@ _DET_LABELS = {
     "corequisite_availability": "Corequisite co-availability",
     "infeasibility": "Infeasibility explainer",
     "demand_success": "Course success signal",
+    "equity_success_gap": "Equity course-success gap",
 }
 _PLAN_LABELS = {"shared": "met by major", "concrete": "concrete", "reserve": "reserve"}
 _GE_PATTERN_NAMES = {"igetc": "IGETC", "cal-getc": "Cal-GETC", "csu-ge": "CSU GE"}
@@ -803,6 +804,49 @@ def _demand_success(results: dict) -> str:
             f'{_gateway_not_assessed(block)}</section>')
 
 
+def _equity_success_gap(results: dict) -> str:
+    """Equity course-success gap (E13): a MEASURED aggregate gap between demographic
+    subgroups (small cells <10 suppressed) — NOT a completion gap, NOT student-level,
+    NOT causal. Empty when absent; honest inert note otherwise. All data
+    HTML-escaped."""
+    block = (results.get("analysis") or {}).get("equity_success_gap")
+    if not block:
+        return ""
+    label = _esc(block.get("label", ""))
+    if block.get("status") != "active":
+        return ('<section class="card" aria-labelledby="eqgap"><h2 id="eqgap">'
+                'Equity course-success gap</h2>'
+                f'<p>Not computed: '
+                f'{_esc(block.get("reason", "no disaggregated export"))}</p>'
+                f'<p class="note">{label}</p></section>')
+    rows = []
+    for c in block.get("courses", []):
+        parts = []
+        for g in c.get("below_reference", []):
+            gap = g.get("gap")
+            gap_pp = f"{gap * 100:+.0f} pp" if isinstance(gap, (int, float)) else "—"
+            parts.append(f'{_esc(g.get("subgroup"))} '
+                         f'({_fmt_rate(g.get("success_rate"))}, {gap_pp})')
+        below = ", ".join(parts) or "—"
+        supp = c.get("suppressed_subgroups") or 0
+        supp_txt = (f' · {_esc(supp)} subgroup(s) suppressed (small cell)'
+                    if supp else "")
+        basis = ("highest subgroup — no overall row"
+                 if c.get("reference_basis") == "highest_subgroup" else "overall row")
+        rows.append(
+            f'<li><b>{_esc(c.get("course"))}</b> (ref '
+            f'{_esc(c.get("reference_subgroup"))} '
+            f'{_fmt_rate(c.get("reference_rate"))}, {basis}): below-reference '
+            f'{below}{supp_txt}</li>')
+    return ('<section class="card" aria-labelledby="eqgap"><h2 id="eqgap">'
+            'Equity course-success gap</h2>'
+            f'<p class="note">{label}</p>'
+            f'<p>Join granularity: {_esc(block.get("granularity"))} · small cells '
+            f'(&lt;{_esc(block.get("suppression_min"))}) suppressed.</p>'
+            f'<ul>{"".join(rows)}</ul>'
+            f'{_gateway_not_assessed(block)}</section>')
+
+
 def _reconciliation(results: dict) -> str:
     rec = results.get("reconciliation")
     if not rec:
@@ -962,6 +1006,7 @@ SECTION_RENDERERS = [
     _gateway_momentum,
     _corequisite_availability,
     _demand_success,
+    _equity_success_gap,
     _reconciliation,
     _detectors,
     _ge,

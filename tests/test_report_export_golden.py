@@ -306,6 +306,24 @@ def _maximal_results() -> dict:
                     {"check": "causation", "status": "inert",
                      "reason": "a low rate next to a constraint is a co-occurrence"}],
             },
+            "equity_success_gap": {
+                "status": "active",
+                "label": "Equity Course-Success Gap: a MEASURED, AGGREGATE gap between "
+                         "demographic subgroups ... NOT a completion gap ...",
+                "granularity": "Course", "suppression_min": 10,
+                "courses": [{
+                    "course": "CHEM <101>", "reference_subgroup": "All",
+                    "reference_rate": 0.62, "reference_basis": "all_row",
+                    "below_reference": [{"subgroup": "Group B", "success_rate": 0.45,
+                                         "gap": -0.17}],
+                    "suppressed_subgroups": 2}],
+                "courses_with_gap": 1,
+                "not_assessed": [
+                    {"check": "causation", "status": "inert",
+                     "reason": "a gap is a difference, not a cause"},
+                    {"check": "suppressed_subgroups", "status": "inert",
+                     "reason": "small cells below 10 were suppressed"}],
+            },
         },
         "reconciliation": {
             "matched_count": 6, "unmatched_count": 2,
@@ -335,6 +353,9 @@ def _maximal_results() -> dict:
             {"detector": "demand_success", "status": "active", "found": 1,
              "reason": "crosses measured aggregate course success with the supply "
                        "signals — a measured course outcome, not completion"},
+            {"detector": "equity_success_gap", "status": "active", "found": 1,
+             "reason": "measures the aggregate course-success gap between subgroups "
+                       "(small cells <10 suppressed) — a measured difference, not causal"},
         ],
         "ge_coverage": {
             "requested": True, "pattern": "igetc", "assist_status": "ok",
@@ -463,6 +484,9 @@ def _inert_each_section_results() -> dict:
             "demand_success": {"status": "inert",
                                "label": "... course success MEASURED aggregate ...",
                                "reason": "no course-success export supplied"},
+            "equity_success_gap": {"status": "inert",
+                                   "label": "... equity gap MEASURED ...",
+                                   "reason": "no disaggregated course-success export supplied"},
         },
     }
 

@@ -312,6 +312,27 @@ def test_context_omits_demand_success_when_inert():
     assert "COURSE SUCCESS" not in chat_assist._context(results).upper()
 
 
+# ------------------------------------------------ E13 equity-success-gap grounding
+def test_context_includes_equity_success_gap_measured_framing():
+    results = {"analysis": {"equity_success_gap": {"status": "active", "label": "L",
+        "granularity": "Course", "suppression_min": 10,
+        "courses": [{"course": "CHEM 101", "reference_subgroup": "All",
+                     "reference_rate": 0.62, "reference_basis": "all_row",
+                     "below_reference": [{"subgroup": "Group B", "success_rate": 0.45,
+                                          "gap": -0.17}],
+                     "suppressed_subgroups": 2}],
+        "courses_with_gap": 1, "not_assessed": []}}}
+    blob = chat_assist._context(results)
+    assert "EQUITY COURSE-SUCCESS GAP" in blob.upper() and "MEASURED" in blob.upper()
+    assert "CHEM 101" in blob and "Group B" in blob and "-17" in blob
+    assert "suppress" in blob.lower() and "not a causal" in blob.lower()
+
+
+def test_context_omits_equity_success_gap_when_inert():
+    results = {"analysis": {"equity_success_gap": {"status": "inert", "reason": "no export"}}}
+    assert "EQUITY COURSE-SUCCESS GAP" not in chat_assist._context(results).upper()
+
+
 # ------------------------------------------------------------------ router
 def test_route_parses_offering_and_fills_defaults(monkeypatch):
     _patch_chat(monkeypatch, lambda *a, **k: '{"lookup":"offering","courses":["BIOLOGY 6"]}')
