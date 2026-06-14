@@ -238,6 +238,11 @@ def _cohort(label: str, c) -> str:
         parts = ", ".join(f'+ {_esc(f.get("course"))} in {_esc(f.get("season"))}' for f in fixes)
         fix = f'<div class="fix">fix: {parts}</div>'
     tag = ' <span class="withfix">(with fix)</span>' if c.get("needs_fix") else ""
+    # E2: the deterministic-budget caveat travels WITH the plan it qualifies — only
+    # when the solver did not prove this the minimum-term plan (absent/True -> none).
+    if c.get("proven_optimal") is False:
+        tag += (' <span class="withfix" title="feasible but not proven the minimum">'
+                '(not proven optimal)</span>')
     return (f'<div class="cohort"><div class="lab">{_esc(label)}</div>'
             f'<div class="big">{_esc(c.get("terms_used"))} terms{tag}</div>'
             f'<div class="yr">~{yrs} year{"s" if yrs != 1 else ""}</div>{terms}{fix}</div>')
