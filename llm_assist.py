@@ -87,10 +87,15 @@ def available(model: str = MODEL) -> bool:
 
 
 # ----------------------------------------------------------- chat helper
-def _chat(prompt: str, model: str = MODEL, system: str = "") -> str:
+def _chat(prompt: str, model: str = MODEL, system: str = "", options=None) -> str:
     body = {"model": model, "stream": False,
             "messages": ([{"role": "system", "content": system}] if system else [])
                         + [{"role": "user", "content": prompt}]}
+    # E3: callers that need a REPRODUCIBLE generation (the in-engine prereq parse)
+    # pass Ollama sampling options (temperature 0 + a fixed seed). Omitted by
+    # default so explain()/chat() outside engine.run keep Ollama's default sampling.
+    if options:
+        body["options"] = options
     req = urllib.request.Request(
         f"{OLLAMA_URL}/api/chat",
         data=json.dumps(body).encode(),
@@ -111,12 +116,21 @@ PREREQ_SYS = (
 )
 
 
+# E3: this parse feeds engine.run (via make_prereq_parser -> engine.parse_prereq),
+# so its output must be reproducible. Pin Ollama to greedy decoding (temperature 0)
+# with a fixed seed. HONEST residual: cross-machine GPU float nondeterminism can
+# still vary the raw text; the regex/structured pre-pass in engine.parse_prereq —
+# NOT the LLM — remains the byte-identity guarantee for the derived CNF.
+_PREREQ_OPTIONS = {"temperature": 0, "seed": 42}
+
+
 def parse_prereq_text(text: str, model: str = MODEL):
     """LLM prereq parse with safe JSON handling. Returns list-of-lists or None."""
     if not available(model):
         return None
     try:
-        raw = _chat(text, model=model, system=PREREQ_SYS).strip()
+        raw = _chat(text, model=model, system=PREREQ_SYS,
+                    options=_PREREQ_OPTIONS).strip()
         raw = raw.replace("```json", "").replace("```", "").strip()
         data = json.loads(raw)
         if isinstance(data, list) and all(isinstance(g, list) for g in data):
