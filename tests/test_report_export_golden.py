@@ -285,6 +285,27 @@ def _maximal_results() -> dict:
                     {"check": "student_completion", "status": "inert",
                      "reason": "no student-level outcome exists"}],
             },
+            "demand_success": {
+                "status": "active",
+                "label": "Course Success Signal: a MEASURED, AGGREGATE retention/success "
+                         "outcome from a CCCCO Data Mart export ... NOT a "
+                         "program-completion label ...",
+                "granularity": "Course",
+                "with_outcome": [
+                    {"course": "CHEM <101>", "success_rate": 0.40, "retention_rate": 0.70,
+                     "enrollment": 300, "supply_constrained": True},
+                    {"course": "MATH 261", "success_rate": 0.55, "retention_rate": None,
+                     "enrollment": None, "supply_constrained": False}],
+                "escalated": [
+                    {"course": "CHEM <101>", "success_rate": 0.40, "retention_rate": 0.70,
+                     "enrollment": 300, "supply_constrained": True}],
+                "matched": 2, "offered_without_outcome": 1,
+                "not_assessed": [
+                    {"check": "student_completion", "status": "inert",
+                     "reason": "an aggregate course rate is not a completion rate"},
+                    {"check": "causation", "status": "inert",
+                     "reason": "a low rate next to a constraint is a co-occurrence"}],
+            },
         },
         "reconciliation": {
             "matched_count": 6, "unmatched_count": 2,
@@ -311,6 +332,9 @@ def _maximal_results() -> dict:
             {"detector": "infeasibility", "status": "active", "found": 1,
              "reason": "isolates the minimal set of required courses behind an "
                        "unbuildable cohort — a deterministic structural diagnostic"},
+            {"detector": "demand_success", "status": "active", "found": 1,
+             "reason": "crosses measured aggregate course success with the supply "
+                       "signals — a measured course outcome, not completion"},
         ],
         "ge_coverage": {
             "requested": True, "pattern": "igetc", "assist_status": "ok",
@@ -436,6 +460,9 @@ def _inert_each_section_results() -> dict:
             "infeasibility": {"status": "inert",
                               "label": "... infeasibility STRUCTURAL diagnostic ...",
                               "reason": "every program cohort has a feasible plan to explain"},
+            "demand_success": {"status": "inert",
+                               "label": "... course success MEASURED aggregate ...",
+                               "reason": "no course-success export supplied"},
         },
     }
 

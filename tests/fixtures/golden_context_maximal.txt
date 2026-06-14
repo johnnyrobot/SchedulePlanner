@@ -78,6 +78,10 @@ COREQUISITE CO-AVAILABILITY (AB1705 co-OFFERING STRUCTURE PROXY for whether the 
 - English: ENGL 101 (corequisite ENGL 101L) — co-offered in year 1.
 - Math: MATH 150 (corequisite MATH 150L) — NOT co-offered in year 1; corequisite MATH 150L is not offered in the analyzed schedule.
 
+COURSE SUCCESS SIGNAL (MEASURED aggregate retention/success from a CCCCO Data Mart export, Course granularity; NOT a completion or student-level outcome and NOT this schedule's outcome — a low rate next to a supply constraint is a co-occurrence, not causal)
+- ESCALATED CHEM 101: success 40% (also supply-constrained).
+- MATH 261: success 55%.
+
 WHY THIS MATTERS — SECTOR-WIDE RESEARCH EVIDENCE (published findings from OTHER institutions explaining why a flagged condition matters; NOT a measurement or prediction of this campus)
 - 30%→43%; 9%→~18%; 23.7%→34.8%: Guided-pathway course maps with structured, data-informed advising raised graduation rates: Central Arizona College 30%→43%, Community College of Philadelphia 9%→~18% (doubled), and Bluegrass / BCTC 23.7%→34.8%. [Source: Central Arizona College, Community College of Philadelphia, Bluegrass Community & Technical College; reported via Community College Daily and CCRC]
 - 57% of students affected: 57% of students report having to spend more time and money because required courses are not offered at the times they need them. [Source: Student-survey finding aggregated in the completion-research review (ScienceDirect / Community College Daily source set)]

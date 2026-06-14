@@ -179,6 +179,18 @@ def _maximal_results() -> dict:
                                 "within the 4-term full-time plan; relaxing any one "
                                 "restores feasibility"}],
                 "not_assessed": []},
+            "demand_success": {"status": "active",
+                "label": "Course success MEASURED aggregate label",
+                "granularity": "Course",
+                "with_outcome": [
+                    {"course": "CHEM 101", "success_rate": 0.40, "retention_rate": 0.70,
+                     "supply_constrained": True},
+                    {"course": "MATH 261", "success_rate": 0.55, "retention_rate": None,
+                     "supply_constrained": False}],
+                "escalated": [
+                    {"course": "CHEM 101", "success_rate": 0.40, "retention_rate": 0.70,
+                     "supply_constrained": True}],
+                "matched": 2, "offered_without_outcome": 0, "not_assessed": []},
         },
         "reconciliation": {
             "matched_count": 6, "unmatched_count": 2,

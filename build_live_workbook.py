@@ -76,6 +76,7 @@ import httpx
 import buildability
 import corequisite_availability
 import cross_program_bottleneck
+import demand_success
 import demand_supply
 import equity_exposure
 import evidence
@@ -83,9 +84,9 @@ import gateway_momentum
 import grid_pressure
 import infeasibility
 import engine
-from sources import (assist, catalog_ge, course_master, elumen, elumen_client,
-                     enrollment, enrollment_ir, ge, live_demand, mapping,
-                     pdf_loader, program_lists, program_mapper, schedule,
+from sources import (assist, catalog_ge, course_master, course_success, elumen,
+                     elumen_client, enrollment, enrollment_ir, ge, live_demand,
+                     mapping, pdf_loader, program_lists, program_mapper, schedule,
                      schedule_import, timeblocks)
 # Imported under an alias so the module name does not shadow the loaded ``facility``
 # room-map that analyze_live / analyze_import pass around as a local variable.
@@ -815,6 +816,58 @@ def _infeasibility_detector_entry(block):
     }
 
 
+def _course_success_block(sections, course_success_path, results):
+    """E9 demand-vs-success block: derive the supply-constrained courses from the
+    already-computed F2/F5 analysis, load the OFFLINE success export (if supplied),
+    and cross them. A supplied-but-unreadable export goes inert with the named
+    error (never silent)."""
+    analysis = (results or {}).get("analysis") if isinstance(results, dict) else None
+    supply = set()
+    if isinstance(analysis, dict):
+        bnk = analysis.get("bottlenecks") or {}
+        if bnk.get("status") == "active":
+            supply |= {b.get("course") for b in bnk.get("leaderboard", [])
+                       if b.get("course")}
+        dsl = analysis.get("demand_supply") or {}
+        if dsl.get("status") == "active":
+            supply |= {d.get("course") for d in dsl.get("add_list", [])
+                       if d.get("course")}
+    if not course_success_path:
+        return demand_success.demand_success_report(sections, None)
+    try:
+        smap, gran = course_success.load_course_success(course_success_path)
+    except SourceDataError as exc:
+        return {"status": "inert", "label": demand_success.DEMAND_SUCCESS_LABEL,
+                "reason": f"the supplied course-success export could not be read: {exc}",
+                "remedy": ("supply a valid CCCCO Data Mart Credit Course "
+                           "Retention/Success export")}
+    return demand_success.demand_success_report(
+        sections, smap, supply_constrained=supply, granularity=gran)
+
+
+def _demand_success_detector_entry(block):
+    """Honest active/inert entry for the E9 demand-vs-success escalation detector.
+    Inert when no success export was supplied (the live default); active when the
+    measured aggregate data is crossed with the supply signals. ``found`` counts
+    the escalated (supply-constrained + lower-success) courses."""
+    if not block or block.get("status") != "active":
+        return {
+            "detector": "demand_success", "status": "inert",
+            "reason": ((block or {}).get("reason")
+                       or "no course-success export supplied"),
+            "remedy": ((block or {}).get("remedy")
+                       or "supply a CCCCO Data Mart Credit Course Retention/Success export"),
+        }
+    return {
+        "detector": "demand_success", "status": "active",
+        "found": len(block.get("escalated", [])),
+        "reason": ("crosses MEASURED aggregate course retention/success (offline CCCCO "
+                   "Data Mart) with the supply signals to escalate courses that are "
+                   "both supply-constrained and historically lower-success — a measured "
+                   "course outcome, NOT a completion or student-level claim"),
+    }
+
+
 def _buildability_detector_entry(block):
     """Honest active/inert entry for the program-buildability audit (mirrors the
     other detector entries). Inert carries the audit's own reason."""
@@ -1043,7 +1096,7 @@ def analyze_live(campus, terms, program_query, out_path, *, client=None,
                  active_courses=None, program_demand=None,
                  demand_program_ids=None,
                  sections_override=None, program_override=None, by_design=None,
-                 elumen_coreq=None):
+                 elumen_coreq=None, course_success_path=None):
     """Run the full live pipeline and return a structured, JSON-serializable report.
 
     The report carries the reconciliation (matched/unmatched program courses)
@@ -1396,6 +1449,14 @@ def analyze_live(campus, terms, program_query, out_path, *, client=None,
         if isinstance(report["results"], dict) and isinstance(report["results"].get("analysis"), dict):
             report["results"]["analysis"][d.analysis_key] = block
         report["inert_detectors"].append(d.entry(block))
+    # E9: cross the MEASURED course-success data (offline CCCCO Data Mart export,
+    # if supplied) with the now-computed supply signals (F2 bottlenecks / F5 demand)
+    # to escalate courses that are BOTH supply-constrained AND historically
+    # lower-success. Heterogeneous (reads the analysis it follows); OUTSIDE engine.run.
+    ds_block = _course_success_block(sections, course_success_path, report["results"])
+    if isinstance(report["results"], dict) and isinstance(report["results"].get("analysis"), dict):
+        report["results"]["analysis"]["demand_success"] = ds_block
+    report["inert_detectors"].append(_demand_success_detector_entry(ds_block))
     # F7: map the now-fully-computed structural flags to curated ✅ research
     # evidence (PURE consumer — reads results["analysis"][...] / ge_coverage, writes
     # only this JSON key, OUTSIDE engine.run → the workbook bytes are untouched, so

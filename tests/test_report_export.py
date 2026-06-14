@@ -566,3 +566,49 @@ def test_infeasibility_section_inert_note():
         "status": "inert", "label": "L",
         "reason": "every program cohort has a feasible plan to explain"}}})
     assert "Not computed" in html and "feasible" in html
+
+
+# ------------------------------------------------- E9 demand-success render
+def _demand_success_block():
+    return {
+        "status": "active",
+        "label": "Course Success Signal: a MEASURED, AGGREGATE retention/success "
+                 "outcome ... NOT a program-completion label ...",
+        "granularity": "Course",
+        "with_outcome": [
+            {"course": "CHEM <101>", "success_rate": 0.40, "retention_rate": 0.70,
+             "enrollment": 300, "supply_constrained": True},
+            {"course": "MATH 125", "success_rate": 0.55, "retention_rate": None,
+             "enrollment": None, "supply_constrained": False}],
+        "escalated": [
+            {"course": "CHEM <101>", "success_rate": 0.40, "retention_rate": 0.70,
+             "enrollment": 300, "supply_constrained": True}],
+        "matched": 2, "offered_without_outcome": 3,
+        "not_assessed": [
+            {"check": "student_completion", "status": "inert",
+             "reason": "an aggregate course rate is not a completion rate"},
+            {"check": "causation", "status": "inert",
+             "reason": "a low rate next to a constraint is a co-occurrence"}],
+    }
+
+
+def test_demand_success_section_renders_and_escapes():
+    html = report_export._demand_success({"analysis": {"demand_success": _demand_success_block()}})
+    assert "success" in html.lower()
+    assert "CHEM &lt;101&gt;" in html and "CHEM <101>" not in html   # escaped course
+    assert "MEASURED" in html                                        # honesty label
+    assert "40%" in html                                             # rate rendered
+    assert "Course" in html                                          # granularity disclosed
+    assert "causation" in html.lower()                               # not_assessed surfaced
+    assert "supply-constrained" in html                              # escalation flag
+
+
+def test_demand_success_section_empty_when_absent():
+    assert report_export._demand_success({"analysis": {}}) == ""
+
+
+def test_demand_success_section_inert_note():
+    html = report_export._demand_success({"analysis": {"demand_success": {
+        "status": "inert", "label": "L",
+        "reason": "no course-success export supplied"}}})
+    assert "Not computed" in html and "success" in html.lower()
