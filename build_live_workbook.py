@@ -1494,16 +1494,22 @@ def analyze_live(campus, terms, program_query, out_path, *, client=None,
     # is never read as complete coverage. Only present when a term was skipped, so
     # the normal (all-terms-ok) path is unchanged.
     if fetch_status.get("skipped"):
+        skipped_terms = [s.get("term") for s in fetch_status["skipped"]]
         report["fetch_status"] = fetch_status
+        # Surface the skip on the top-line report too, so a consumer reading only
+        # report["terms"] is not misled into thinking the full span loaded.
+        report["terms_skipped"] = skipped_terms
+        report["terms_loaded"] = [t for t in report.get("terms", []) if t not in skipped_terms]
         report["inert_detectors"].append({
             "detector": "schedule_fetch", "status": "warning",
             "found": len(fetch_status["skipped"]),
-            "skipped_terms": [s.get("term") for s in fetch_status["skipped"]],
+            "skipped_terms": skipped_terms,
             "reason": ("one or more terms could not be fetched and were SKIPPED — the "
                        "analysis covers only the terms that loaded, so coverage is "
                        "PARTIAL (rotation / buildability / supply signals may understate)"),
-            "remedy": ("re-run when the LACCD schedule API is reachable for the "
-                       "skipped term(s); the bounded retry already absorbs brief blips"),
+            "remedy": ("re-run when the skipped term(s) are reachable; if it persists, "
+                       "the schedule API may have changed (the bounded retry already "
+                       "absorbs brief transient blips)"),
         })
 
     os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
@@ -1788,9 +1794,13 @@ def _print_banner(report):
         return
     prog = report["program"]
     rec = report["reconciliation"]
+    skipped = report.get("terms_skipped") or []
+    span = (f"{len(report['terms']) - len(skipped)} of {len(report['terms'])} "
+            f"requested terms ({len(skipped)} SKIPPED: "
+            f"{', '.join(str(t) for t in skipped)})" if skipped
+            else f"{len(report['terms'])} terms")
     print(f"Wrote {report['workbook']}: {report['section_count']} sections across "
-          f"{len(report['terms'])} terms; program {prog['title']!r} "
-          f"({prog['course_count']} courses).")
+          f"{span}; program {prog['title']!r} ({prog['course_count']} courses).")
     print(f"Course reconciliation: {rec['matched_count']} matched, "
           f"{rec['unmatched_count']} unmatched (not offered in fetched terms): "
           f"{rec['unmatched']}")

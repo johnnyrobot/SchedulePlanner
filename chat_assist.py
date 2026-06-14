@@ -672,7 +672,15 @@ def run_lookup(intent: dict, *, client=None):
 def _lk_offering(intent, client):
     campus, terms, courses = intent["campus"], intent["terms"], intent["courses"]
     label = f"offering · {campus} · terms {', '.join(str(t) for t in terms)}"
-    secs = schedule.fetch_sections(campus, terms, client=client)
+    # E7: collect per-term skips so "No sections found" / an undercount is never
+    # reported as authoritative when a term silently failed to fetch — a student
+    # must not be told a course is unoffered when the term carrying it was skipped.
+    status = {}
+    secs = schedule.fetch_sections(campus, terms, client=client, status=status)
+    skipped = [s.get("term") for s in status.get("skipped", [])]
+    partial = ("" if not skipped else
+               f" PARTIAL — term(s) {', '.join(str(t) for t in skipped)} could not be "
+               "fetched and were skipped, so this offering list may be INCOMPLETE.")
     wanted = {mapping._norm(c) for c in courses}
     by_course = {}
     for s in secs:
@@ -680,7 +688,7 @@ def _lk_offering(intent, client):
             by_course.setdefault(s.get("course"), []).append(s)
     if not by_course:
         return (label, f"No sections found for {', '.join(courses)} in {campus} "
-                       f"terms {', '.join(str(t) for t in terms)}.")
+                       f"terms {', '.join(str(t) for t in terms)}.{partial}")
     lines = []
     for course, ss in sorted(by_course.items()):
         bits = []
@@ -689,7 +697,7 @@ def _lk_offering(intent, client):
             when = f"{s.get('days', '')} {s.get('times', '')}".strip()
             bits.append(f"{seg} {when}".strip())
         lines.append(f"{course}: {len(ss)} section(s) — " + "; ".join(bits))
-    return (label, "\n".join(lines))
+    return (label, "\n".join(lines) + (("\n" + partial.strip()) if partial else ""))
 
 
 def _lk_program(intent, client):
