@@ -16,6 +16,7 @@ issues anything but one of the four whitelisted, side-effect-free lookups.
 """
 from __future__ import annotations
 import json
+import re
 
 import llm_assist
 from sources import assist, elumen_client, mapping, program_mapper, schedule
@@ -91,6 +92,38 @@ def _segregate(text: str) -> str:
     """Strip the fence sentinels from untrusted content so it cannot forge the
     boundary (OWASP LLM01 content-segregation, anti-breakout)."""
     return (text or "").replace(_UNTRUSTED_OPEN, "").replace(_UNTRUSTED_CLOSE, "")
+
+
+# E19: answer-time groundedness guard (RAGAS-style faithfulness, stdlib only).
+# ANSWER_SYS forbids inventing course numbers; this catches a leak of that rule by
+# flagging COURSE CODES in the answer that are absent from the grounding data — the
+# highest-signal, lowest-noise checkable claim. A heuristic, NOT a proof: it
+# surfaces a "could not verify" caveat (reinforcing no-silent-drops), never asserts
+# the answer is wrong, and stays conservative (only canonical SUBJECT<space>NUMBER
+# codes, minus calendar/structure words that look like one).
+_CODE_RE = re.compile(r"\b([A-Za-z]{2,12})\s+(\d{1,4}[A-Za-z]?)\b")
+_CODE_STOP = {"TERM", "TERMS", "YEAR", "YEARS", "FALL", "SPRING", "SUMMER", "WINTER",
+              "WEEK", "WEEKS", "UNIT", "UNITS", "SECTION", "SECTIONS", "AREA",
+              "GOAL", "OPTION", "OPTIONS", "NOTE", "STEP", "FIGURE", "TABLE", "ROW",
+              "VERSION", "TOP", "PARTIAL"}
+
+
+def _course_codes(text: str) -> set:
+    """Canonical course codes (``SUBJECT NUMBER``) mentioned in ``text``, excluding
+    calendar/structure words that share the shape (e.g. 'Term 2268')."""
+    out = set()
+    for subj, num in _CODE_RE.findall(text or ""):
+        s = subj.upper()
+        if s in _CODE_STOP:
+            continue
+        out.add(f"{s} {num.upper()}")
+    return out
+
+
+def groundedness_review(answer: str, grounding: str) -> list:
+    """Sorted course codes asserted in ``answer`` but absent from the grounding data
+    — the (heuristic) ungrounded claims. Deterministic, pure."""
+    return sorted(_course_codes(answer) - _course_codes(grounding))
 
 
 # ----------------------------------------------------------------- small helpers
@@ -828,4 +861,13 @@ def chat(question, results, history=None, *, client=None, model=llm_assist.MODEL
         answer = llm_assist._chat(prompt, model=model, system=ANSWER_SYS).strip()
     except Exception as e:  # noqa: BLE001 - never raise into the caller / JS bridge
         answer = f"Sorry — I couldn't reach the local model just now ({type(e).__name__})."
-    return {"answer": answer, "lookup": label}
+    # E19: groundedness guard — flag course codes the answer asserts that aren't in
+    # the grounding data (analysis context + live facts), and surface a "could not
+    # verify" caveat so a possible hallucinated course number is never presented as
+    # fact. Heuristic + conservative; never silently dropped.
+    ungrounded = groundedness_review(answer, context + "\n" + (facts or ""))
+    if ungrounded:
+        answer += ("\n\n⚠ Unverified: these course code(s) are not in the loaded "
+                   "analysis / lookup data, so I could not verify them — "
+                   "double-check before relying on them: " + ", ".join(ungrounded) + ".")
+    return {"answer": answer, "lookup": label, "ungrounded": ungrounded}
