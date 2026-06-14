@@ -902,3 +902,15 @@ def test_analyze_import_equity_online_inert_no_modality(tmp_path):
     for key in ("evening", "two_day"):
         assert next(a for a in block["archetypes"] if a["key"] == key)["computable"] is True
     json.dumps(report)
+
+
+def test_contact_hours_inert_detector_entry_surfaces_not_assessed_counts():
+    # E15 nit fix: on the inert-with-data path the per-reason breakdown must ride the
+    # detector entry's reason so report + ui surface it (not only the report section).
+    entry = build_live_workbook._contact_hours_detector_entry({
+        "status": "inert", "reason": "no normalizable section",
+        "not_assessed": {"no_meeting_time": 3, "missing_weeks": 12,
+                         "missing_units": 0, "category_unknown": 0}})
+    assert entry["status"] == "inert"
+    assert "no meeting time" in entry["reason"] and "3" in entry["reason"]
+    assert "missing weeks" in entry["reason"] and "12" in entry["reason"]

@@ -100,6 +100,18 @@ def test_solver_uses_deterministic_time_budget_not_wallclock():
         "solve_cohort must NOT use the wall-clock max_time_in_seconds budget"
 
 
+def test_proven_optimal_is_computed_from_solver_status_not_a_constant():
+    """SOURCE-GUARD: the bundled data always solves OPTIMAL, so the data-level test
+    below cannot tell ``proven_optimal: True`` (the honest expression) from a
+    hardcoded ``True``. Pin that the flag is the real ``st == cp_model.OPTIMAL``
+    comparison (mirrors test_solver_pins_deterministic_parameters), so a regression
+    that would silently label a FEASIBLE-not-OPTIMAL plan 'proven optimal' — the
+    exact thing the E2 honesty advisory exists to prevent — is caught."""
+    src = inspect.getsource(engine.solve_cohort)
+    assert re.search(r'"proven_optimal"\s*:\s*st\s*==\s*cp_model\.OPTIMAL', src), \
+        "proven_optimal must be computed as (st == cp_model.OPTIMAL), not a constant"
+
+
 def test_cohort_results_are_proven_optimal_on_the_default_data():
     """E2: every solved cohort on the bundled data reaches OPTIMAL (the models are
     tiny), so proven_optimal is True — the plan shown is the true minimum-term plan.
