@@ -112,6 +112,58 @@ def test_ge_gap_surfaces_guided_pathways():
     assert "guided_pathways" in {c["id"] for c in out["claims"]}
 
 
+def _gateway_unschedulable_results():
+    return {"analysis": {"gateway_momentum": {"status": "active",
+        "english": {"identified": True, "course": "ENGL 101",
+                    "schedulable_year1": True, "obstructions": []},
+        "math": {"identified": True, "course": "MATH 227",
+                 "schedulable_year1": False,
+                 "obstructions": ["not offered in the analyzed schedule"]}}}}
+
+
+def test_gateway_not_schedulable_surfaces_availability_claims():
+    # A transfer-level gateway that cannot be scheduled in year 1 IS a required-
+    # course availability problem -> the (vetted, no-new-number) availability claims.
+    out = evidence.evidence_appendix(_gateway_unschedulable_results())
+    assert out["status"] == "active"
+    ids = {c["id"] for c in out["claims"]}
+    assert "required_course_unavailable" in ids
+    assert "course_shutout" in ids
+    assert any(c["condition"] == "gateway_not_schedulable" for c in out["conditions"])
+
+
+def test_gateway_schedulable_does_not_flag():
+    # Both gateways schedulable -> no gateway condition fires.
+    res = {"analysis": {"gateway_momentum": {"status": "active",
+        "english": {"identified": True, "course": "E", "schedulable_year1": True},
+        "math": {"identified": True, "course": "M", "schedulable_year1": True}}}}
+    out = evidence.evidence_appendix(res)
+    assert not any(c["condition"] == "gateway_not_schedulable"
+                   for c in out.get("conditions", []))
+
+
+def test_corequisite_not_co_offered_surfaces_availability_claim():
+    res = {"analysis": {"corequisite_availability": {"status": "active",
+        "english": {"identified": True, "course": "ENGL 101",
+                    "has_corequisite": True, "co_offered_year1": True},
+        "math": {"identified": True, "course": "MATH 150",
+                 "has_corequisite": True, "co_offered_year1": False}}}}
+    out = evidence.evidence_appendix(res)
+    assert out["status"] == "active"
+    assert "required_course_unavailable" in {c["id"] for c in out["claims"]}
+    assert any(c["condition"] == "corequisite_not_co_offered" for c in out["conditions"])
+
+
+def test_corequisite_co_offered_does_not_flag():
+    res = {"analysis": {"corequisite_availability": {"status": "active",
+        "english": {"identified": True, "course": "E", "has_corequisite": True,
+                    "co_offered_year1": True},
+        "math": {"identified": True, "course": "M", "has_corequisite": False}}}}
+    out = evidence.evidence_appendix(res)
+    assert not any(c["condition"] == "corequisite_not_co_offered"
+                   for c in out.get("conditions", []))
+
+
 def test_no_flags_default():
     """Clean build → inert, positive context only; problem-claims excluded."""
     out = evidence.evidence_appendix({"analysis": {

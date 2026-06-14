@@ -74,7 +74,8 @@ CLAIMS = [
             "Student-survey finding aggregated in the completion-research review "
             "(ScienceDirect / Community College Daily source set)"),
         "grade": GRADE,
-        "supports": ("buildability_gap", "bottleneck", "demand_oversubscribed"),
+        "supports": ("buildability_gap", "bottleneck", "demand_oversubscribed",
+                     "gateway_not_schedulable", "corequisite_not_co_offered"),
     },
     {
         "id": "course_shutout",
@@ -87,7 +88,8 @@ CLAIMS = [
             "Robles et al., 'The effect of course shutouts on community college students,' "
             "ScienceDirect"),
         "grade": GRADE,
-        "supports": ("buildability_gap", "bottleneck", "demand_oversubscribed"),
+        "supports": ("buildability_gap", "bottleneck", "demand_oversubscribed",
+                     "gateway_not_schedulable"),
     },
     {
         "id": "conflict_aware_tools",
@@ -115,6 +117,11 @@ _BY_ID = {c["id"]: c for c in CLAIMS}
 # --------------------------------------------------------------- condition predicates
 # Each predicate reads ONLY an already-computed analysis block and returns a short
 # human "trigger" string when the condition fired, else None. They never recompute.
+# INVARIANT: a trigger string is STRUCTURED context only — it may embed a course
+# code (digits and all). The report/chat surfaces render the curated CLAIMS'
+# metric/statement/source, NOT the trigger, so the every-number-is-sourced guard
+# never sees these digits. Do NOT render condition["trigger"] into a number-guarded
+# surface without sourcing its numbers.
 def _buildability_gap(results):
     bld = (results.get("analysis") or {}).get("buildability") or {}
     if bld.get("status") != "active":
@@ -194,6 +201,41 @@ def _morning_compression(results):
     return None
 
 
+def _gateway_not_schedulable(results):
+    # F8: a transfer-level English/Math gateway that is identified but NOT
+    # schedulable in the first year IS a required-course availability problem — the
+    # same availability/shutout evidence applies. (We map only the STRUCTURAL
+    # availability fact; F8's own label keeps it an offering proxy, never a causal
+    # gateway-completion claim.)
+    gm = (results.get("analysis") or {}).get("gateway_momentum") or {}
+    if gm.get("status") != "active":
+        return None
+    for disc in ("english", "math"):
+        g = gm.get(disc) or {}
+        if g.get("identified") and g.get("schedulable_year1") is False:
+            return (f"the transfer-level {disc} gateway ({g.get('course')}) cannot be "
+                    "scheduled in the first year")
+    return None
+
+
+def _corequisite_not_co_offered(results):
+    # F9: a transfer-level gateway whose catalog corequisite SUPPORT is not
+    # co-offered in the first year is a required-course availability gap (the
+    # support course is not offered when it is needed). We map ONLY the availability
+    # evidence — never the AB1705 causal claim (direct placement was the dominant
+    # lever; co-offering is one supported form), which F9's label already bounds.
+    ca = (results.get("analysis") or {}).get("corequisite_availability") or {}
+    if ca.get("status") != "active":
+        return None
+    for disc in ("english", "math"):
+        g = ca.get(disc) or {}
+        if (g.get("identified") and g.get("has_corequisite")
+                and g.get("co_offered_year1") is False):
+            return (f"the transfer-level {disc} gateway's corequisite support is not "
+                    "co-offered in the first year")
+    return None
+
+
 # Ordered registry of (condition_key, predicate). Source order = the order fired
 # conditions appear in the envelope's ``conditions`` list.
 _CONDITIONS = (
@@ -205,6 +247,8 @@ _CONDITIONS = (
     ("mutual_exclusivity", _mutual_exclusivity),
     ("grid_conformance", _grid_conformance),
     ("morning_compression", _morning_compression),
+    ("gateway_not_schedulable", _gateway_not_schedulable),
+    ("corequisite_not_co_offered", _corequisite_not_co_offered),
 )
 
 
