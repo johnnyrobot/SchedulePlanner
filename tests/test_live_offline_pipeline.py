@@ -108,7 +108,7 @@ def test_build_live_workbook_emits_structured_report(lamc_routes, make_client,
         "time_block_conflict", "room_conflict", "program_buildability",
         "program_bottleneck", "grid_pressure", "demand_supply",
         "equity_exposure", "gateway_momentum", "corequisite_availability",
-        "infeasibility"}
+        "infeasibility", "demand_success"}
     for d in inert:
         if d["detector"] == "ge_scheduling" or d.get("status") == "active":
             continue  # ge_scheduling / active detectors carry "reason" but no "remedy"
@@ -687,6 +687,48 @@ def test_analyze_live_infeasibility_inert_when_buildable(tmp_path):
     block = report["results"]["analysis"]["infeasibility"]
     assert block["status"] == "inert"
     det = next(d for d in report["inert_detectors"] if d["detector"] == "infeasibility")
+    assert det["status"] == "inert" and det.get("remedy")
+
+
+# --- E9: course-success / demand-vs-success escalation ------------------------
+def test_analyze_live_demand_success_active_with_export(tmp_path):
+    """A supplied CCCCO Data Mart export -> E9 active, joining the measured success
+    rate onto the offered course; inert (with remedy) when no export is supplied."""
+    success = tmp_path / "success.csv"
+    success.write_text("Course,Success Rate,Retention Rate\nMATH 227,55%,82%\n")
+    records = [{"course": "MATH 227", "term": 2268, "class_nbr": "1",
+                "days": "MW", "times": "9:00 AM - 10:15 AM", "units": 5}]
+    program = {"code": "TEST", "title": "Test", "award": "AS", "courses": [
+        {"course_id": "MATH 227", "recommended_semester": 1}], "major_choices": []}
+    out = tmp_path / "ds.xlsx"
+    report = build_live_workbook.analyze_live(
+        "LAMC", [2268], "(test)", str(out),
+        sections_override=records, program_override=program,
+        course_success_path=str(success))
+    block = report["results"]["analysis"]["demand_success"]
+    assert block["status"] == "active"
+    assert block["granularity"] == "Course"
+    assert block["matched"] == 1
+    row = block["with_outcome"][0]
+    assert row["course"] == "MATH 227" and row["success_rate"] == 0.55
+    assert "MEASURED" in block["label"]
+    det = next(d for d in report["inert_detectors"] if d["detector"] == "demand_success")
+    assert det["status"] == "active"
+    json.dumps(report)
+
+
+def test_analyze_live_demand_success_inert_without_export(tmp_path):
+    records = [{"course": "MATH 227", "term": 2268, "class_nbr": "1",
+                "days": "MW", "times": "9:00 AM - 10:15 AM", "units": 5}]
+    program = {"code": "TEST", "title": "Test", "award": "AS", "courses": [
+        {"course_id": "MATH 227", "recommended_semester": 1}], "major_choices": []}
+    out = tmp_path / "ds_inert.xlsx"
+    report = build_live_workbook.analyze_live(
+        "LAMC", [2268], "(test)", str(out),
+        sections_override=records, program_override=program)
+    block = report["results"]["analysis"]["demand_success"]
+    assert block["status"] == "inert"
+    det = next(d for d in report["inert_detectors"] if d["detector"] == "demand_success")
     assert det["status"] == "inert" and det.get("remedy")
 
 

@@ -292,6 +292,26 @@ def test_context_omits_infeasibility_when_inert():
     assert "INFEASIB" not in chat_assist._context(results).upper()
 
 
+# ------------------------------------------------------ E9 course-success grounding
+def test_context_includes_demand_success_measured_framing():
+    results = {"analysis": {"demand_success": {"status": "active", "label": "L",
+        "granularity": "Course",
+        "with_outcome": [{"course": "CHEM 101", "success_rate": 0.40,
+                          "retention_rate": 0.70, "supply_constrained": True}],
+        "escalated": [{"course": "CHEM 101", "success_rate": 0.40,
+                       "retention_rate": 0.70, "supply_constrained": True}],
+        "matched": 1, "offered_without_outcome": 0, "not_assessed": []}}}
+    blob = chat_assist._context(results)
+    assert "SUCCESS" in blob.upper() and "MEASURED" in blob.upper()
+    assert "CHEM 101" in blob and "40%" in blob
+    assert "co-occurrence" in blob.lower() or "not causal" in blob.lower()
+
+
+def test_context_omits_demand_success_when_inert():
+    results = {"analysis": {"demand_success": {"status": "inert", "reason": "no export"}}}
+    assert "COURSE SUCCESS" not in chat_assist._context(results).upper()
+
+
 # ------------------------------------------------------------------ router
 def test_route_parses_offering_and_fills_defaults(monkeypatch):
     _patch_chat(monkeypatch, lambda *a, **k: '{"lookup":"offering","courses":["BIOLOGY 6"]}')

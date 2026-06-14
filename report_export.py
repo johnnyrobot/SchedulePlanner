@@ -193,6 +193,7 @@ _DET_LABELS = {
     "gateway_momentum": "First-year gateway momentum",
     "corequisite_availability": "Corequisite co-availability",
     "infeasibility": "Infeasibility explainer",
+    "demand_success": "Course success signal",
 }
 _PLAN_LABELS = {"shared": "met by major", "concrete": "concrete", "reserve": "reserve"}
 _GE_PATTERN_NAMES = {"igetc": "IGETC", "cal-getc": "Cal-GETC", "csu-ge": "CSU GE"}
@@ -757,6 +758,51 @@ def _infeasibility(results: dict) -> str:
             f'{foot}{_gateway_not_assessed(block)}</section>')
 
 
+def _fmt_rate(r) -> str:
+    """A success/retention fraction as a percent, or an em dash when absent.
+    Excludes bool (an int subclass) so a stray True never renders as '100%'."""
+    return f"{r:.0%}" if isinstance(r, (int, float)) and not isinstance(r, bool) else "—"
+
+
+def _demand_success(results: dict) -> str:
+    """Demand-vs-success escalation (E9): MEASURED aggregate course retention/success
+    (offline CCCCO Data Mart) crossed with the supply signals — NOT a completion or
+    student-level claim. Empty when absent; honest inert note otherwise. All data
+    HTML-escaped."""
+    block = (results.get("analysis") or {}).get("demand_success")
+    if not block:
+        return ""
+    label = _esc(block.get("label", ""))
+    if block.get("status") != "active":
+        return ('<section class="card" aria-labelledby="success"><h2 id="success">'
+                'Course success signal</h2>'
+                f'<p>Not computed: '
+                f'{_esc(block.get("reason", "no course-success export"))}</p>'
+                f'<p class="note">{label}</p></section>')
+
+    def _row(r):
+        flag = " · supply-constrained" if r.get("supply_constrained") else ""
+        ret = (f', retention {_fmt_rate(r.get("retention_rate"))}'
+               if r.get("retention_rate") is not None else "")
+        return (f'<li>{_esc(r.get("course"))}: success '
+                f'{_fmt_rate(r.get("success_rate"))}{ret}{flag}</li>')
+
+    esc_rows = "".join(_row(r) for r in block.get("escalated", []))
+    esc_html = ('<p class="note">Escalated — both supply-constrained and historically '
+                f'lower-success:</p><ul>{esc_rows}</ul>') if esc_rows else ""
+    all_rows = "".join(_row(r) for r in block.get("with_outcome", []))
+    return ('<section class="card" aria-labelledby="success"><h2 id="success">'
+            'Course success signal</h2>'
+            f'<p class="note">{label}</p>'
+            f'<p>Join granularity: {_esc(block.get("granularity"))} · matched '
+            f'{_esc(block.get("matched"))} offered course(s); '
+            f'{_esc(block.get("offered_without_outcome"))} offered without data.</p>'
+            f'{esc_html}'
+            f'<p class="note">All offered courses with measured data:</p>'
+            f'<ul>{all_rows}</ul>'
+            f'{_gateway_not_assessed(block)}</section>')
+
+
 def _reconciliation(results: dict) -> str:
     rec = results.get("reconciliation")
     if not rec:
@@ -915,6 +961,7 @@ SECTION_RENDERERS = [
     _infeasibility,
     _gateway_momentum,
     _corequisite_availability,
+    _demand_success,
     _reconciliation,
     _detectors,
     _ge,

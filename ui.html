@@ -796,6 +796,7 @@ const DET_LABELS={
   gateway_momentum:'First-year gateway momentum',
   corequisite_availability:'Corequisite co-availability',
   infeasibility:'Infeasibility explainer',
+  demand_success:'Course success signal',
 };
 // GE-coverage card maps, hoisted to module scope for the same reason.
 const PNAME = {igetc:'IGETC', 'cal-getc':'Cal-GETC', 'csu-ge':'CSU GE', local:'Local AA/AS GE'};
@@ -1106,6 +1107,29 @@ const LIVE_CARDS = [
     }).join('');
     return '<div class="card"><h3>Why a plan is infeasible</h3>'+
       '<p class="hint">'+escapeHtml(inf.label||'')+'</p>'+rows+'</div>';
+  }
+  return '';
+  } },
+  // (f6) Course success signal (E9): MEASURED aggregate course retention/success
+  // (offline CCCCO Data Mart) crossed with the supply signals — NOT a completion
+  // or student-level claim (ds.label carries the caveat). All data escaped.
+  { target:'html', render:(res)=>{
+  const ds = res.analysis && res.analysis.demand_success;
+  if(ds && ds.status==='active'){
+    const pct=(v)=> (typeof v==='number')? Math.round(v*100)+'%' : '—';
+    const row=(r)=> '<div class="inert"><div class="det'+(r.supply_constrained?'':' on')+'">'+
+      (r.supply_constrained?'⚠ ':'• ')+escapeHtml(r.course||'')+' — success '+pct(r.success_rate)+
+      (r.retention_rate!=null?', retention '+pct(r.retention_rate):'')+
+      (r.supply_constrained?' · supply-constrained':'')+'</div></div>';
+    const esc=(ds.escalated||[]).map(row).join('');
+    const escHtml=esc?'<p class="hint">Escalated — supply-constrained + lower success:</p>'+esc:'';
+    const all=(ds.with_outcome||[]).map(row).join('');
+    return '<div class="card"><h3>Course success signal</h3>'+
+      '<p class="hint">'+escapeHtml(ds.label||'')+'</p>'+
+      '<p class="hint">Join granularity: '+escapeHtml(ds.granularity||'')+' · matched '+
+      escapeHtml(String(ds.matched||0))+' offered course(s); '+
+      escapeHtml(String(ds.offered_without_outcome||0))+' without data.</p>'+
+      escHtml+all+'</div>';
   }
   return '';
   } },

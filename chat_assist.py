@@ -405,6 +405,32 @@ def _ground_corequisite_availability(results: dict) -> list[str]:
     return []
 
 
+def _ground_demand_success(results: dict) -> list[str]:
+    ds = (results.get("analysis") or {}).get("demand_success")
+    if ds and ds.get("status") == "active":
+        el = []
+        esc_courses = {r.get("course") for r in ds.get("escalated", [])}
+
+        def _r(x):
+            v = x.get("success_rate")
+            return f"{v:.0%}" if isinstance(v, (int, float)) else "n/a"
+
+        for r in ds.get("escalated", []):
+            el.append(f"- ESCALATED {r.get('course')}: success {_r(r)} "
+                      "(also supply-constrained).")
+        for r in ds.get("with_outcome", []):
+            if r.get("course") in esc_courses:
+                continue
+            el.append(f"- {r.get('course')}: success {_r(r)}.")
+        # The MEASURED-not-completion + co-occurrence-not-causal caveat rides in the
+        # header so the model never reports this as a student or completion outcome.
+        return ["", "COURSE SUCCESS SIGNAL (MEASURED aggregate retention/success from a "
+                f"CCCCO Data Mart export, {ds.get('granularity')} granularity; NOT a "
+                "completion or student-level outcome and NOT this schedule's outcome — a "
+                "low rate next to a supply constraint is a co-occurrence, not causal)", *el]
+    return []
+
+
 def _ground_evidence(results: dict) -> list[str]:
     block = (results.get("analysis") or {}).get("evidence")
     if not block:
@@ -439,6 +465,7 @@ GROUNDERS = [
     _ground_infeasibility,
     _ground_gateway_momentum,
     _ground_corequisite_availability,
+    _ground_demand_success,
     _ground_evidence,
 ]
 
