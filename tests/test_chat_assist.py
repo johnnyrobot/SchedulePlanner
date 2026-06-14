@@ -496,6 +496,17 @@ def test_run_lookup_offering_absent_course(lamc_routes, make_client):
     assert "No sections" in facts
 
 
+def test_run_lookup_offering_surfaces_skipped_term(lamc_routes, make_client, error_resp):
+    # A term whose listing fails (404) is skipped — the offering answer must say so,
+    # never report "No sections found" / an undercount as authoritative.
+    routes = {**lamc_routes, "/listing/LAMC/2266": error_resp(404)}
+    _label, facts = chat_assist.run_lookup(
+        {"lookup": "offering", "campus": "LAMC", "terms": [2266, 2268],
+         "courses": ["ZZZZ 999"]},
+        client=make_client(routes))
+    assert "PARTIAL" in facts and "2266" in facts
+
+
 def test_run_lookup_program(lamc_routes, make_client):
     label, facts = chat_assist.run_lookup(
         {"lookup": "program", "campus": "LAMC", "program": "Biology"},
