@@ -42,6 +42,26 @@ ROUTER_SYS = (
     "fields you don't know — campus/terms default to the current build."
 )
 
+# E17: the JSON schema the router's output is constrained to (Ollama `format`).
+# It bounds the SHAPE (a single intent object, lookup restricted to the known
+# types) so the model emits parseable JSON; _validate_intent still enforces the
+# SEMANTICS (required fields per lookup, GE goals, course cleaning) as the trust
+# gate, so an off-list or under-specified intent is still rejected.
+ROUTER_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "lookup": {"type": "string",
+                   "enum": ["none", "offering", "program", "prereqs", "ge"]},
+        "campus": {"type": "string"},
+        "courses": {"type": "array", "items": {"type": "string"}},
+        "terms": {"type": "array", "items": {"type": "integer"}},
+        "program": {"type": "string"},
+        "goal": {"type": "string", "enum": ["igetc", "cal-getc", "csu-ge"]},
+        "area": {"type": "string"},
+    },
+    "required": ["lookup"],
+}
+
 ANSWER_SYS = (
     "You are a concise assistant for a community-college course-scheduling tool. "
     "Answer using ONLY the ANALYSIS DATA and any LIVE LOOKUP facts provided below. "
@@ -608,7 +628,8 @@ def route(question: str, defaults: dict, history=None, *, model=llm_assist.MODEL
               + (f"RECENT:\n{hist}\n" if hist else "")
               + f"QUESTION: {question}\nJSON:")
     try:
-        raw = llm_assist._chat(prompt, model=model, system=ROUTER_SYS).strip()
+        raw = llm_assist._chat(prompt, model=model, system=ROUTER_SYS,
+                               format=ROUTER_SCHEMA).strip()
         raw = raw.replace("```json", "").replace("```", "").strip()
         i, j = raw.find("{"), raw.rfind("}")
         if i == -1 or j == -1:

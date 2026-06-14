@@ -87,7 +87,8 @@ def available(model: str = MODEL) -> bool:
 
 
 # ----------------------------------------------------------- chat helper
-def _chat(prompt: str, model: str = MODEL, system: str = "", options=None) -> str:
+def _chat(prompt: str, model: str = MODEL, system: str = "", options=None,
+          format=None) -> str:
     body = {"model": model, "stream": False,
             "messages": ([{"role": "system", "content": system}] if system else [])
                         + [{"role": "user", "content": prompt}]}
@@ -96,6 +97,13 @@ def _chat(prompt: str, model: str = MODEL, system: str = "", options=None) -> st
     # default so explain()/chat() outside engine.run keep Ollama's default sampling.
     if options:
         body["options"] = options
+    # E17: callers that need STRUCTURED output (the router intent, the prereq DNF)
+    # pass a JSON schema; Ollama's `format` constrains the model to emit conforming
+    # JSON, cutting malformed-output failures. Defense-in-depth only — the caller's
+    # own validation (chat_assist._validate_intent / the prereq structural check)
+    # stays the trust gate. Omitted by default so prose answers are unconstrained.
+    if format is not None:
+        body["format"] = format
     req = urllib.request.Request(
         f"{OLLAMA_URL}/api/chat",
         data=json.dumps(body).encode(),
@@ -122,6 +130,11 @@ PREREQ_SYS = (
 # still vary the raw text; the regex/structured pre-pass in engine.parse_prereq —
 # NOT the LLM — remains the byte-identity guarantee for the derived CNF.
 _PREREQ_OPTIONS = {"temperature": 0, "seed": 42}
+# E17: the prereq DNF is an array of OR-groups, each an array of course-id strings.
+# Constraining Ollama to this shape cuts malformed output; the structural check
+# below stays the trust gate.
+_PREREQ_FORMAT = {"type": "array",
+                  "items": {"type": "array", "items": {"type": "string"}}}
 
 
 def parse_prereq_text(text: str, model: str = MODEL):
@@ -130,7 +143,7 @@ def parse_prereq_text(text: str, model: str = MODEL):
         return None
     try:
         raw = _chat(text, model=model, system=PREREQ_SYS,
-                    options=_PREREQ_OPTIONS).strip()
+                    options=_PREREQ_OPTIONS, format=_PREREQ_FORMAT).strip()
         raw = raw.replace("```json", "").replace("```", "").strip()
         data = json.loads(raw)
         if isinstance(data, list) and all(isinstance(g, list) for g in data):

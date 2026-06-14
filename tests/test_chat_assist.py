@@ -472,6 +472,29 @@ def test_route_offering_without_courses_is_none(monkeypatch):
     assert chat_assist.route("x", {"campus": "LAMC", "terms": [2268]})["lookup"] == "none"
 
 
+def test_route_constrains_output_with_intent_schema(monkeypatch):
+    # E17: the router asks Ollama to emit JSON conforming to the intent schema
+    # (fewer malformed outputs). _validate_intent stays the trust gate regardless.
+    seen = {}
+
+    def rec(prompt, model=llm_assist.MODEL, system="", options=None, format=None):
+        seen["format"] = format
+        return '{"lookup":"offering","courses":["BIOLOGY 6"]}'
+    monkeypatch.setattr(llm_assist, "_chat", rec)
+    chat_assist.route("is bio 6 offered?", {"campus": "LAMC", "terms": [2268]})
+    fmt = seen["format"]
+    assert fmt and fmt.get("type") == "object"
+    assert fmt["properties"]["lookup"].get("enum")          # constrained lookup type
+    assert "courses" in fmt["properties"]
+
+
+def test_route_schema_constraint_does_not_replace_the_validation_gate(monkeypatch):
+    # Even a schema-shaped but SEMANTICALLY invalid intent (unknown lookup) is still
+    # rejected by _validate_intent — the constraint is defense-in-depth, not the gate.
+    _patch_chat(monkeypatch, lambda *a, **k: '{"lookup":"delete_everything"}')
+    assert chat_assist.route("x", {"campus": "LAMC", "terms": [2268]})["lookup"] == "none"
+
+
 def test_route_chat_exception_is_none(monkeypatch):
     def boom(*a, **k):
         raise RuntimeError("no model")
@@ -557,7 +580,7 @@ def test_run_lookup_source_error_degrades(monkeypatch):
 def test_chat_routes_then_answers_with_lookup(lamc_routes, make_client, monkeypatch):
     calls = {"n": 0}
 
-    def fake_chat(prompt, model=None, system=""):
+    def fake_chat(prompt, model=None, system="", **k):
         calls["n"] += 1
         if calls["n"] == 1:
             return '{"lookup":"program","program":"Biology"}'

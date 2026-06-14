@@ -229,12 +229,43 @@ def test_parse_prereq_text_pins_temperature_zero_and_seed(monkeypatch):
     _patch_available(monkeypatch, True)
     seen = {}
 
-    def rec(prompt, model=llm_assist.MODEL, system="", options=None):
+    def rec(prompt, model=llm_assist.MODEL, system="", options=None, format=None):
         seen["options"] = options
         return "[]"
     monkeypatch.setattr(llm_assist, "_chat", rec)
     llm_assist.parse_prereq_text("MATH 101")
     assert seen["options"] == {"temperature": 0, "seed": 42}
+
+
+# --------------------------------------------------------------------------- #
+# E17: schema-constrained JSON output (Ollama `format`) for the in-engine parse #
+# --------------------------------------------------------------------------- #
+def test_chat_includes_format_schema_when_given(monkeypatch):
+    captured = _capture_chat_body(monkeypatch)
+    schema = {"type": "object", "properties": {"x": {"type": "string"}}}
+    llm_assist._chat("hi", format=schema)
+    assert captured["body"]["format"] == schema
+
+
+def test_chat_omits_format_when_not_given(monkeypatch):
+    captured = _capture_chat_body(monkeypatch)
+    llm_assist._chat("hi")
+    assert "format" not in captured["body"]
+
+
+def test_parse_prereq_text_constrains_output_with_array_schema(monkeypatch):
+    _patch_available(monkeypatch, True)
+    seen = {}
+
+    def rec(text, model=llm_assist.MODEL, system="", options=None, format=None):
+        seen["format"] = format
+        return "[]"
+    monkeypatch.setattr(llm_assist, "_chat", rec)
+    llm_assist.parse_prereq_text("MATH 101")
+    # the DNF is an array-of-arrays-of-strings; constraining the shape reduces
+    # malformed output, but the structural check in parse_prereq_text stays the gate.
+    assert seen["format"]["type"] == "array"
+    assert seen["format"]["items"]["type"] == "array"
 
 
 # --------------------------------------------------------------------------- #
