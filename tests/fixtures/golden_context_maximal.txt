@@ -66,6 +66,15 @@ EQUITY / ARCHETYPE EXPOSURE (structural exposure PROXY, NOT a measured equity ou
 - Two days a week (≤ 2 meeting days) (kept 2/3 sections): 0 program(s) collapse.
 (+2 more newly-unavailable required course(s) not shown.)
 
+FIRST-YEAR GATEWAY MOMENTUM (offering PROXY for whether the transfer-level English/Math gateway can be SCHEDULED in year 1, NOT a measured completion rate; a major-subject-fallback gateway is discipline-level, transfer-level UNVERIFIED)
+- English: ENGL 101 (via ge_area_1A, transfer-level area-defined) — schedulable in year 1.
+- Math: MATH 227 (via major_subject, transfer-level unverified) — NOT schedulable in year 1; not offered in the analyzed schedule.
+  First-year window: 2268, 2272. Both gateways schedulable: no.
+
+COREQUISITE CO-AVAILABILITY (AB1705 co-OFFERING STRUCTURE PROXY for whether the gateway's catalog corequisite runs in the SAME first-year term; NOT a measured or causal outcome — per AB1705, DIRECT PLACEMENT was the dominant lever and corequisite is one supported form)
+- English: ENGL 101 (corequisite ENGL 101L) — co-offered in year 1.
+- Math: MATH 150 (corequisite MATH 150L) — NOT co-offered in year 1; corequisite MATH 150L is not offered in the analyzed schedule.
+
 WHY THIS MATTERS — SECTOR-WIDE RESEARCH EVIDENCE (published findings from OTHER institutions explaining why a flagged condition matters; NOT a measurement or prediction of this campus)
 - 30%→43%; 9%→~18%; 23.7%→34.8%: Guided-pathway course maps with structured, data-informed advising raised graduation rates: Central Arizona College 30%→43%, Community College of Philadelphia 9%→~18% (doubled), and Bluegrass / BCTC 23.7%→34.8%. [Source: Central Arizona College, Community College of Philadelphia, Bluegrass Community & Technical College; reported via Community College Daily and CCRC]
 - 57% of students affected: 57% of students report having to spend more time and money because required courses are not offered at the times they need them. [Source: Student-survey finding aggregated in the completion-research review (ScienceDirect / Community College Daily source set)]

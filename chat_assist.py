@@ -326,6 +326,63 @@ def _ground_equity_exposure(results: dict) -> list[str]:
     return []
 
 
+def _ground_gateway_momentum(results: dict) -> list[str]:
+    gm = (results.get("analysis") or {}).get("gateway_momentum")
+    if gm and gm.get("status") == "active":
+        el = []
+        for disc in ("english", "math"):
+            g = gm.get(disc) or {}
+            name = disc.capitalize()
+            if not g.get("identified"):
+                el.append(f"- {name}: {g.get('reason', 'no gateway identified')}.")
+                continue
+            sched = ("schedulable in year 1" if g.get("schedulable_year1")
+                     else "NOT schedulable in year 1")
+            obstr = "; ".join(g.get("obstructions", []))
+            el.append(f"- {name}: {g.get('course')} (via {g.get('via')}, transfer-level "
+                      f"{g.get('transfer_level')}) — {sched}"
+                      + (f"; {obstr}" if obstr else "") + ".")
+        el.append(f"  First-year window: {', '.join(gm.get('first_year_terms', []))}. "
+                  f"Both gateways schedulable: "
+                  f"{'yes' if gm.get('both_gateways_year1') else 'no'}.")
+        # The honest envelope rides in the header so the model never reports the
+        # offering proxy as a measured completion rate.
+        return ["", "FIRST-YEAR GATEWAY MOMENTUM (offering PROXY for whether the "
+                "transfer-level English/Math gateway can be SCHEDULED in year 1, NOT a "
+                "measured completion rate; a major-subject-fallback gateway is "
+                "discipline-level, transfer-level UNVERIFIED)", *el]
+    return []
+
+
+def _ground_corequisite_availability(results: dict) -> list[str]:
+    ca = (results.get("analysis") or {}).get("corequisite_availability")
+    if ca and ca.get("status") == "active":
+        el = []
+        for disc in ("english", "math"):
+            g = ca.get(disc) or {}
+            name = disc.capitalize()
+            if not g.get("identified"):
+                el.append(f"- {name}: {g.get('reason', 'no gateway identified')}.")
+                continue
+            if not g.get("has_corequisite"):
+                el.append(f"- {name}: {g.get('course')} — "
+                          f"{g.get('reason', 'no corequisite in the catalog data')}.")
+                continue
+            coreqs = ", ".join(g.get("corequisites", []))
+            co = ("co-offered in year 1" if g.get("co_offered_year1")
+                  else "NOT co-offered in year 1")
+            obstr = "; ".join(g.get("obstructions", []))
+            el.append(f"- {name}: {g.get('course')} (corequisite {coreqs}) — {co}"
+                      + (f"; {obstr}" if obstr else "") + ".")
+        # The AB1705 causal caveat rides in the header: co-offering is NOT a measured
+        # or causal outcome, and direct placement (not corequisite alone) drove gains.
+        return ["", "COREQUISITE CO-AVAILABILITY (AB1705 co-OFFERING STRUCTURE PROXY for "
+                "whether the gateway's catalog corequisite runs in the SAME first-year "
+                "term; NOT a measured or causal outcome — per AB1705, DIRECT PLACEMENT "
+                "was the dominant lever and corequisite is one supported form)", *el]
+    return []
+
+
 def _ground_evidence(results: dict) -> list[str]:
     block = (results.get("analysis") or {}).get("evidence")
     if not block:
@@ -357,6 +414,8 @@ GROUNDERS = [
     _ground_demand_supply,
     _ground_grid_pressure,
     _ground_equity_exposure,
+    _ground_gateway_momentum,
+    _ground_corequisite_availability,
     _ground_evidence,
 ]
 

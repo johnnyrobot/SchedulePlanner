@@ -190,6 +190,8 @@ _DET_LABELS = {
     "prerequisite_ordering": "Prerequisite ordering",
     "time_block_conflict": "Time-block conflicts",
     "equity_exposure": "Equity / archetype exposure",
+    "gateway_momentum": "First-year gateway momentum",
+    "corequisite_availability": "Corequisite co-availability",
 }
 _PLAN_LABELS = {"shared": "met by major", "concrete": "concrete", "reserve": "reserve"}
 _GE_PATTERN_NAMES = {"igetc": "IGETC", "cal-getc": "Cal-GETC", "csu-ge": "CSU GE"}
@@ -615,6 +617,109 @@ def _equity_exposure(results: dict) -> str:
             f'{"".join(sub)}{footnote}</section>')
 
 
+def _gateway_not_assessed(block: dict) -> str:
+    """Render the F8/F9 ``not_assessed`` LIST (each ``{check, status, reason}``) so
+    the limitations travel with the rendered finding. Empty string when none."""
+    items = "".join(
+        f'<li>{_esc(str(n.get("check", "")).replace("_", " "))}: '
+        f'{_esc(n.get("reason"))}</li>'
+        for n in (block.get("not_assessed") or []))
+    return f'<p class="note">Not assessed:</p><ul>{items}</ul>' if items else ""
+
+
+def _gateway_momentum(results: dict) -> str:
+    """First-year gateway momentum (F8): whether each program's transfer-level
+    English (GE Area 1A) and Math (Area 2) gateway course can be SCHEDULED in the
+    first year — an OFFERING proxy, NOT a measured completion rate. Empty when
+    absent; honest inert note otherwise. All data HTML-escaped."""
+    block = (results.get("analysis") or {}).get("gateway_momentum")
+    if not block:
+        return ""
+    label = _esc(block.get("label", ""))
+    if block.get("status") != "active":
+        return ('<section class="card" aria-labelledby="gateway"><h2 id="gateway">'
+                'First-year gateway momentum</h2>'
+                f'<p>Not computed: '
+                f'{_esc(block.get("reason", "no gateway identifiable"))}</p>'
+                f'<p class="note">{label}</p></section>')
+    rows = []
+    for disc in ("english", "math"):
+        g = block.get(disc) or {}
+        title = disc.capitalize()
+        if not g.get("identified"):
+            rows.append(f'<li>{title}: '
+                        f'{_esc(g.get("reason", "no gateway identified"))}</li>')
+            continue
+        sched = ("schedulable in year 1" if g.get("schedulable_year1")
+                 else "NOT schedulable in year 1")
+        obstr = "; ".join(_esc(o) for o in g.get("obstructions", []))
+        obstr_txt = f' — {obstr}' if obstr else ""
+        rows.append(
+            f'<li><b>{title}:</b> {_esc(g.get("course"))} '
+            f'(via {_esc(g.get("via"))}, transfer-level: '
+            f'{_esc(g.get("transfer_level", ""))}) — {sched}{obstr_txt}</li>')
+    both = "yes" if block.get("both_gateways_year1") else "no"
+    win = block.get("window_note")
+    win_html = f'<p class="note">{_esc(win)}</p>' if win else ""
+    return ('<section class="card" aria-labelledby="gateway"><h2 id="gateway">'
+            'First-year gateway momentum</h2>'
+            f'<p class="note">{label}</p>'
+            f'<ul>{"".join(rows)}</ul>'
+            f'<p>Both gateways schedulable in year 1: {both} · first-year terms: '
+            f'{_esc(", ".join(block.get("first_year_terms", [])))}</p>'
+            f'{win_html}{_gateway_not_assessed(block)}</section>')
+
+
+def _corequisite_availability(results: dict) -> str:
+    """AB1705 corequisite co-availability (F9): whether a transfer-level gateway's
+    catalog corequisite is co-offered in the SAME first-year term — a co-OFFERING
+    STRUCTURE proxy, NOT a measured or causal outcome (per AB1705, direct placement
+    was the dominant lever). Empty when absent; honest inert note otherwise. All
+    data HTML-escaped."""
+    block = (results.get("analysis") or {}).get("corequisite_availability")
+    if not block:
+        return ""
+    label = _esc(block.get("label", ""))
+    if block.get("status") != "active":
+        return ('<section class="card" aria-labelledby="coreq"><h2 id="coreq">'
+                'Corequisite co-availability (AB1705)</h2>'
+                f'<p>Not computed: '
+                f'{_esc(block.get("reason", "no corequisite linkage"))}</p>'
+                f'<p class="note">{label}</p></section>')
+    rows = []
+    for disc in ("english", "math"):
+        g = block.get(disc) or {}
+        title = disc.capitalize()
+        if not g.get("identified"):
+            rows.append(f'<li>{title}: '
+                        f'{_esc(g.get("reason", "no gateway identified"))}</li>')
+            continue
+        if not g.get("has_corequisite"):
+            rows.append(
+                f'<li><b>{title}:</b> {_esc(g.get("course"))} — '
+                f'{_esc(g.get("reason", "no corequisite in the catalog data"))}</li>')
+            continue
+        coreqs = ", ".join(_esc(c) for c in g.get("corequisites", []))
+        co = ("co-offered in year 1" if g.get("co_offered_year1")
+              else "NOT co-offered in year 1")
+        obstr = "; ".join(_esc(o) for o in g.get("obstructions", []))
+        obstr_txt = f' — {obstr}' if obstr else ""
+        rows.append(
+            f'<li><b>{title}:</b> {_esc(g.get("course"))} '
+            f'(corequisite: {coreqs}) — {co}{obstr_txt}</li>')
+    both = "yes" if block.get("both_gateways_coreq_co_offered_year1") else "no"
+    win = block.get("window_note")
+    win_html = f'<p class="note">{_esc(win)}</p>' if win else ""
+    return ('<section class="card" aria-labelledby="coreq"><h2 id="coreq">'
+            'Corequisite co-availability (AB1705)</h2>'
+            f'<p class="note">{label}</p>'
+            f'<ul>{"".join(rows)}</ul>'
+            f'<p>Both gateway corequisites co-offered in year 1: {both} · '
+            f'first-year terms: '
+            f'{_esc(", ".join(block.get("first_year_terms", [])))}</p>'
+            f'{win_html}{_gateway_not_assessed(block)}</section>')
+
+
 def _reconciliation(results: dict) -> str:
     rec = results.get("reconciliation")
     if not rec:
@@ -770,6 +875,8 @@ SECTION_RENDERERS = [
     _grid_pressure,
     _demand_supply,
     _equity_exposure,
+    _gateway_momentum,
+    _corequisite_availability,
     _reconciliation,
     _detectors,
     _ge,
