@@ -81,6 +81,7 @@ import equity_exposure
 import evidence
 import gateway_momentum
 import grid_pressure
+import infeasibility
 import engine
 from sources import (assist, catalog_ge, course_master, elumen, elumen_client,
                      enrollment, enrollment_ir, ge, live_demand, mapping,
@@ -792,6 +793,28 @@ def _room_detector_entry(sections, collisions, *, facility_used, capacity=None,
     return entry
 
 
+def _infeasibility_detector_entry(block):
+    """Honest active/inert entry for the E11 infeasibility explainer. Inert when
+    every cohort has a feasible plan (nothing to explain); active when >=1 cohort
+    is unbuildable. ``found`` counts the cohorts a minimal conflicting set was
+    isolated for."""
+    if not block or block.get("status") != "active":
+        return {
+            "detector": "infeasibility", "status": "inert",
+            "reason": ((block or {}).get("reason")
+                       or "every program cohort has a feasible plan to explain"),
+            "remedy": ((block or {}).get("remedy")
+                       or "this fires only when the planner finds NO feasible plan"),
+        }
+    found = sum(1 for e in block.get("explained", []) if e.get("reproduced"))
+    return {
+        "detector": "infeasibility", "status": "active", "found": found,
+        "reason": ("when the planner finds NO feasible plan for a program cohort, a "
+                   "deterministic CP-SAT re-solve isolates the minimal set of required "
+                   "courses behind it — a structural diagnostic, not a student outcome"),
+    }
+
+
 def _buildability_detector_entry(block):
     """Honest active/inert entry for the program-buildability audit (mirrors the
     other detector entries). Inert carries the audit's own reason."""
@@ -1341,10 +1364,18 @@ def analyze_live(campus, terms, program_query, out_path, *, client=None,
         analysis["room_conflicts"] = room_conflicts
         if facility:
             analysis["room_capacity"] = room_capacity
+    # E11 infeasibility explainer: a DETERMINISTIC CP-SAT re-solve (outside
+    # engine.run) that, when the planner found NO feasible plan for a cohort,
+    # isolates the minimal set of required courses behind it. Re-derives the
+    # planner's exact inputs from the written workbook; engine.run is untouched.
+    infeasibility_block = infeasibility.infeasibility_report(out_path, report["results"])
+    if isinstance(report["results"], dict) and isinstance(report["results"].get("analysis"), dict):
+        report["results"]["analysis"]["infeasibility"] = infeasibility_block
     report["inert_detectors"].append(_time_block_detector_entry(sections, collisions))
     report["inert_detectors"].append(_room_detector_entry(
         sections, room_conflicts, facility_used=bool(facility),
         capacity=room_capacity, lab_stats=_lab_pool_stats(sections, facility)))
+    report["inert_detectors"].append(_infeasibility_detector_entry(infeasibility_block))
 
     # Feature-analysis detectors (F1+F4 buildability, F2 bottlenecks, F5
     # demand_supply, F3 grid_pressure): each is deterministic, advisory, and

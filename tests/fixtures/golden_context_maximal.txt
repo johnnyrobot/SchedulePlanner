@@ -66,6 +66,9 @@ EQUITY / ARCHETYPE EXPOSURE (structural exposure PROXY, NOT a measured equity ou
 - Two days a week (≤ 2 meeting days) (kept 2/3 sections): 0 program(s) collapse.
 (+2 more newly-unavailable required course(s) not shown.)
 
+WHY A PLAN IS INFEASIBLE (a deterministic STRUCTURAL diagnostic of the minimal required-course set the planner cannot schedule in a cohort's term horizon; NOT a student outcome — season mismatches are excluded as fixable, and GE is held as fixed background)
+- Biology AS-T (Full-time, 4 terms): these 2 required course(s) cannot all be scheduled within the 4-term full-time plan; relaxing any one restores feasibility [MATH 261, CHEM 101].
+
 FIRST-YEAR GATEWAY MOMENTUM (offering PROXY for whether the transfer-level English/Math gateway can be SCHEDULED in year 1, NOT a measured completion rate; a major-subject-fallback gateway is discipline-level, transfer-level UNVERIFIED)
 - English: ENGL 101 (via ge_area_1A, transfer-level area-defined) — schedulable in year 1.
 - Math: MATH 227 (via major_subject, transfer-level unverified) — NOT schedulable in year 1; not offered in the analyzed schedule.

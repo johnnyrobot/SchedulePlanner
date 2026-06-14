@@ -270,6 +270,28 @@ def test_context_omits_corequisite_when_inert():
     assert "COREQUISITE" not in chat_assist._context(results)
 
 
+# ------------------------------------------------------- E11 infeasibility grounding
+def test_context_includes_infeasibility_structural_framing():
+    results = {"analysis": {"infeasibility": {"status": "active", "label": "L",
+        "explained": [{"program": "Bio", "cohort": "Full-time", "horizon_terms": 4,
+                       "reproduced": True,
+                       "minimal_conflict_set": ["MATH 261", "CHEM 101"],
+                       "background_only": False,
+                       "summary": "these 2 required course(s) cannot all be scheduled "
+                                  "within the 4-term full-time plan; relaxing any one "
+                                  "restores feasibility"}],
+        "not_assessed": []}}}
+    blob = chat_assist._context(results)
+    assert "INFEASIB" in blob.upper() and "STRUCTURAL" in blob.upper()
+    assert "Bio" in blob and "Full-time" in blob and "MATH 261" in blob
+    assert "relaxing any one restores feasibility" in blob
+
+
+def test_context_omits_infeasibility_when_inert():
+    results = {"analysis": {"infeasibility": {"status": "inert", "reason": "all feasible"}}}
+    assert "INFEASIB" not in chat_assist._context(results).upper()
+
+
 # ------------------------------------------------------------------ router
 def test_route_parses_offering_and_fills_defaults(monkeypatch):
     _patch_chat(monkeypatch, lambda *a, **k: '{"lookup":"offering","courses":["BIOLOGY 6"]}')

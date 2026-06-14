@@ -519,3 +519,50 @@ def test_corequisite_availability_section_inert_note():
             "reason": "no corequisite linkage available",
             "remedy": "run with --elumen-live"}}})
     assert "Not computed" in html and "corequisite" in html.lower()
+
+
+# ------------------------------------------------- E11 infeasibility render
+def _infeasibility_block():
+    return {
+        "status": "active",
+        "label": "Infeasibility Explainer: a deterministic STRUCTURAL re-solve ... "
+                 "NOT a student outcome or a prediction.",
+        "explained": [
+            {"program": "Bio <AS>", "cohort": "Full-time", "horizon_terms": 4,
+             "reproduced": True, "minimal_conflict_set": ["MATH <261>", "CHEM 101"],
+             "background_only": False,
+             "summary": "these 2 required course(s) cannot all be scheduled within "
+                        "the 4-term full-time plan; relaxing any one restores feasibility"},
+            {"program": "Bio <AS>", "cohort": "Part-time", "horizon_terms": 8,
+             "reproduced": False,
+             "note": "the planner found no feasible plan, but the structural explainer "
+                     "could not reproduce it, so a minimal conflicting set is unavailable"},
+        ],
+        "not_assessed": [
+            {"check": "season_mismatch_as_cause", "status": "inert",
+             "reason": "season mismatches are treated as fixable"},
+            {"check": "student_completion", "status": "inert",
+             "reason": "no student-level outcome exists"}],
+    }
+
+
+def test_infeasibility_section_renders_and_escapes():
+    html = report_export._infeasibility({"analysis": {"infeasibility": _infeasibility_block()}})
+    assert "infeasib" in html.lower() or "unbuildable" in html.lower()
+    assert "MATH &lt;261&gt;" in html and "MATH <261>" not in html   # escaped course
+    assert "Full-time" in html and "Part-time" in html
+    assert "relaxing any one restores feasibility" in html
+    assert "could not reproduce" in html                              # not-reproduced note
+    assert "season" in html.lower()                                   # not_assessed surfaced
+    assert "STRUCTURAL" in html                                       # honesty label
+
+
+def test_infeasibility_section_empty_when_absent():
+    assert report_export._infeasibility({"analysis": {}}) == ""
+
+
+def test_infeasibility_section_inert_note():
+    html = report_export._infeasibility({"analysis": {"infeasibility": {
+        "status": "inert", "label": "L",
+        "reason": "every program cohort has a feasible plan to explain"}}})
+    assert "Not computed" in html and "feasible" in html

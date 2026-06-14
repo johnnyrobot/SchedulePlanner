@@ -795,6 +795,7 @@ const DET_LABELS={
   equity_exposure:'Equity / archetype exposure',
   gateway_momentum:'First-year gateway momentum',
   corequisite_availability:'Corequisite co-availability',
+  infeasibility:'Infeasibility explainer',
 };
 // GE-coverage card maps, hoisted to module scope for the same reason.
 const PNAME = {igetc:'IGETC', 'cal-getc':'Cal-GETC', 'csu-ge':'CSU GE', local:'Local AA/AS GE'};
@@ -1084,6 +1085,27 @@ const LIVE_CARDS = [
       '<p class="hint">First-year window: '+cterms+
       ' · both gateway corequisites co-offered in year 1: '+
       (ca.both_gateways_coreq_co_offered_year1?'yes':'no')+'</p></div>';
+  }
+  return '';
+  } },
+  // (f5) Why a plan is infeasible (E11): when the planner finds no feasible plan
+  // for a cohort, the minimal required-course set behind it — a deterministic
+  // STRUCTURAL diagnostic, NOT a student outcome (inf.label carries the caveat).
+  { target:'html', render:(res)=>{
+  const inf = res.analysis && res.analysis.infeasibility;
+  if(inf && inf.status==='active'){
+    const rows=(inf.explained||[]).map(e=>{
+      const head=escapeHtml(e.program||'')+' — '+escapeHtml(e.cohort||'')+
+        ' ('+escapeHtml(String(e.horizon_terms||''))+' terms)';
+      if(!e.reproduced) return '<div class="inert"><div class="det">⊘ '+head+
+        '</div><div class="why">'+escapeHtml(e.note||'')+'</div></div>';
+      const mcs=(e.minimal_conflict_set||[]).map(escapeHtml).join(', ')||'—';
+      return '<div class="inert"><div class="det">⊘ '+head+'</div>'+
+        '<div class="why">'+escapeHtml(e.summary||'')+'</div>'+
+        '<div class="rem">'+mcs+'</div></div>';
+    }).join('');
+    return '<div class="card"><h3>Why a plan is infeasible</h3>'+
+      '<p class="hint">'+escapeHtml(inf.label||'')+'</p>'+rows+'</div>';
   }
   return '';
   } },
