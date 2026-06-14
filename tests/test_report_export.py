@@ -410,3 +410,112 @@ def test_equity_exposure_truncation_footnote():
     blk["truncated"]["newly_unavailable"] = 5
     html = report_export._equity_exposure({"analysis": {"equity_exposure": blk}})
     assert "5 more" in html
+
+
+# ---------------------------------------------------- F8 gateway momentum render
+def _gateway_block():
+    """An active F8 block: English schedulable, Math obstructed (matches the real
+    gateway_momentum_report shape)."""
+    return {
+        "status": "active",
+        "label": "First-Year Gateway-Momentum: an OFFERING PROXY ... NOT a measured "
+                 "completion rate.",
+        "first_year_terms": ["2248", "2252"],
+        "english": {"identified": True, "course": "ENGL <1>", "via": "ge_area_1A",
+                    "transfer_level": "area-defined", "recommended_semester": 1,
+                    "schedulable_year1": True, "sections_in_window": 2,
+                    "obstructions": []},
+        "math": {"identified": True, "course": "MATH 227", "via": "major_subject",
+                 "transfer_level": "unverified", "recommended_semester": 1,
+                 "schedulable_year1": False, "sections_in_window": 0,
+                 "obstructions": ["not offered in the analyzed schedule"]},
+        "both_gateways_year1": False,
+        "not_assessed": [
+            {"check": "placement_prerequisite_blocking", "status": "inert",
+             "reason": "no placement data exists"},
+            {"check": "student_completion", "status": "inert",
+             "reason": "no student-level outcome exists"}],
+    }
+
+
+def test_gateway_momentum_section_renders_and_escapes():
+    html = report_export._gateway_momentum({"analysis": {"gateway_momentum": _gateway_block()}})
+    assert "gateway" in html.lower() and "momentum" in html.lower()
+    assert "ENGL &lt;1&gt;" in html and "ENGL <1>" not in html          # escaped
+    assert "MATH 227" in html
+    assert "PROXY" in html                                              # caveat carried
+    assert "not offered in the analyzed schedule" in html              # obstruction
+    assert "placement" in html and "student completion" in html.replace("_", " ")  # not_assessed
+    assert "unverified" in html                                        # transfer-level honesty
+
+
+def test_gateway_momentum_section_empty_when_absent():
+    assert report_export._gateway_momentum({"analysis": {}}) == ""
+
+
+def test_gateway_momentum_section_inert_note():
+    html = report_export._gateway_momentum({"analysis": {"gateway_momentum": {
+        "status": "inert", "label": "L",
+        "reason": "neither a transfer-level English nor Math gateway could be identified"}}})
+    assert "Not computed" in html and "gateway" in html.lower()
+
+
+# ------------------------------------------------ F9 corequisite co-availability
+def _coreq_block():
+    """An active F9 block: English coreq co-offered, Math coreq not offered."""
+    return {
+        "status": "active",
+        "label": "Corequisite Co-Availability (AB1705): a co-OFFERING STRUCTURE proxy "
+                 "... DIRECT PLACEMENT was the dominant lever ... NOT a measured "
+                 "completion rate.",
+        "first_year_terms": ["2248"],
+        "english": {"identified": True, "course": "ENGL 101", "via": "ge_area_1A",
+                    "transfer_level": "area-defined", "has_corequisite": True,
+                    "corequisites": ["ENGL <101L>"],
+                    "corequisite_detail": [{"course": "ENGL <101L>", "offered": True,
+                                            "co_offered_terms": ["2248"],
+                                            "co_offered_year1": True}],
+                    "co_offered_year1": True, "all_corequisites_co_offered_year1": True,
+                    "co_offered_terms": ["2248"], "obstructions": []},
+        "math": {"identified": True, "course": "MATH 150", "via": "major_subject",
+                 "transfer_level": "unverified", "has_corequisite": True,
+                 "corequisites": ["MATH 150L"],
+                 "corequisite_detail": [{"course": "MATH 150L", "offered": False,
+                                         "co_offered_terms": [], "co_offered_year1": False}],
+                 "co_offered_year1": False, "all_corequisites_co_offered_year1": False,
+                 "co_offered_terms": [],
+                 "obstructions": ["corequisite MATH 150L is not offered in the analyzed schedule"]},
+        "both_gateways_coreq_co_offered_year1": False,
+        "not_assessed": [
+            {"check": "placement_prerequisite_blocking", "status": "inert",
+             "reason": "no placement data exists"},
+            {"check": "corequisite_enrollment_linkage", "status": "inert",
+             "reason": "catalog co-offering is not registration linkage"},
+            {"check": "student_completion_or_corequisite_effectiveness", "status": "inert",
+             "reason": "no student-level outcome exists"}],
+    }
+
+
+def test_corequisite_availability_section_renders_and_escapes():
+    html = report_export._corequisite_availability(
+        {"analysis": {"corequisite_availability": _coreq_block()}})
+    assert "corequisite" in html.lower()
+    assert "ENGL &lt;101L&gt;" in html and "ENGL <101L>" not in html    # escaped coreq
+    assert "MATH 150L" in html
+    assert "STRUCTURE proxy" in html or "PROXY" in html                # caveat
+    assert "DIRECT PLACEMENT" in html                                  # AB1705 honesty
+    assert "not offered in the analyzed schedule" in html              # obstruction
+    assert "linkage" in html                                           # not_assessed disclosed
+
+
+def test_corequisite_availability_section_empty_when_absent():
+    assert report_export._corequisite_availability({"analysis": {}}) == ""
+
+
+def test_corequisite_availability_section_inert_note():
+    html = report_export._corequisite_availability(
+        {"analysis": {"corequisite_availability": {
+            "status": "inert", "label": "L",
+            "reason": "no corequisite linkage available",
+            "remedy": "run with --elumen-live"}}})
+    assert "Not computed" in html and "corequisite" in html.lower()

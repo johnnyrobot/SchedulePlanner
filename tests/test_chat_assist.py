@@ -219,6 +219,57 @@ def test_context_equity_exposure_surfaces_truncation():
     assert "7 more" in blob
 
 
+# ------------------------------------------------ F8 gateway momentum grounding
+def test_context_includes_gateway_momentum_proxy_framing():
+    results = {"analysis": {"gateway_momentum": {
+        "status": "active", "label": "L", "first_year_terms": ["2248", "2252"],
+        "english": {"identified": True, "course": "ENGL 101", "via": "ge_area_1A",
+                    "transfer_level": "area-defined", "schedulable_year1": True,
+                    "obstructions": []},
+        "math": {"identified": True, "course": "MATH 227", "via": "major_subject",
+                 "transfer_level": "unverified", "schedulable_year1": False,
+                 "obstructions": ["not offered in the analyzed schedule"]},
+        "both_gateways_year1": False, "not_assessed": []}}}
+    blob = "\n".join(chat_assist._context(results).split("\n"))
+    assert "GATEWAY" in blob and "PROXY" in blob
+    assert "ENGL 101" in blob and "MATH 227" in blob
+    assert "not offered in the analyzed schedule" in blob   # obstruction carried
+    assert "unverified" in blob                             # transfer-level honesty
+
+
+def test_context_omits_gateway_momentum_when_inert():
+    results = {"analysis": {"gateway_momentum": {
+        "status": "inert", "label": "L", "reason": "no gateway identifiable"}}}
+    assert "GATEWAY" not in chat_assist._context(results)
+
+
+# ------------------------------------------ F9 corequisite co-availability grounding
+def test_context_includes_corequisite_proxy_and_ab1705_framing():
+    results = {"analysis": {"corequisite_availability": {
+        "status": "active", "label": "L", "first_year_terms": ["2248"],
+        "english": {"identified": True, "course": "ENGL 101", "via": "ge_area_1A",
+                    "transfer_level": "area-defined", "has_corequisite": True,
+                    "corequisites": ["ENGL 101L"], "co_offered_year1": True,
+                    "co_offered_terms": ["2248"], "obstructions": []},
+        "math": {"identified": True, "course": "MATH 150", "via": "major_subject",
+                 "transfer_level": "unverified", "has_corequisite": True,
+                 "corequisites": ["MATH 150L"], "co_offered_year1": False,
+                 "co_offered_terms": [],
+                 "obstructions": ["corequisite MATH 150L is not offered in the analyzed schedule"]},
+        "both_gateways_coreq_co_offered_year1": False, "not_assessed": []}}}
+    blob = chat_assist._context(results)
+    assert "COREQUISITE" in blob and ("PROXY" in blob or "STRUCTURE" in blob)
+    assert "DIRECT PLACEMENT" in blob                       # AB1705 causal caveat
+    assert "ENGL 101L" in blob and "MATH 150L" in blob
+    assert "not offered in the analyzed schedule" in blob   # obstruction carried
+
+
+def test_context_omits_corequisite_when_inert():
+    results = {"analysis": {"corequisite_availability": {
+        "status": "inert", "label": "L", "reason": "no corequisite linkage"}}}
+    assert "COREQUISITE" not in chat_assist._context(results)
+
+
 # ------------------------------------------------------------------ router
 def test_route_parses_offering_and_fills_defaults(monkeypatch):
     _patch_chat(monkeypatch, lambda *a, **k: '{"lookup":"offering","courses":["BIOLOGY 6"]}')

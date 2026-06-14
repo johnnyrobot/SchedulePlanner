@@ -793,6 +793,8 @@ const DET_LABELS={
   grid_pressure:'Grid conformance & morning compression',
   demand_supply:'Demand-vs-supply action list',
   equity_exposure:'Equity / archetype exposure',
+  gateway_momentum:'First-year gateway momentum',
+  corequisite_availability:'Corequisite co-availability',
 };
 // GE-coverage card maps, hoisted to module scope for the same reason.
 const PNAME = {igetc:'IGETC', 'cal-getc':'Cal-GETC', 'csu-ge':'CSU GE', local:'Local AA/AS GE'};
@@ -1024,6 +1026,64 @@ const LIVE_CARDS = [
       ' more newly-unavailable required course(s) beyond those shown.</p>':'';
     return '<div class="card"><h3>Equity / archetype exposure</h3>'+
       '<p class="hint">'+escapeHtml(eq.label||'')+'</p>'+subs+foot+'</div>';
+  }
+  return '';
+  } },
+  // (f3) First-year gateway momentum (F8): whether each program's transfer-level
+  // English (GE Area 1A) / Math (Area 2) gateway course can be SCHEDULED in the
+  // first year — an OFFERING proxy, NOT a measured completion rate (gm.label). A
+  // major-subject-fallback gateway is discipline-level, transfer-level UNVERIFIED.
+  { target:'html', render:(res)=>{
+  const gm = res.analysis && res.analysis.gateway_momentum;
+  if(gm && gm.status==='active'){
+    const rows=['english','math'].map(k=>{
+      const g=gm[k]||{}; const name=k.charAt(0).toUpperCase()+k.slice(1);
+      if(!g.identified) return '<div class="inert"><div class="det">⊘ '+name+': '+
+        escapeHtml(g.reason||'no gateway identified')+'</div></div>';
+      const ok=g.schedulable_year1;
+      const obstr=(g.obstructions||[]).map(escapeHtml).join('; ');
+      return '<div class="inert"><div class="det'+(ok?' on':'')+'">'+(ok?'✓ ':'⊘ ')+
+        name+': '+escapeHtml(g.course||'')+' (via '+escapeHtml(g.via||'')+
+        ', transfer-level '+escapeHtml(g.transfer_level||'')+') — '+
+        (ok?'schedulable in year 1':'NOT schedulable in year 1')+'</div>'+
+        (obstr?'<div class="why">'+obstr+'</div>':'')+'</div>';
+    }).join('');
+    const terms=(gm.first_year_terms||[]).map(escapeHtml).join(', ');
+    return '<div class="card"><h3>First-year gateway momentum</h3>'+
+      '<p class="hint">'+escapeHtml(gm.label||'')+'</p>'+rows+
+      '<p class="hint">First-year window: '+terms+' · both gateways schedulable: '+
+      (gm.both_gateways_year1?'yes':'no')+'</p></div>';
+  }
+  return '';
+  } },
+  // (f4) Corequisite co-availability (F9): whether a transfer-level gateway's
+  // catalog corequisite is co-offered in the SAME first-year term — a co-OFFERING
+  // STRUCTURE proxy, NOT a measured or causal outcome (ca.label carries the AB1705
+  // "direct placement was the dominant lever" caveat). All data escaped.
+  { target:'html', render:(res)=>{
+  const ca = res.analysis && res.analysis.corequisite_availability;
+  if(ca && ca.status==='active'){
+    const rows=['english','math'].map(k=>{
+      const g=ca[k]||{}; const name=k.charAt(0).toUpperCase()+k.slice(1);
+      if(!g.identified) return '<div class="inert"><div class="det">⊘ '+name+': '+
+        escapeHtml(g.reason||'no gateway identified')+'</div></div>';
+      if(!g.has_corequisite) return '<div class="inert"><div class="det">⊘ '+name+': '+
+        escapeHtml(g.course||'')+' — '+
+        escapeHtml(g.reason||'no corequisite in the catalog data')+'</div></div>';
+      const ok=g.co_offered_year1;
+      const coreqs=(g.corequisites||[]).map(escapeHtml).join(', ');
+      const obstr=(g.obstructions||[]).map(escapeHtml).join('; ');
+      return '<div class="inert"><div class="det'+(ok?' on':'')+'">'+(ok?'✓ ':'⊘ ')+
+        name+': '+escapeHtml(g.course||'')+' (corequisite '+coreqs+') — '+
+        (ok?'co-offered in year 1':'NOT co-offered in year 1')+'</div>'+
+        (obstr?'<div class="why">'+obstr+'</div>':'')+'</div>';
+    }).join('');
+    const cterms=(ca.first_year_terms||[]).map(escapeHtml).join(', ');
+    return '<div class="card"><h3>Corequisite co-availability (AB1705)</h3>'+
+      '<p class="hint">'+escapeHtml(ca.label||'')+'</p>'+rows+
+      '<p class="hint">First-year window: '+cterms+
+      ' · both gateway corequisites co-offered in year 1: '+
+      (ca.both_gateways_coreq_co_offered_year1?'yes':'no')+'</p></div>';
   }
   return '';
   } },
