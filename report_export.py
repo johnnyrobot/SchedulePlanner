@@ -196,6 +196,7 @@ _DET_LABELS = {
     "demand_success": "Course success signal",
     "equity_success_gap": "Equity course-success gap",
     "minimal_perturbation": "Fewest offering changes to buildable",
+    "contact_hours": "Contact-hour conformance",
 }
 _PLAN_LABELS = {"shared": "met by major", "concrete": "concrete", "reserve": "reserve"}
 _GE_PATTERN_NAMES = {"igetc": "IGETC", "cal-getc": "Cal-GETC", "csu-ge": "CSU GE"}
@@ -897,6 +898,57 @@ def _minimal_perturbation(results: dict) -> str:
             f'{_gateway_not_assessed(block)}</section>')
 
 
+def _contact_hours(results: dict) -> str:
+    """Contact-hour conformance (F10/E15): observed scheduled in-class time vs a wide
+    Title 5 §55002.5 per-unit band — a CONFORMANCE proxy, NOT a compliance ruling.
+    Empty when absent; honest inert note otherwise. All data HTML-escaped."""
+    block = (results.get("analysis") or {}).get("contact_hours")
+    if not block:
+        return ""
+    label = _esc(block.get("label", ""))
+    if block.get("status") != "active":
+        # Echo the not-assessed breakdown the inert block computes (the common live
+        # case: sections existed but none carried units + woi + a meeting), so the
+        # reader sees WHY nothing was assessable — not just the aggregate reason.
+        na = block.get("not_assessed") or {}
+        na_items = "".join(
+            f'<li>{_esc(str(k).replace("_", " "))}: {_esc(v)}</li>'
+            for k, v in sorted(na.items()) if v)
+        na_html = (f'<p class="note">Not assessed:</p><ul>{na_items}</ul>'
+                   if na_items else "")
+        return ('<section class="card" aria-labelledby="contact"><h2 id="contact">'
+                'Contact-hour conformance</h2>'
+                f'<p>Not computed: '
+                f'{_esc(block.get("reason", "no normalizable section"))}</p>'
+                f'{na_html}<p class="note">{label}</p></section>')
+
+    def _flag(f):
+        band = f.get("expected_band") or []
+        band_txt = f'{_esc(band[0])}–{_esc(band[1])}' if len(band) == 2 else "—"
+        return (f'<li><b>{_esc(f.get("course"))}</b>: '
+                f'{_esc(f.get("per_unit_term_hours"))} contact hrs/unit is implausibly '
+                f'{_esc(f.get("direction"))} for the {_esc(f.get("contact_category"))} '
+                f'band {band_txt} ({_esc(f.get("weekly_minutes"))} min/wk × '
+                f'{_esc(f.get("woi"))} wks, {_esc(f.get("units"))} units)</li>')
+
+    flagged = "".join(_flag(f) for f in block.get("flagged", []))
+    flagged_html = (f'<p class="note">Implausible outliers:</p><ul>{flagged}</ul>'
+                    if flagged else '<p>No section falls outside the band.</p>')
+    na = block.get("not_assessed") or {}
+    na_items = "".join(
+        f'<li>{_esc(str(k).replace("_", " "))}: {_esc(v)}</li>'
+        for k, v in sorted(na.items()))
+    na_html = (f'<p class="note">Not assessed:</p><ul>{na_items}</ul>'
+               if na_items else "")
+    return ('<section class="card" aria-labelledby="contact"><h2 id="contact">'
+            'Contact-hour conformance</h2>'
+            f'<p class="note">{label}</p>'
+            f'<p>{_esc(block.get("assessed"))} section(s) assessed · '
+            f'{_esc(block.get("consistent"))} within band · '
+            f'{_esc(len(block.get("flagged", [])))} flagged.</p>'
+            f'{flagged_html}{na_html}</section>')
+
+
 def _reconciliation(results: dict) -> str:
     rec = results.get("reconciliation")
     if not rec:
@@ -1058,6 +1110,7 @@ SECTION_RENDERERS = [
     _demand_success,
     _equity_success_gap,
     _minimal_perturbation,
+    _contact_hours,
     _reconciliation,
     _detectors,
     _ge,

@@ -496,6 +496,38 @@ def _ground_minimal_perturbation(results: dict) -> list[str]:
     return []
 
 
+def _ground_contact_hours(results: dict) -> list[str]:
+    ch = (results.get("analysis") or {}).get("contact_hours")
+    if ch and ch.get("status") == "active":
+        el = []
+        for f in ch.get("flagged", []):
+            band = f.get("expected_band") or []
+            band_txt = f"{band[0]}-{band[1]}" if len(band) == 2 else "n/a"
+            el.append(f"- {f.get('course')}: {f.get('per_unit_term_hours')} contact "
+                      f"hours/unit is implausibly {f.get('direction')} for the "
+                      f"{f.get('contact_category')} band {band_txt}.")
+        if not el:
+            el.append(f"- {ch.get('assessed')} section(s) assessed; none outside the band.")
+        # Surface the not-assessed accounting the report + ui both render, so the
+        # proxy's coverage (how many sections could NOT be assessed, and why) is not
+        # silently dropped on the chat surface.
+        na = ch.get("not_assessed") or {}
+        for k in ("no_meeting_time", "missing_units", "missing_weeks", "category_unknown"):
+            if na.get(k):
+                el.append(f"  Not assessed — {k.replace('_', ' ')}: {na[k]}.")
+        cov = na.get("meeting_block_coverage")
+        if cov:
+            el.append(f"  Coverage: {cov}.")
+        # The CONFORMANCE-proxy-not-compliance caveat rides in the header so the model
+        # never reports this as an official contact-hour record or a ruling.
+        return ["", "CONTACT-HOUR CONFORMANCE (a Title 5 §55002.5 CONFORMANCE PROXY of "
+                "observed scheduled in-class time vs a WIDE implied per-unit band; NOT a "
+                "compliance ruling and NOT the official contact-hour record — only "
+                "implausible outliers are flagged, the Activity-vs-Lab band stays wide, "
+                "and outside-class study hours are not counted)", *el]
+    return []
+
+
 def _ground_evidence(results: dict) -> list[str]:
     block = (results.get("analysis") or {}).get("evidence")
     if not block:
@@ -533,6 +565,7 @@ GROUNDERS = [
     _ground_demand_success,
     _ground_equity_success_gap,
     _ground_minimal_perturbation,
+    _ground_contact_hours,
     _ground_evidence,
 ]
 

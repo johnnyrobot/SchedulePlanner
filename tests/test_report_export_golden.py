@@ -352,6 +352,25 @@ def _maximal_results() -> dict:
                     {"check": "student_completion", "status": "inert",
                      "reason": "no student-level outcome exists in any LACCD source"}],
             },
+            "contact_hours": {
+                "status": "active",
+                "label": "Contact-hour conformance: a Title 5 §55002.5 CONFORMANCE PROXY "
+                         "... NOT a compliance ruling and NOT the official record ...",
+                "assessed": 3, "consistent": 2,
+                "flagged": [{
+                    "course": "PE <1>", "term": 2268, "units": 1.0,
+                    "weekly_minutes": 1200, "woi": 18.0, "contact_category": "lecture",
+                    "term_contact_hours": 360.0, "per_unit_term_hours": 360.0,
+                    "expected_band": [9.0, 27.0], "within_band": False,
+                    "direction": "high",
+                    "summary": "PE <1>: 360.0 contact hours/unit is implausibly high"}],
+                "used_all_blocks": False,
+                "not_assessed": {
+                    "no_meeting_time": 1, "missing_units": 0, "missing_weeks": 2,
+                    "category_unknown": 1,
+                    "meeting_block_coverage": "only the first meeting block was visible "
+                    "for some sections — a multi-block section may be UNDERCOUNTED"},
+            },
         },
         "reconciliation": {
             "matched_count": 6, "unmatched_count": 2,
@@ -387,6 +406,9 @@ def _maximal_results() -> dict:
             {"detector": "minimal_perturbation", "status": "active", "found": 1,
              "reason": "recommends the fewest OFFERING changes that flip a program's "
                        "required path to buildable — a structural offering recommendation"},
+            {"detector": "contact_hours", "status": "active", "found": 1,
+             "reason": "compares observed scheduled in-class time to a wide Title 5 band "
+                       "and flags implausible outliers — a conformance proxy, not a ruling"},
         ],
         "ge_coverage": {
             "requested": True, "pattern": "igetc", "assist_status": "ok",
@@ -522,6 +544,10 @@ def _inert_each_section_results() -> dict:
                                      "label": "... minimal-perturbation OFFERING ...",
                                      "reason": "every audited program's required path is "
                                                "already structurally buildable"},
+            "contact_hours": {"status": "inert",
+                              "label": "... contact-hour CONFORMANCE proxy ...",
+                              "reason": "no section carries units + weeks-of-instruction "
+                                        "+ a meeting time"},
         },
     }
 

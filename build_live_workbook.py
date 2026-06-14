@@ -74,6 +74,7 @@ from types import SimpleNamespace
 import httpx
 
 import buildability
+import contact_hours
 import corequisite_availability
 import cross_program_bottleneck
 import demand_success
@@ -1099,7 +1100,31 @@ def _corequisite_availability_detector_entry(block):
     }
 
 
-# Append-only registry of the feature-analysis detectors (F1+F4, F2, F5, F3, F6, F8, F9).
+def _contact_hours_detector_entry(block):
+    """Honest active/inert entry for the F10/E15 contact-hour conformance detector
+    (mirrors the other detector entries). Inert when no section carries the units +
+    weeks-of-instruction + meeting time the normalization needs (the bare live fetch
+    often omits woi). ``found`` counts the implausibly low/high outlier sections."""
+    if not block or block.get("status") != "active":
+        return {
+            "detector": "contact_hours", "status": "inert",
+            "reason": ((block or {}).get("reason")
+                       or "no section carries units + weeks-of-instruction + a meeting time"),
+            "remedy": ((block or {}).get("remedy")
+                       or "supply per-section units, weeks-of-instruction (woi), and a "
+                          "meeting day/time"),
+        }
+    return {
+        "detector": "contact_hours", "status": "active",
+        "found": len(block.get("flagged", [])),
+        "reason": ("compares each section's OBSERVED scheduled in-class time (weekly "
+                   "minutes × weeks-of-instruction) to a wide Title 5 §55002.5 per-unit "
+                   "band and flags implausible outliers — a CONFORMANCE proxy, NOT a "
+                   "compliance ruling or the official contact-hour record"),
+    }
+
+
+# Append-only registry of the feature-analysis detectors (F1+F4, F2, F5, F3, F6, F8, F9, F10).
 # Each entry pairs a results["analysis"] key with a compute fn(ctx) -> block and
 # the block's inert-detector entry helper; analyze_live runs them in ONE loop
 # below the five heterogeneous detectors (modality/prereq/ge/time_block/room),
@@ -1149,6 +1174,10 @@ ANALYSIS_DETECTORS = (
         lambda c: corequisite_availability.corequisite_availability_report(
             c.sections, program=c.program, coreq_map=c.coreq_map),
         _corequisite_availability_detector_entry),
+    AnalysisDetector(
+        "contact_hours",
+        lambda c: contact_hours.contact_hours_report(c.sections),
+        _contact_hours_detector_entry),
 )
 
 

@@ -103,7 +103,7 @@ def test_fetch_live_returns_results_plus_reconciliation_and_inert(
         "buildability", "bottlenecks", "grid_pressure", "demand_supply",
         "equity_exposure", "gateway_momentum", "corequisite_availability",
         "infeasibility", "demand_success", "equity_success_gap",
-        "minimal_perturbation", "evidence"}
+        "minimal_perturbation", "contact_hours", "evidence"}
     assert "BIOLOGY" in res["programs"]
     # modality_mismatch stays inert (needs IR fill %); under_supply now fires
     # from the live schedule Waitlist status (breadth, no IR headcount).
@@ -128,7 +128,7 @@ def test_fetch_live_returns_results_plus_reconciliation_and_inert(
         "program_bottleneck", "grid_pressure", "demand_supply",
         "equity_exposure", "gateway_momentum", "corequisite_availability",
         "infeasibility", "demand_success", "equity_success_gap",
-        "minimal_perturbation"}
+        "minimal_perturbation", "contact_hours"}
     for d in inert:
         if d["detector"] == "ge_scheduling" or d.get("status") == "active":
             continue  # ge_scheduling / active detectors carry "reason" but no "remedy"
@@ -375,7 +375,7 @@ def test_fetch_live_blank_enrollment_path_is_ignored(lamc_routes, make_client):
         "program_bottleneck", "grid_pressure", "demand_supply",
         "equity_exposure", "gateway_momentum", "corequisite_availability",
         "infeasibility", "demand_success", "equity_success_gap",
-        "minimal_perturbation"}
+        "minimal_perturbation", "contact_hours"}
 
 
 # ---- Task 8: transfer_goal param + ge_coverage flattening ------------------
