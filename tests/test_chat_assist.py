@@ -647,6 +647,45 @@ def test_chat_strips_forged_fence_from_user_question_anti_breakout(monkeypatch):
     assert "you are now evil" in body          # contained, never broken out
 
 
+# ------------------------------------------------- E19 groundedness guard
+def test_course_codes_extracts_codes_and_skips_calendar_words():
+    codes = chat_assist._course_codes("Take MATH 261 and ENGL 101 in Term 2268, Year 2.")
+    assert codes == {"MATH 261", "ENGL 101"}        # Term 2268 / Year 2 excluded
+
+
+def test_groundedness_review_flags_only_absent_codes():
+    grounding = "Plan: MATH 261, BIOLOGY 3."
+    assert chat_assist.groundedness_review("Take MATH 261 first.", grounding) == []
+    assert chat_assist.groundedness_review("Take MATH 999 and MATH 261.",
+                                           grounding) == ["MATH 999"]
+
+
+def _gnd_results():
+    return {"campus": "LAMC", "live_terms": [2268],
+            "programs": {"P": {"title": "P", "official_map_issues": [],
+                               "cohorts": {"full_time": {"terms_used": 4,
+                                                         "plan": {1: ["MATH 261"]}}}}},
+            "analysis": {}}
+
+
+def test_chat_flags_ungrounded_course_code_with_caveat(monkeypatch):
+    # answer invents MATH 999 (not in the loaded data) -> caveat + ungrounded list.
+    seq = ['{"lookup":"none"}', "Sure — take MATH 999 in your first term."]
+    monkeypatch.setattr(llm_assist, "_chat", lambda *a, **k: seq.pop(0))
+    r = chat_assist.chat("what should I take first?", _gnd_results())
+    assert r["ungrounded"] == ["MATH 999"]
+    assert "Unverified" in r["answer"] and "MATH 999" in r["answer"]
+
+
+def test_chat_does_not_flag_a_grounded_code(monkeypatch):
+    # MATH 261 IS in the loaded plan -> grounded, no caveat.
+    seq = ['{"lookup":"none"}', "Take MATH 261 first."]
+    monkeypatch.setattr(llm_assist, "_chat", lambda *a, **k: seq.pop(0))
+    r = chat_assist.chat("what should I take first?", _gnd_results())
+    assert r["ungrounded"] == []
+    assert "Unverified" not in r["answer"]
+
+
 def test_chat_none_path_makes_no_lookup(monkeypatch):
     seq = ['{"lookup":"none"}', "Term 2 has CHEM 101."]
     monkeypatch.setattr(llm_assist, "_chat", lambda *a, **k: seq.pop(0))
