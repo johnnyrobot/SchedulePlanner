@@ -98,7 +98,7 @@ from sources.http import SourceDataError
 
 
 def build(campus, terms, program_query, *, client=None,
-          program_id=None, program_title="", program_award=""):
+          program_id=None, program_title="", program_award="", status=None):
     """Fetch sections + program from the live sources (or an injected client).
 
     Network IO lives HERE, outside engine.run(). The m7 enrichment (enrollment
@@ -116,10 +116,10 @@ def build(campus, terms, program_query, *, client=None,
         return program_mapper.fetch_program(campus, program_query, client=c)
 
     if client is not None:
-        sections = schedule.fetch_sections(campus, terms, client=client)
+        sections = schedule.fetch_sections(campus, terms, client=client, status=status)
         return sections, _fetch_program(client)
     with httpx.Client(timeout=30.0) as owned:
-        sections = schedule.fetch_sections(campus, terms, client=owned)
+        sections = schedule.fetch_sections(campus, terms, client=owned, status=status)
         return sections, _fetch_program(owned)
 
 
@@ -1254,12 +1254,13 @@ def analyze_live(campus, terms, program_query, out_path, *, client=None,
     # (enrollment join, GE, reconcile, write_workbook, engine.run, time-block /
     # room detectors) is reused byte-for-byte with zero network. sections_override
     # is None on the live path, so build() runs exactly as before.
+    fetch_status = {}
     if sections_override is not None:
         sections, program = sections_override, program_override
     else:
         sections, program = build(campus, terms, program_query, client=client,
                                   program_id=program_id, program_title=program_title,
-                                  program_award=program_award)
+                                  program_award=program_award, status=fetch_status)
 
     # --- FF4: bounded live cross-program demand fan-out (outside engine.run) ---
     # F2's cross-program bottleneck leaderboard needs a programs-per-course demand
@@ -1488,6 +1489,22 @@ def analyze_live(campus, terms, program_query, out_path, *, client=None,
                                   coverage=elumen_coverage)]
     )
     report["inert_detectors"].append(_ge_detector_entry(ge_coverage))
+    # E7: a term whose live fetch failed was SKIPPED (per-term fail-open) rather
+    # than nuking the whole multi-term fetch — surface it loudly so a PARTIAL fetch
+    # is never read as complete coverage. Only present when a term was skipped, so
+    # the normal (all-terms-ok) path is unchanged.
+    if fetch_status.get("skipped"):
+        report["fetch_status"] = fetch_status
+        report["inert_detectors"].append({
+            "detector": "schedule_fetch", "status": "warning",
+            "found": len(fetch_status["skipped"]),
+            "skipped_terms": [s.get("term") for s in fetch_status["skipped"]],
+            "reason": ("one or more terms could not be fetched and were SKIPPED — the "
+                       "analysis covers only the terms that loaded, so coverage is "
+                       "PARTIAL (rotation / buildability / supply signals may understate)"),
+            "remedy": ("re-run when the LACCD schedule API is reachable for the "
+                       "skipped term(s); the bounded retry already absorbs brief blips"),
+        })
 
     os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
     mapping.write_workbook(sections, program, out_path, prereqs=prereq_map,
@@ -1508,6 +1525,18 @@ def analyze_live(campus, terms, program_query, out_path, *, client=None,
         analysis = report["results"]["analysis"]
         analysis["time_block_collisions"] = collisions
         analysis["off_grid_sections"] = _off_grid_sections(sections)
+        # E7: mirror the per-term skip into results["analysis"] so the CHAT surface
+        # (which reads analysis blocks, not inert_detectors) carries the partial-
+        # coverage caveat too — report + ui already show it via inert_detectors.
+        # Conditional, so the no-skip path's analysis-key set is unchanged.
+        if fetch_status.get("skipped"):
+            analysis["schedule_fetch"] = {
+                "status": "warning",
+                "skipped_terms": [s.get("term") for s in fetch_status["skipped"]],
+                "reason": ("one or more terms could not be fetched and were SKIPPED — "
+                           "coverage is PARTIAL (rotation / buildability / supply "
+                           "signals may understate)"),
+            }
         # Room double-bookings (and, when a facility table is supplied, over-capacity)
         # are computed HERE from the raw section room/days/times the workbook drops.
         analysis["room_conflicts"] = room_conflicts

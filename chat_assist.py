@@ -131,6 +131,18 @@ def _ground_build(results: dict) -> list[str]:
     return []
 
 
+def _ground_schedule_fetch(results: dict) -> list[str]:
+    sf = (results.get("analysis") or {}).get("schedule_fetch")
+    if sf and sf.get("status") == "warning" and sf.get("skipped_terms"):
+        terms = ", ".join(str(t) for t in sf.get("skipped_terms", []))
+        # A partial fetch must never read as complete — surface it on chat too
+        # (report + ui already show it via inert_detectors).
+        return ["", "PARTIAL SCHEDULE COVERAGE (one or more terms could not be "
+                f"fetched and were SKIPPED: {terms}; rotation / buildability / supply "
+                "signals below may UNDERSTATE — this is NOT 'no classes offered')"]
+    return []
+
+
 def _ground_term_plans(results: dict) -> list[str]:
     plan_lines = []
     for _code, p in (results.get("programs") or {}).items():
@@ -555,6 +567,7 @@ def _ground_evidence(results: dict) -> list[str]:
 # feature number). A future block adds ONE entry here instead of editing _context.
 GROUNDERS = [
     _ground_build,
+    _ground_schedule_fetch,
     _ground_term_plans,
     _ground_ge_coverage,
     _ground_reconciliation,

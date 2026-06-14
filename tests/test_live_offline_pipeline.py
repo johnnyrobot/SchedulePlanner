@@ -737,6 +737,29 @@ def test_analyze_live_minimal_perturbation_inert_when_buildable(tmp_path):
     assert det["status"] == "inert" and det.get("remedy")
 
 
+# --- E7: per-term fail-open surfaces a skipped term ---------------------------
+def test_analyze_live_surfaces_a_skipped_term(lamc_routes, make_client, error_resp,
+                                              tmp_path):
+    """A term whose live listing fails (404) is SKIPPED (fail-open) but surfaced —
+    the analysis proceeds on the surviving term and a schedule_fetch WARNING reaches
+    the report, so partial coverage is never read as complete."""
+    routes = {**lamc_routes, "/listing/LAMC/2266": error_resp(404)}
+    client = make_client(routes)
+    out = tmp_path / "skip.xlsx"
+    report = build_live_workbook.analyze_live(
+        "LAMC", [2266, 2268], "Biology", str(out), client=client)
+    json.dumps(report)
+    assert report["section_count"] > 0                       # 2268 still loaded
+    assert report["fetch_status"]["skipped"][0]["term"] == 2266
+    warn = next(d for d in report["inert_detectors"]
+                if d["detector"] == "schedule_fetch")
+    assert warn["status"] == "warning" and 2266 in warn["skipped_terms"]
+    assert "PARTIAL" in warn["reason"]
+    # the CHAT-readable analysis block carries it too (no silent drop on chat)
+    sf = report["results"]["analysis"]["schedule_fetch"]
+    assert sf["status"] == "warning" and 2266 in sf["skipped_terms"]
+
+
 # --- E15/F10: Title 5 contact-hour conformance --------------------------------
 def test_analyze_live_contact_hours_active_flags_implausible_section(tmp_path):
     """A 1-unit section scheduled MTWThF 8 AM-12 PM (20 hrs/week) with woi=18 is

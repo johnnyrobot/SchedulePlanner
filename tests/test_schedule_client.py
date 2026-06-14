@@ -81,3 +81,39 @@ def test_fetch_sections_raises_endpoint_named_on_missing_subjects_key(make_clien
     msg = str(ei.value)
     assert "listing endpoint" in msg
     assert "LAMC 2268" in msg
+
+
+# ---- E7: per-term fail-open + shared retry/backoff -------------------------
+def test_fetch_sections_fail_open_skips_failing_term_and_surfaces_it(make_client, error_resp):
+    # term 2266 errors (503) but 2268 succeeds: the good term's records still come
+    # back AND the failed term is surfaced in status["skipped"] — never silently
+    # dropped. max_retries=0 makes the failing term fail fast (no real sleep).
+    client = make_client({
+        "/listing/LAMC/2268": LISTING_2268,
+        "/listing/LAMC/2266": error_resp(503),
+    })
+    status = {}
+    records = schedule.fetch_sections("LAMC", [2266, 2268], client=client,
+                                      status=status, max_retries=0)
+    assert records, "the surviving term's sections must still be returned"
+    assert {r["term"] for r in records} == {2268}
+    assert status["skipped"] and status["skipped"][0]["term"] == 2266
+    assert "error" in status["skipped"][0]
+
+
+def test_fetch_sections_raises_when_every_term_fails(make_client, error_resp):
+    # total failure stays LOUD — an all-terms-down fetch must raise, not return an
+    # empty list that masquerades as "no classes offered".
+    client = make_client({
+        "/listing/LAMC/2266": error_resp(503),
+        "/listing/LAMC/2268": error_resp(503),
+    })
+    with pytest.raises(Exception):
+        schedule.fetch_sections("LAMC", [2266, 2268], client=client, max_retries=0)
+
+
+def test_fetch_sections_no_skips_leaves_status_skipped_empty(make_client):
+    status = {}
+    schedule.fetch_sections("LAMC", [2268], client=make_client({"/listing/LAMC/2268": LISTING_2268}),
+                            status=status)
+    assert status.get("skipped") == []

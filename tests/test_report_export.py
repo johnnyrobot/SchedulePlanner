@@ -721,6 +721,18 @@ def test_minimal_perturbation_not_buildable_after_is_honest():
     assert "NOT fully buildable by offerings alone" in html
 
 
+# ------------------------------------------------- E7 schedule-fetch warning
+def test_detectors_renders_warning_state_distinct_from_inert():
+    # A schedule_fetch WARNING (a partial fetch) must render as a WARNING, not as a
+    # benign "needs more data" inert note — otherwise the partial-coverage caveat is
+    # visually demoted to "not yet measurable".
+    html = report_export._detectors({"inert_detectors": [{
+        "detector": "schedule_fetch", "status": "warning", "skipped_terms": [2266],
+        "reason": "coverage is PARTIAL", "remedy": "re-run when reachable"}]})
+    assert "⚠" in html and "PARTIAL" in html
+    assert "needs more data" not in html.lower() or "partial" in html.lower()
+
+
 # ------------------------------------------------- E2 plan-optimality caveat
 def test_cohort_tags_not_proven_optimal_only_when_false():
     base = {"terms_used": 4, "plan": {1: ["MATH 245"]}, "fixes": []}

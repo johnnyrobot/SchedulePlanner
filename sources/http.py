@@ -20,6 +20,10 @@ message names the endpoint that drifted rather than a bare URL.
 from __future__ import annotations
 
 import json as _json
+import random as _random
+import time as _time
+from datetime import datetime, timezone
+from email.utils import parsedate_to_datetime
 
 import httpx
 
@@ -84,3 +88,101 @@ def get_json(url, *, params=None, headers=None, client=None, timeout=DEFAULT_TIM
     finally:
         if owns_client:
             client.close()
+
+
+# ---- E7: shared bounded retry/backoff over the transport ------------------
+# The LACCD endpoints are flaky and schedule.fetch_sections loops terms with NO
+# retry, so a single transient 5xx nuked the whole fetch. get_json_retrying wraps
+# get_json with a bounded, polite retry: ONLY transient failures (429 + the
+# transient 5xx 500/502/503/504, plus transport/timeout) are retried; a hard 4xx
+# and any JSON/schema drift fail immediately (retrying cannot fix bad data). A
+# server Retry-After is honored (clamped to a sane ceiling) when present,
+# else jittered exponential backoff avoids a synchronized retry storm. sleep + rand
+# are injectable so the suite stays fast and deterministic. Retry TIMING never
+# touches engine.run or any parsed output, so determinism is unaffected.
+# A curated allowlist of TRANSIENT statuses worth a retry — 429 plus the transient
+# 5xx (500/502/503/504). Deliberately EXCLUDES 501 (Not Implemented) and other
+# non-transient 5xx, which retrying cannot fix.
+RETRYABLE_STATUS = frozenset({429, 500, 502, 503, 504})
+DEFAULT_MAX_RETRIES = 3
+BACKOFF_BASE_SECONDS = 0.5
+BACKOFF_MAX_SECONDS = 8.0
+BACKOFF_JITTER = 0.5          # up to +50% jitter on the base backoff
+RETRY_AFTER_MAX_SECONDS = 60.0  # ceiling on a server-supplied Retry-After
+
+
+def _status_of(exc):
+    return getattr(getattr(exc.__cause__, "response", None), "status_code", None)
+
+
+def _is_retryable(exc):
+    """True iff ``exc`` is a TRANSIENT failure worth a bounded backoff retry.
+
+    Retryable: a SourceHTTPError whose status is in RETRYABLE_STATUS (429 + the
+    transient 5xx 500/502/503/504), or a transport/timeout failure (a bare
+    SourceError). NOT retryable: SourceDataError (JSON/schema drift — retrying
+    cannot fix bad data), 501, and every other 4xx (a hard client error)."""
+    if isinstance(exc, SourceHTTPError):
+        return _status_of(exc) in RETRYABLE_STATUS
+    if isinstance(exc, SourceDataError):
+        return False
+    return isinstance(exc, SourceError)
+
+
+def _retry_after_seconds(exc):
+    """Parse a ``Retry-After`` header (delta-seconds OR an HTTP-date) off the
+    failing response, in seconds. ``None`` when absent/unparseable."""
+    resp = getattr(exc.__cause__, "response", None)
+    try:
+        raw = resp.headers.get("Retry-After") if resp is not None else None
+    except (AttributeError, TypeError):
+        return None
+    if not raw:
+        return None
+    raw = str(raw).strip()
+    if raw.isdigit():
+        return float(raw)
+    try:
+        dt = parsedate_to_datetime(raw)
+    except (TypeError, ValueError):
+        return None
+    if dt is None:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return max(0.0, (dt - datetime.now(timezone.utc)).total_seconds())
+
+
+def _backoff_seconds(attempt, *, rand=_random.random):
+    base = min(BACKOFF_BASE_SECONDS * (2 ** attempt), BACKOFF_MAX_SECONDS)
+    return base * (1.0 + BACKOFF_JITTER * rand())
+
+
+def get_json_retrying(url, *, params=None, headers=None, client=None,
+                      timeout=DEFAULT_TIMEOUT, source="LACCD API",
+                      max_retries=DEFAULT_MAX_RETRIES, sleep=_time.sleep,
+                      rand=_random.random):
+    """``get_json`` with a bounded, polite retry on transient failures.
+
+    Retries at most ``max_retries`` times, honoring ``Retry-After`` when the
+    server sends it, else jittered exponential backoff. A non-retryable error
+    (hard 4xx, JSON/shape drift) propagates immediately; after the final retry the
+    LAST error propagates unchanged — always a clean SourceError, never a raw
+    httpx traceback."""
+    attempt = 0
+    while True:
+        try:
+            return get_json(url, params=params, headers=headers, client=client,
+                            timeout=timeout, source=source)
+        except SourceError as exc:
+            if attempt >= max_retries or not _is_retryable(exc):
+                raise
+            wait = _retry_after_seconds(exc)
+            if wait is None:
+                wait = _backoff_seconds(attempt, rand=rand)
+            else:
+                # Honor the server's Retry-After, but never sleep for an absurd
+                # span a hostile/buggy server might send (e.g. days).
+                wait = min(wait, RETRY_AFTER_MAX_SECONDS)
+            sleep(wait)
+            attempt += 1

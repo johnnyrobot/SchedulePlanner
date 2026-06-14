@@ -197,6 +197,7 @@ _DET_LABELS = {
     "equity_success_gap": "Equity course-success gap",
     "minimal_perturbation": "Fewest offering changes to buildable",
     "contact_hours": "Contact-hour conformance",
+    "schedule_fetch": "Schedule fetch coverage",
 }
 _PLAN_LABELS = {"shared": "met by major", "concrete": "concrete", "reserve": "reserve"}
 _GE_PATTERN_NAMES = {"igetc": "IGETC", "cal-getc": "Cal-GETC", "csu-ge": "CSU GE"}
@@ -990,6 +991,7 @@ def _detectors(results: dict) -> str:
     rows = []
     for d in inert:
         active = d.get("status") == "active"
+        warning = d.get("status") == "warning"
         label = _DET_LABELS.get(d.get("detector"), d.get("detector"))
         why = d.get("reason") or d.get("label") or ""
         rem = d.get("remedy") or d.get("metric") or ""
@@ -1005,11 +1007,14 @@ def _detectors(results: dict) -> str:
                        if ps.get("fallback_count") else "")
             join += (f'<div class="join">{_esc(n)} prerequisite{"" if n == 1 else "s"} '
                      f'applied{relaxed}</div>')
-        mark = "✓ " if active else "⊘ "
-        state = " — on" if active else " — needs more data"
+        # Three visual states: active (on), WARNING (a partial/degraded result that
+        # IS firing — e.g. E7 partial schedule coverage), and inert (not measurable).
+        mark = "✓ " if active else ("⚠ " if warning else "⊘ ")
+        state = " — on" if active else (" — PARTIAL coverage" if warning
+                                        else " — needs more data")
         why_html = f'<div class="why">{_esc(why)}</div>' if why else ""
-        rem_html = (f'<div class="rem">{"how: " if active else "to enable: "}{_esc(rem)}</div>'
-                    if rem else "")
+        rem_prefix = "how: " if active else ("to fix: " if warning else "to enable: ")
+        rem_html = (f'<div class="rem">{rem_prefix}{_esc(rem)}</div>' if rem else "")
         rows.append(
             f'<div class="det"><div class="name{" on" if active else ""}">'
             f'<span aria-hidden="true">{mark}</span>{_esc(label)}{state}</div>'
