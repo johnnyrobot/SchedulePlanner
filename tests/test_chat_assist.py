@@ -379,6 +379,39 @@ def test_minimal_perturbation_grounder_renders_notes_no_silent_drop():
     assert "infeasibility explainer" in blob.lower() or "prereq" in blob.lower()
 
 
+# ------------------------------------------------- E15/F10 contact-hours grounding
+def test_context_includes_contact_hours_conformance_framing():
+    results = {"analysis": {"contact_hours": {"status": "active", "label": "L",
+        "assessed": 3, "consistent": 2,
+        "flagged": [{"course": "PE 1", "per_unit_term_hours": 360.0, "direction": "high",
+                     "contact_category": "lecture", "expected_band": [9.0, 27.0]}],
+        "used_all_blocks": False,
+        "not_assessed": {"meeting_block_coverage": "only the first block visible"}}}}
+    blob = chat_assist._context(results)
+    assert "CONTACT-HOUR CONFORMANCE" in blob.upper()
+    assert "PE 1" in blob and "implausibly high" in blob
+    assert "not a compliance ruling" in blob.lower() or "conformance proxy" in blob.lower()
+
+
+def test_context_omits_contact_hours_when_inert():
+    results = {"analysis": {"contact_hours": {"status": "inert", "reason": "no woi"}}}
+    assert "CONTACT-HOUR CONFORMANCE" not in chat_assist._context(results).upper()
+
+
+def test_contact_hours_grounder_surfaces_not_assessed_counts_no_silent_drop():
+    # The per-reason not_assessed counts reach report + ui; the chat surface must
+    # carry them too (doctrine 2: no partial silent drop on any surface).
+    results = {"analysis": {"contact_hours": {"status": "active", "label": "L",
+        "assessed": 1, "consistent": 1, "flagged": [], "used_all_blocks": False,
+        "not_assessed": {"no_meeting_time": 4, "missing_units": 0,
+                         "missing_weeks": 7, "category_unknown": 2,
+                         "meeting_block_coverage": "only the first block visible"}}}}
+    blob = chat_assist._context(results)
+    assert "no meeting time" in blob.lower() and "4" in blob
+    assert "missing weeks" in blob.lower() and "7" in blob
+    assert "category unknown" in blob.lower()
+
+
 # ------------------------------------------------------------------ router
 def test_route_parses_offering_and_fills_defaults(monkeypatch):
     _patch_chat(monkeypatch, lambda *a, **k: '{"lookup":"offering","courses":["BIOLOGY 6"]}')

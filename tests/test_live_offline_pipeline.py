@@ -109,7 +109,7 @@ def test_build_live_workbook_emits_structured_report(lamc_routes, make_client,
         "program_bottleneck", "grid_pressure", "demand_supply",
         "equity_exposure", "gateway_momentum", "corequisite_availability",
         "infeasibility", "demand_success", "equity_success_gap",
-        "minimal_perturbation"}
+        "minimal_perturbation", "contact_hours"}
     for d in inert:
         if d["detector"] == "ge_scheduling" or d.get("status") == "active":
             continue  # ge_scheduling / active detectors carry "reason" but no "remedy"
@@ -734,6 +734,46 @@ def test_analyze_live_minimal_perturbation_inert_when_buildable(tmp_path):
     assert block["status"] == "inert"
     det = next(d for d in report["inert_detectors"]
                if d["detector"] == "minimal_perturbation")
+    assert det["status"] == "inert" and det.get("remedy")
+
+
+# --- E15/F10: Title 5 contact-hour conformance --------------------------------
+def test_analyze_live_contact_hours_active_flags_implausible_section(tmp_path):
+    """A 1-unit section scheduled MTWThF 8 AM-12 PM (20 hrs/week) with woi=18 is
+    implausibly OVER the Title 5 lecture band -> F10 active, flagged high."""
+    records = [{"course": "PE 1", "term": 2268, "class_nbr": "1",
+                "days": "MTWThF", "times": "8:00 AM - 12:00 PM",
+                "units": "1", "woi": "18", "contact": "LEC"}]
+    program = {"code": "TEST", "title": "Test", "award": "AS", "courses": [
+        {"course_id": "PE 1", "recommended_semester": 1}], "major_choices": []}
+    out = tmp_path / "ch.xlsx"
+    report = build_live_workbook.analyze_live(
+        "LAMC", [2268], "(test)", str(out),
+        sections_override=records, program_override=program)
+    block = report["results"]["analysis"]["contact_hours"]
+    assert block["status"] == "active"
+    assert len(block["flagged"]) == 1
+    assert block["flagged"][0]["direction"] == "high"
+    assert "CONFORMANCE" in block["label"].upper()
+    det = next(d for d in report["inert_detectors"] if d["detector"] == "contact_hours")
+    assert det["status"] == "active" and det["found"] >= 1
+    json.dumps(report)
+
+
+def test_analyze_live_contact_hours_inert_without_woi(tmp_path):
+    """A section with a meeting time + units but NO weeks-of-instruction cannot be
+    normalized -> F10 inert (with a remedy), never a false flag."""
+    records = [{"course": "MATH 227", "term": 2268, "class_nbr": "1",
+                "days": "MW", "times": "9:00 AM - 10:15 AM", "units": "5"}]
+    program = {"code": "TEST", "title": "Test", "award": "AS", "courses": [
+        {"course_id": "MATH 227", "recommended_semester": 1}], "major_choices": []}
+    out = tmp_path / "ch_inert.xlsx"
+    report = build_live_workbook.analyze_live(
+        "LAMC", [2268], "(test)", str(out),
+        sections_override=records, program_override=program)
+    block = report["results"]["analysis"]["contact_hours"]
+    assert block["status"] == "inert"
+    det = next(d for d in report["inert_detectors"] if d["detector"] == "contact_hours")
     assert det["status"] == "inert" and det.get("remedy")
 
 

@@ -799,6 +799,7 @@ const DET_LABELS={
   demand_success:'Course success signal',
   equity_success_gap:'Equity course-success gap',
   minimal_perturbation:'Fewest offering changes to buildable',
+  contact_hours:'Contact-hour conformance',
 };
 // GE-coverage card maps, hoisted to module scope for the same reason.
 const PNAME = {igetc:'IGETC', 'cal-getc':'Cal-GETC', 'csu-ge':'CSU GE', local:'Local AA/AS GE'};
@@ -1190,6 +1191,34 @@ const LIVE_CARDS = [
     const naHtml=na?'<p class="hint">Not assessed:</p><ul>'+na+'</ul>':'';
     return '<div class="card"><h3>Fewest offering changes to buildable</h3>'+
       '<p class="hint">'+escapeHtml(mp.label||'')+'</p>'+rows+naHtml+'</div>';
+  }
+  return '';
+  } },
+  // (f3) E15/F10 Title 5 contact-hour conformance: observed scheduled in-class time
+  // vs a wide implied per-unit band — a CONFORMANCE proxy, not a compliance ruling.
+  { target:'html', render:(res)=>{
+  const ch = res.analysis && res.analysis.contact_hours;
+  if(ch && ch.status==='active'){
+    const flag=(f)=>{
+      const band=(f.expected_band||[]);
+      const bandTxt=(band.length===2)?escapeHtml(String(band[0]))+'–'+escapeHtml(String(band[1])):'—';
+      return '<div class="inert"><div class="det">⚠ '+escapeHtml(f.course||'')+': '+
+        escapeHtml(String(f.per_unit_term_hours))+' contact hrs/unit implausibly '+
+        escapeHtml(f.direction||'')+' for the '+escapeHtml(f.contact_category||'')+
+        ' band '+bandTxt+'</div></div>';
+    };
+    const rows=(ch.flagged||[]).map(flag).join('')||
+      '<p class="hint">No section falls outside the band.</p>';
+    const na=ch.not_assessed||{};
+    const naItems=Object.keys(na).sort().map(k=>'<li>'+escapeHtml(k.replace(/_/g,' '))+
+      ': '+escapeHtml(String(na[k]))+'</li>').join('');
+    const naHtml=naItems?'<p class="hint">Not assessed:</p><ul>'+naItems+'</ul>':'';
+    return '<div class="card"><h3>Contact-hour conformance</h3>'+
+      '<p class="hint">'+escapeHtml(ch.label||'')+'</p>'+
+      '<p class="hint">'+escapeHtml(String(ch.assessed||0))+' assessed · '+
+      escapeHtml(String(ch.consistent||0))+' within band · '+
+      escapeHtml(String((ch.flagged||[]).length))+' flagged.</p>'+
+      rows+naHtml+'</div>';
   }
   return '';
   } },

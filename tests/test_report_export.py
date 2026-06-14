@@ -721,6 +721,60 @@ def test_minimal_perturbation_not_buildable_after_is_honest():
     assert "NOT fully buildable by offerings alone" in html
 
 
+# ------------------------------------------------- E15/F10 contact-hours render
+def _contact_hours_block():
+    return {
+        "status": "active",
+        "label": "Contact-hour conformance: a Title 5 §55002.5 CONFORMANCE PROXY ... "
+                 "NOT a compliance ruling and NOT the official record ...",
+        "assessed": 3, "consistent": 2,
+        "flagged": [{
+            "course": "PE <1>", "term": 2268, "units": 1.0, "weekly_minutes": 1200,
+            "woi": 18.0, "contact_category": "lecture", "term_contact_hours": 360.0,
+            "per_unit_term_hours": 360.0, "expected_band": [9.0, 27.0],
+            "within_band": False, "direction": "high"}],
+        "used_all_blocks": False,
+        "not_assessed": {"no_meeting_time": 1, "missing_units": 0, "missing_weeks": 2,
+                         "category_unknown": 1,
+                         "meeting_block_coverage": "only the first meeting block was "
+                         "visible — a multi-block section may be UNDERCOUNTED"},
+    }
+
+
+def test_contact_hours_renders_and_escapes():
+    html = report_export._contact_hours({"analysis": {"contact_hours": _contact_hours_block()}})
+    assert "contact" in html.lower()
+    assert "PE &lt;1&gt;" in html and "PE <1>" not in html        # escaped course
+    assert "CONFORMANCE" in html                                  # honesty label
+    assert "implausibly high" in html
+    assert "360.0" in html and "9.0" in html and "27.0" in html   # value + band
+    assert "undercount" in html.lower() or "block" in html.lower()  # coverage disclosed
+
+
+def test_contact_hours_empty_when_absent():
+    assert report_export._contact_hours({"analysis": {}}) == ""
+
+
+def test_contact_hours_inert_note():
+    html = report_export._contact_hours({"analysis": {"contact_hours": {
+        "status": "inert", "label": "L",
+        "reason": "no section carries units + weeks-of-instruction + a meeting time"}}})
+    assert "Not computed" in html and "week" in html.lower()
+
+
+def test_contact_hours_inert_surfaces_not_assessed_breakdown_when_present():
+    # The common live case is inert-with-data: sections existed but none had
+    # units+woi+meeting. The per-reason breakdown the inert block computes must be
+    # visible so the reader sees WHY nothing was assessable, not just the aggregate.
+    html = report_export._contact_hours({"analysis": {"contact_hours": {
+        "status": "inert", "label": "L", "reason": "no normalizable section",
+        "not_assessed": {"no_meeting_time": 3, "missing_units": 0,
+                         "missing_weeks": 12, "category_unknown": 0}}}})
+    assert "Not computed" in html
+    assert "missing weeks" in html.lower() and "12" in html
+    assert "no meeting time" in html.lower() and "3" in html
+
+
 def test_equity_success_gap_discloses_reference_basis():
     # The reference basis must reach the reader: an All/overall row vs the
     # highest-performing subgroup (used only when there is no overall row) — so a

@@ -30,18 +30,20 @@ EXPECTED = [
     ("equity_exposure", "equity_exposure"),
     ("gateway_momentum", "gateway_momentum"),
     ("corequisite_availability", "corequisite_availability"),
+    ("contact_hours", "contact_hours"),
 ]
 
 
-def test_registry_has_exactly_seven_entries_in_order():
-    # Pins the slot order the inert_detectors [5..11] sequence + the determinism
+def test_registry_has_exactly_eight_entries_in_order():
+    # Pins the slot order the inert_detectors [5..] sequence + the determinism
     # gate depend on. Reordering or appending in the wrong slot fails here. F8
-    # (gateway_momentum) then F9 (corequisite_availability) are APPENDED LAST —
-    # never reordering F1-F6.
+    # (gateway_momentum), F9 (corequisite_availability), then F10 (contact_hours)
+    # are APPENDED LAST — never reordering F1-F6.
     assert [d.analysis_key for d in ANALYSIS_DETECTORS] == [
         "buildability", "bottlenecks", "demand_supply", "grid_pressure",
-        "equity_exposure", "gateway_momentum", "corequisite_availability"]
-    assert len(ANALYSIS_DETECTORS) == 7
+        "equity_exposure", "gateway_momentum", "corequisite_availability",
+        "contact_hours"]
+    assert len(ANALYSIS_DETECTORS) == 8
 
 
 def test_each_entry_compute_and_entry_are_callable():
