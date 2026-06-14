@@ -431,6 +431,33 @@ def _ground_demand_success(results: dict) -> list[str]:
     return []
 
 
+def _ground_equity_success_gap(results: dict) -> list[str]:
+    eg = (results.get("analysis") or {}).get("equity_success_gap")
+    if eg and eg.get("status") == "active":
+        el = []
+        for c in eg.get("courses", []):
+            parts = []
+            for g in c.get("below_reference", []):
+                gap = g.get("gap")
+                if isinstance(gap, (int, float)):
+                    parts.append(f"{g.get('subgroup')} ({gap * 100:+.0f} pp)")
+            below = ", ".join(parts) or "none"
+            supp = c.get("suppressed_subgroups") or 0
+            seg = f" [{supp} subgroup(s) suppressed]" if supp else ""
+            basis = ("highest subgroup, no overall row"
+                     if c.get("reference_basis") == "highest_subgroup" else "overall row")
+            el.append(f"- {c.get('course')} (ref {c.get('reference_subgroup')}, "
+                      f"{basis}): below-reference {below}{seg}.")
+        # The MEASURED-not-completion + difference-not-causal caveat rides in the
+        # header; cites no external figure (the disaggregated roadmap figures are
+        # NOT in the vetted evidence list).
+        return ["", "EQUITY COURSE-SUCCESS GAP (MEASURED aggregate subgroup difference "
+                "in course success, small cells <10 suppressed; NOT a completion gap, "
+                "NOT student-level, NOT this schedule's outcome, and a difference is "
+                "NOT a causal claim — cites no external figure)", *el]
+    return []
+
+
 def _ground_evidence(results: dict) -> list[str]:
     block = (results.get("analysis") or {}).get("evidence")
     if not block:
@@ -466,6 +493,7 @@ GROUNDERS = [
     _ground_gateway_momentum,
     _ground_corequisite_availability,
     _ground_demand_success,
+    _ground_equity_success_gap,
     _ground_evidence,
 ]
 

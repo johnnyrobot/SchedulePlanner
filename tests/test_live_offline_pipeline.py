@@ -108,7 +108,7 @@ def test_build_live_workbook_emits_structured_report(lamc_routes, make_client,
         "time_block_conflict", "room_conflict", "program_buildability",
         "program_bottleneck", "grid_pressure", "demand_supply",
         "equity_exposure", "gateway_momentum", "corequisite_availability",
-        "infeasibility", "demand_success"}
+        "infeasibility", "demand_success", "equity_success_gap"}
     for d in inert:
         if d["detector"] == "ge_scheduling" or d.get("status") == "active":
             continue  # ge_scheduling / active detectors carry "reason" but no "remedy"
@@ -729,6 +729,51 @@ def test_analyze_live_demand_success_inert_without_export(tmp_path):
     block = report["results"]["analysis"]["demand_success"]
     assert block["status"] == "inert"
     det = next(d for d in report["inert_detectors"] if d["detector"] == "demand_success")
+    assert det["status"] == "inert" and det.get("remedy")
+
+
+# --- E13: equity-disaggregated course-success gap ----------------------------
+def test_analyze_live_equity_success_gap_active_with_disaggregated_export(tmp_path):
+    """A supplied disaggregated export -> E13 active: a below-reference subgroup gap
+    surfaces and a <10 small cell is SUPPRESSED (counted, not shown)."""
+    disagg = tmp_path / "disagg.csv"
+    disagg.write_text("Course,Subgroup,Enrollment,Success Rate\n"
+                      "MATH 227,All,1000,0.62\n"
+                      "MATH 227,Group B,300,0.45\n"
+                      "MATH 227,Group C,7,0.40\n")   # count 7 < 10 -> suppressed
+    records = [{"course": "MATH 227", "term": 2268, "class_nbr": "1",
+                "days": "MW", "times": "9:00 AM - 10:15 AM", "units": 5}]
+    program = {"code": "TEST", "title": "Test", "award": "AS", "courses": [
+        {"course_id": "MATH 227", "recommended_semester": 1}], "major_choices": []}
+    out = tmp_path / "eq.xlsx"
+    report = build_live_workbook.analyze_live(
+        "LAMC", [2268], "(test)", str(out),
+        sections_override=records, program_override=program,
+        equity_success_path=str(disagg))
+    block = report["results"]["analysis"]["equity_success_gap"]
+    assert block["status"] == "active"
+    course = block["courses"][0]
+    assert course["course"] == "MATH 227" and course["reference_subgroup"] == "All"
+    assert "Group B" in {g["subgroup"] for g in course["below_reference"]}
+    assert course["suppressed_subgroups"] == 1            # Group C (7) suppressed
+    assert "MEASURED" in block["label"]
+    det = next(d for d in report["inert_detectors"] if d["detector"] == "equity_success_gap")
+    assert det["status"] == "active"
+    json.dumps(report)
+
+
+def test_analyze_live_equity_success_gap_inert_without_export(tmp_path):
+    records = [{"course": "MATH 227", "term": 2268, "class_nbr": "1",
+                "days": "MW", "times": "9:00 AM - 10:15 AM", "units": 5}]
+    program = {"code": "TEST", "title": "Test", "award": "AS", "courses": [
+        {"course_id": "MATH 227", "recommended_semester": 1}], "major_choices": []}
+    out = tmp_path / "eq_inert.xlsx"
+    report = build_live_workbook.analyze_live(
+        "LAMC", [2268], "(test)", str(out),
+        sections_override=records, program_override=program)
+    block = report["results"]["analysis"]["equity_success_gap"]
+    assert block["status"] == "inert"
+    det = next(d for d in report["inert_detectors"] if d["detector"] == "equity_success_gap")
     assert det["status"] == "inert" and det.get("remedy")
 
 

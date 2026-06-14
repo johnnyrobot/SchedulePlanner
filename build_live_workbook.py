@@ -79,6 +79,7 @@ import cross_program_bottleneck
 import demand_success
 import demand_supply
 import equity_exposure
+import equity_success_gap
 import evidence
 import gateway_momentum
 import grid_pressure
@@ -845,6 +846,46 @@ def _course_success_block(sections, course_success_path, results):
         sections, smap, supply_constrained=supply, granularity=gran)
 
 
+def _equity_success_gap_block(sections, equity_success_path):
+    """E13 equity-gap block: load the OFFLINE disaggregated success export (if
+    supplied) and compute the measured subgroup gaps. A supplied-but-unreadable
+    export (e.g. missing the required count column the <10 suppression needs) goes
+    inert with the named error — never silent, never an unsuppressed read."""
+    if not equity_success_path:
+        return equity_success_gap.equity_success_gap_report(sections, None)
+    try:
+        dmap, gran, supp = course_success.load_course_success_disaggregated(
+            equity_success_path)
+    except SourceDataError as exc:
+        return {"status": "inert", "label": equity_success_gap.EQUITY_SUCCESS_GAP_LABEL,
+                "reason": f"the supplied disaggregated export could not be read: {exc}",
+                "remedy": ("supply a valid disaggregated CCCCO Data Mart export with a "
+                           "subgroup column and an enrollment/count column")}
+    return equity_success_gap.equity_success_gap_report(
+        sections, dmap, granularity=gran, suppression_min=supp)
+
+
+def _equity_success_gap_detector_entry(block):
+    """Honest active/inert entry for the E13 equity-gap detector. Inert when no
+    disaggregated export was supplied; active when the measured subgroup gaps are
+    computed. ``found`` counts the courses carrying a below-reference gap."""
+    if not block or block.get("status") != "active":
+        return {
+            "detector": "equity_success_gap", "status": "inert",
+            "reason": ((block or {}).get("reason")
+                       or "no disaggregated course-success export supplied"),
+            "remedy": ((block or {}).get("remedy")
+                       or "supply a disaggregated CCCCO Data Mart export by subgroup"),
+        }
+    return {
+        "detector": "equity_success_gap", "status": "active",
+        "found": block.get("courses_with_gap", 0),
+        "reason": ("measures the AGGREGATE course-success gap between demographic "
+                   "subgroups (small cells <10 suppressed) — a measured difference, "
+                   "NOT a completion gap, NOT student-level, and NOT causal"),
+    }
+
+
 def _demand_success_detector_entry(block):
     """Honest active/inert entry for the E9 demand-vs-success escalation detector.
     Inert when no success export was supplied (the live default); active when the
@@ -1096,7 +1137,8 @@ def analyze_live(campus, terms, program_query, out_path, *, client=None,
                  active_courses=None, program_demand=None,
                  demand_program_ids=None,
                  sections_override=None, program_override=None, by_design=None,
-                 elumen_coreq=None, course_success_path=None):
+                 elumen_coreq=None, course_success_path=None,
+                 equity_success_path=None):
     """Run the full live pipeline and return a structured, JSON-serializable report.
 
     The report carries the reconciliation (matched/unmatched program courses)
@@ -1457,6 +1499,14 @@ def analyze_live(campus, terms, program_query, out_path, *, client=None,
     if isinstance(report["results"], dict) and isinstance(report["results"].get("analysis"), dict):
         report["results"]["analysis"]["demand_success"] = ds_block
     report["inert_detectors"].append(_demand_success_detector_entry(ds_block))
+    # E13: the equity-disaggregated course-success GAP (offline export, <10
+    # small-cell suppressed). A MEASURED subgroup difference, never completion /
+    # student-level / causal; NOT wired into the F7 evidence trust root (no vetted
+    # subgroup figure to cite). OUTSIDE engine.run.
+    eq_gap_block = _equity_success_gap_block(sections, equity_success_path)
+    if isinstance(report["results"], dict) and isinstance(report["results"].get("analysis"), dict):
+        report["results"]["analysis"]["equity_success_gap"] = eq_gap_block
+    report["inert_detectors"].append(_equity_success_gap_detector_entry(eq_gap_block))
     # F7: map the now-fully-computed structural flags to curated ✅ research
     # evidence (PURE consumer — reads results["analysis"][...] / ge_coverage, writes
     # only this JSON key, OUTSIDE engine.run → the workbook bytes are untouched, so

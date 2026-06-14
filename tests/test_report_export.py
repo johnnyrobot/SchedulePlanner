@@ -612,3 +612,60 @@ def test_demand_success_section_inert_note():
         "status": "inert", "label": "L",
         "reason": "no course-success export supplied"}}})
     assert "Not computed" in html and "success" in html.lower()
+
+
+# ------------------------------------------------- E13 equity-success-gap render
+def _equity_gap_block():
+    return {
+        "status": "active",
+        "label": "Equity Course-Success Gap: a MEASURED, AGGREGATE gap between "
+                 "demographic subgroups ... NOT a completion gap ...",
+        "granularity": "Course", "suppression_min": 10,
+        "courses": [{
+            "course": "CHEM <101>", "reference_subgroup": "All", "reference_rate": 0.62,
+            "reference_basis": "all_row",
+            "below_reference": [{"subgroup": "Group B", "success_rate": 0.45, "gap": -0.17}],
+            "suppressed_subgroups": 2}],
+        "courses_with_gap": 1,
+        "not_assessed": [
+            {"check": "causation", "status": "inert",
+             "reason": "a gap is a difference, not a cause"},
+            {"check": "suppressed_subgroups", "status": "inert",
+             "reason": "small cells below 10 were suppressed"}],
+    }
+
+
+def test_equity_success_gap_renders_and_escapes():
+    html = report_export._equity_success_gap({"analysis": {"equity_success_gap": _equity_gap_block()}})
+    assert "gap" in html.lower()
+    assert "CHEM &lt;101&gt;" in html and "CHEM <101>" not in html   # escaped course
+    assert "MEASURED" in html                                        # honesty label
+    assert "Group B" in html
+    assert "-17" in html                                             # gap in pp
+    assert "suppress" in html.lower() and "2" in html                # suppressed count surfaced
+    assert "causation" in html.lower()                               # not_assessed
+
+
+def test_equity_success_gap_empty_when_absent():
+    assert report_export._equity_success_gap({"analysis": {}}) == ""
+
+
+def test_equity_success_gap_inert_note():
+    html = report_export._equity_success_gap({"analysis": {"equity_success_gap": {
+        "status": "inert", "label": "L",
+        "reason": "no disaggregated course-success export supplied"}}})
+    assert "Not computed" in html
+
+
+def test_equity_success_gap_discloses_reference_basis():
+    # The reference basis must reach the reader: an All/overall row vs the
+    # highest-performing subgroup (used only when there is no overall row) — so a
+    # gap measured against the best group is never mistaken for an official baseline.
+    blk = _equity_gap_block()                          # all_row
+    html_all = report_export._equity_success_gap({"analysis": {"equity_success_gap": blk}})
+    assert "overall" in html_all.lower()
+    blk2 = _equity_gap_block()
+    blk2["courses"][0]["reference_basis"] = "highest_subgroup"
+    blk2["courses"][0]["reference_subgroup"] = "Group A"
+    html_hi = report_export._equity_success_gap({"analysis": {"equity_success_gap": blk2}})
+    assert "highest subgroup" in html_hi.lower()

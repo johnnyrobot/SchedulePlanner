@@ -40,6 +40,16 @@ _SUCCESS_ALIASES = ("Success Rate", "Success %", "Success Rate (%)", "Success")
 _RETENTION_ALIASES = ("Retention Rate", "Retention %", "Retention Rate (%)",
                       "Retention")
 _ENROLL_ALIASES = ("Enrollment", "Enrollment Count", "Enrolled", "Count")
+# Demographic-subgroup column for the DISAGGREGATED (E13) reader.
+_SUBGROUP_COLUMNS = ("Subgroup", "Race/Ethnicity", "Ethnicity", "Demographic",
+                     "Gender", "Group")
+# The published Cal-PASS small-cell suppression rule: counts BELOW this are
+# suppressed (https://www.calpassplus.org/Launchboard/Suppression). NOTE the
+# earlier-circulated "size 6 or greater" rule was wrong/inverted.
+DEFAULT_SUPPRESSION_MIN = 10
+# Cells the export itself already suppressed: an asterisk / "N/A" / "S" / a
+# "<N" range / blank are NOT a numeric rate — treat as suppressed, never 0.
+_SUPPRESSION_MARKERS = ("*", "n/a", "na", "s", "redacted", "suppressed")
 
 
 def _read_frame(path):
@@ -96,6 +106,97 @@ def _int(value):
     except ValueError:
         return None
     return n if n >= 0 else None   # a negative enrollment is malformed -> None
+
+
+def _is_suppression_marker(value):
+    """True when a success-rate cell is an EXPORT suppression marker (not a number):
+    blank, ``*``, ``N/A``, ``S``, or a ``<N`` range. Such a cell is suppressed
+    upstream — never read as 0."""
+    if value is None or (isinstance(value, float) and pd.isna(value)):
+        return True
+    s = str(value).strip().lower()
+    if s == "" or s in _SUPPRESSION_MARKERS:
+        return True
+    return "<" in s   # e.g. "<11", "< 10"
+
+
+def _read_frame_disagg(path):
+    """Read the export (CSV or the first xlsx sheet carrying key + subgroup + success)."""
+    if os.path.splitext(path)[1].lower() == ".csv":
+        return pd.read_csv(path, dtype=str)
+    xl = pd.ExcelFile(path)
+    for name in xl.sheet_names:
+        cols = list(xl.parse(name, nrows=0).columns)
+        if (_pick(cols, _KEY_COLUMNS) and _pick(cols, _SUBGROUP_COLUMNS)
+                and _pick(cols, _SUCCESS_ALIASES)):
+            return xl.parse(name, dtype=str)
+    return xl.parse(xl.sheet_names[0], dtype=str)
+
+
+def load_course_success_disaggregated(path, *, suppression_min=DEFAULT_SUPPRESSION_MIN):
+    """Read a DISAGGREGATED (by demographic subgroup) success export (E13).
+
+    Long format: one row per course/discipline x subgroup. Returns
+    ``(disagg_map, granularity, suppression_min)`` where ``disagg_map`` is
+    ``dict[_norm(key) -> dict[subgroup -> {"success_rate": float|None, "count":
+    int|None, "suppressed": bool}]]``.
+
+    ENFORCES small-cell suppression for honesty AND privacy: a subgroup cell is
+    SUPPRESSED (``success_rate``/``count`` set to None) when (a) the export already
+    suppressed it (an ``*`` / ``N/A`` / ``<N`` / blank marker), OR (b) its count is
+    BELOW ``suppression_min`` (default 10, the published Cal-PASS rule). A count
+    column is therefore REQUIRED — without it the <10 rule cannot be enforced, so
+    the read is refused rather than risk leaking a small cell. Raises
+    ``SourceDataError`` (named) on any missing required column / unreadable file.
+    """
+    try:
+        df = _read_frame_disagg(path)
+    except (OSError, ValueError) as exc:
+        raise SourceDataError(f"{SOURCE}: could not read {path} ({exc}).") from exc
+    cols = list(df.columns)
+    key_col = _pick(cols, _KEY_COLUMNS)
+    sub_col = _pick(cols, _SUBGROUP_COLUMNS)
+    success_col = _pick(cols, _SUCCESS_ALIASES)
+    count_col = _pick(cols, _ENROLL_ALIASES)
+    if not key_col or not success_col:
+        raise SourceDataError(
+            f"{SOURCE}: {path} is missing a course/discipline key and/or success "
+            f"column; got {cols[:12]}.")
+    if not sub_col:
+        raise SourceDataError(
+            f"{SOURCE}: {path} has no subgroup column (one of {list(_SUBGROUP_COLUMNS)}); "
+            "a disaggregated equity export needs one.")
+    if not count_col:
+        raise SourceDataError(
+            f"{SOURCE}: {path} has no enrollment/count column (one of "
+            f"{list(_ENROLL_ALIASES)}); it is REQUIRED to enforce the <"
+            f"{suppression_min} small-cell suppression (privacy + honesty).")
+
+    disagg = {}
+    for _, row in df.iterrows():
+        raw_key = row.get(key_col)
+        raw_sub = row.get(sub_col)
+        if raw_key is None or (isinstance(raw_key, float) and pd.isna(raw_key)):
+            continue
+        key = _norm(raw_key)
+        sub = "" if (raw_sub is None or (isinstance(raw_sub, float) and pd.isna(raw_sub))) \
+            else str(raw_sub).strip()
+        if not key or not sub:
+            continue
+        count = _int(row.get(count_col))
+        suppressed = (_is_suppression_marker(row.get(success_col))
+                      or count is None or count < suppression_min)
+        disagg.setdefault(key, {})[sub] = {
+            "success_rate": None if suppressed else _rate(row.get(success_col)),
+            # A suppressed cell leaks NOTHING (not even the small count).
+            "count": None if suppressed else count,
+            "suppressed": suppressed,
+        }
+    if not disagg:
+        raise SourceDataError(
+            f"{SOURCE}: {path} parsed to zero usable rows. The assumed disaggregated "
+            "export shape may have drifted.")
+    return disagg, key_col, suppression_min
 
 
 def load_course_success(path):
