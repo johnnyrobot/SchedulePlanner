@@ -54,6 +54,10 @@ jobs:
         run: bash scripts/build_macos.sh
       - name: Verify bundled resources (headless)
         run: bash scripts/verify_macos_build.sh
+      - name: Generate CycloneDX SBOM + no-copyleft license gate (E16)
+        # Fails the release if a non-exempt GPL/AGPL component is in the bundle; the
+        # SBOM (with the bundled Temurin JRE noted) ships beside the .app.
+        run: python3 scripts/generate_sbom.py --out dist/sbom.cyclonedx.json
       - name: Archive the .app into a single attestable artifact
         # attest-build-provenance attests a FILE, not a directory tree, so the
         # bundle is zipped first (ditto = macOS-native, preserves the .app layout
@@ -70,11 +74,13 @@ jobs:
         uses: actions/attest-build-provenance@v2
         with:
           subject-path: dist/SchedulePlanner-macos-unsigned.zip
-      - name: Upload unsigned .app artifact
+      - name: Upload unsigned .app artifact (+ its SBOM)
         uses: actions/upload-artifact@v4
         with:
           name: SchedulePlanner-macos-unsigned
-          path: dist/SchedulePlanner.app
+          path: |
+            dist/SchedulePlanner.app
+            dist/sbom.cyclonedx.json
           if-no-files-found: error
           retention-days: 14
       - name: Upload the attested zip artifact
