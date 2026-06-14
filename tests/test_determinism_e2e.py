@@ -88,6 +88,32 @@ def test_solver_pins_deterministic_parameters():
         "solve_cohort must pin solver.parameters.num_search_workers = 1"
 
 
+def test_solver_uses_deterministic_time_budget_not_wallclock():
+    """E2: the solve budget must be WORK-based (max_deterministic_time), not the
+    wall-clock max_time_in_seconds — otherwise a slow machine could return a
+    different FEASIBLE-not-OPTIMAL plan, silently breaking cross-machine
+    reproducibility the determinism doctrine rests on."""
+    src = inspect.getsource(engine.solve_cohort)
+    assert re.search(r"max_deterministic_time\s*=", src), \
+        "solve_cohort must use a deterministic (work-based) solve budget"
+    assert "max_time_in_seconds" not in src, \
+        "solve_cohort must NOT use the wall-clock max_time_in_seconds budget"
+
+
+def test_cohort_results_are_proven_optimal_on_the_default_data():
+    """E2: every solved cohort on the bundled data reaches OPTIMAL (the models are
+    tiny), so proven_optimal is True — the plan shown is the true minimum-term plan.
+    The advisory only fires if a plan is FEASIBLE-not-proven-optimal."""
+    results = engine.run(engine._default_data_path())
+    saw = 0
+    for prog in results["programs"].values():
+        for c in prog["cohorts"].values():
+            if isinstance(c, dict):
+                assert c.get("proven_optimal") is True, c
+                saw += 1
+    assert saw > 0, "expected at least one solved cohort to check"
+
+
 # ----------------------------------------------------- LLM non-interference
 def test_llm_parser_does_not_change_the_plan():
     """With an LLM prereq parser that returns exactly what the regex fallback

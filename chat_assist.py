@@ -140,7 +140,12 @@ def _ground_term_plans(results: dict) -> list[str]:
                 terms = " | ".join(
                     f"T{t}: {', '.join(v)}"
                     for t, v in sorted(c["plan"].items(), key=lambda kv: int(kv[0])))
-                plan_lines.append(f"- {p.get('title')} [{label}]: {terms}")
+                # E2: the deterministic-budget caveat travels with the plan it
+                # qualifies (only when not proven the minimum-term plan).
+                caveat = (" (NOT proven optimal — feasible but not proven the "
+                          "minimum-term plan)"
+                          if c.get("proven_optimal") is False else "")
+                plan_lines.append(f"- {p.get('title')} [{label}]: {terms}{caveat}")
     if plan_lines:
         return ["", "TERM-BY-TERM PLANS", *plan_lines]
     return []

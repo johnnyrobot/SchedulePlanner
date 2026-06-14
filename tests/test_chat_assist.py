@@ -379,6 +379,19 @@ def test_minimal_perturbation_grounder_renders_notes_no_silent_drop():
     assert "infeasibility explainer" in blob.lower() or "prereq" in blob.lower()
 
 
+# ------------------------------------------------- E2 plan-optimality caveat
+def test_term_plan_grounding_discloses_not_proven_optimal():
+    base = {"programs": {"P": {"title": "Prog", "official_map_issues": [],
+            "cohorts": {"full_time": {
+                "terms_used": 4, "plan": {1: ["MATH 245"]}}}}}}
+    base["programs"]["P"]["cohorts"]["full_time"]["proven_optimal"] = False
+    blob = chat_assist._context(base)
+    assert "not proven" in blob.lower() or "not proven the minimum" in blob.lower()
+    # proven optimal -> no caveat
+    base["programs"]["P"]["cohorts"]["full_time"]["proven_optimal"] = True
+    assert "not proven" not in chat_assist._context(base).lower()
+
+
 # ------------------------------------------------- E15/F10 contact-hours grounding
 def test_context_includes_contact_hours_conformance_framing():
     results = {"analysis": {"contact_hours": {"status": "active", "label": "L",

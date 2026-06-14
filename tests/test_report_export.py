@@ -721,6 +721,20 @@ def test_minimal_perturbation_not_buildable_after_is_honest():
     assert "NOT fully buildable by offerings alone" in html
 
 
+# ------------------------------------------------- E2 plan-optimality caveat
+def test_cohort_tags_not_proven_optimal_only_when_false():
+    base = {"terms_used": 4, "plan": {1: ["MATH 245"]}, "fixes": []}
+    # explicitly not proven optimal -> caveat travels with the plan
+    not_opt = report_export._cohort("Full-time", {**base, "proven_optimal": False})
+    assert "not proven optimal" in not_opt.lower()
+    # proven optimal (the normal case) -> no caveat
+    opt = report_export._cohort("Full-time", {**base, "proven_optimal": True})
+    assert "not proven optimal" not in opt.lower()
+    # absent field (pre-E2 / hand-built dict) -> no caveat, byte-identical to before
+    absent = report_export._cohort("Full-time", base)
+    assert "not proven optimal" not in absent.lower()
+
+
 # ------------------------------------------------- E15/F10 contact-hours render
 def _contact_hours_block():
     return {

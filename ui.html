@@ -1354,7 +1354,10 @@ function cohortCard(label, c){
     '<div class="term"><b>T'+t+'</b> '+cs.map(escapeHtml).join(', ')+'</div>').join('');
   const fix=(c.fixes&&c.fixes.length)?
     '<div class="fix">fix: '+c.fixes.map(f=>'+ '+escapeHtml(f.course)+' in '+escapeHtml(f.season)).join(', ')+'</div>':'';
-  const tag=c.needs_fix?' <span style="color:var(--red)">(with fix)</span>':'';
+  let tag=c.needs_fix?' <span style="color:var(--red)">(with fix)</span>':'';
+  // E2: deterministic-budget caveat, co-located with the plan (only when the
+  // solver did not prove this the minimum-term plan; absent/true -> none).
+  if(c.proven_optimal===false) tag+=' <span style="color:var(--red)" title="feasible but not proven the minimum">(not proven optimal)</span>';
   return '<div class="cohort"><div class="lab">'+label+'</div>'+
          '<div class="big">'+c.terms_used+' terms'+tag+'</div>'+
          '<div class="hint">~'+yrs+' year'+(yrs>1?'s':'')+'</div>'+terms+fix+'</div>';

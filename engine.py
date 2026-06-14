@@ -370,7 +370,13 @@ def solve_cohort(pcode, prog, course_seasons, units, prereqs, cohort, allow_fixe
     m.Minimize(objective)
 
     solver = cp_model.CpSolver()
-    solver.parameters.max_time_in_seconds = 10
+    # WORK-based budget (E2): max_deterministic_time is machine-independent, unlike
+    # a wall-clock budget, so a slow machine can never return a different
+    # (FEASIBLE-not-OPTIMAL) plan. These models are tiny and solve to OPTIMAL far
+    # inside the budget, so this is a safety net, not a real cap. The deterministic-
+    # time UNIT is OR-Tools-version-defined; ortools is pinned in requirements.lock
+    # and test_cohort_results_are_proven_optimal_on_the_default_data guards any drift.
+    solver.parameters.max_deterministic_time = 30.0
     solver.parameters.random_seed = 42        # arbitrary fixed value; preserves determinism
     solver.parameters.num_search_workers = 1  # PRD N11: single worker required for reproducible CP-SAT output
     st = solver.Solve(m)
@@ -399,7 +405,13 @@ def solve_cohort(pcode, prog, course_seasons, units, prereqs, cohort, allow_fixe
 
     result = {"terms_used": int(solver.Value(last)),
               "plan": {int(t): sorted(v) for t, v in sorted(plan.items())},
-              "fixes": fixes}
+              "fixes": fixes,
+              # E2: True iff the solver PROVED this the minimum-term plan (OPTIMAL),
+              # not merely a FEASIBLE one found before the deterministic budget ran
+              # out. Deterministic (a function of the model), so engine.run stays
+              # byte-identical run-to-run; the render surfaces "(not proven optimal)"
+              # only when this is False.
+              "proven_optimal": st == cp_model.OPTIMAL}
     if ge_rows:
         result["ge"] = ge_out
     return result
