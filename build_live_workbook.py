@@ -84,6 +84,7 @@ import evidence
 import gateway_momentum
 import grid_pressure
 import infeasibility
+import perturbation
 import engine
 from sources import (assist, catalog_ge, course_master, course_success, elumen,
                      elumen_client, enrollment, enrollment_ir, ge, live_demand,
@@ -817,6 +818,30 @@ def _infeasibility_detector_entry(block):
     }
 
 
+def _perturbation_detector_entry(block):
+    """Honest active/inert entry for the E14 minimal-perturbation recommender.
+    Inert when every audited program's required path is already buildable (nothing
+    to recommend); active when >=1 program needs offering changes. ``found`` counts
+    the programs with a recommended action set."""
+    if not block or block.get("status") != "active":
+        return {
+            "detector": "minimal_perturbation", "status": "inert",
+            "reason": ((block or {}).get("reason")
+                       or "every audited program's required path is already buildable"),
+            "remedy": ("this fires only when a program's required path has an "
+                       "offering-fixable structural gap (a missing required course, "
+                       "a short choice bucket, or an all-section time conflict)"),
+        }
+    return {
+        "detector": "minimal_perturbation", "status": "active",
+        "found": len(block.get("programs", [])),
+        "reason": ("recommends the fewest OFFERING changes (add a section / an "
+                   "alternate-time section) that flip a program's required path from "
+                   "structurally not-buildable to buildable — a structural offering "
+                   "recommendation, NOT a student outcome or completion claim"),
+    }
+
+
 def _course_success_block(sections, course_success_path, results):
     """E9 demand-vs-success block: derive the supply-constrained courses from the
     already-computed F2/F5 analysis, load the OFFLINE success export (if supplied),
@@ -1491,6 +1516,17 @@ def analyze_live(campus, terms, program_query, out_path, *, client=None,
         if isinstance(report["results"], dict) and isinstance(report["results"].get("analysis"), dict):
             report["results"]["analysis"][d.analysis_key] = block
         report["inert_detectors"].append(d.entry(block))
+    # E14 minimal-perturbation recommender: the INVERSE of E11 — the fewest
+    # OFFERING changes that flip the program's required path from structurally
+    # not-buildable (F1) to buildable. Pure + deterministic (a CP-SAT vertex cover
+    # over the conflict graph); reuses the SAME audit inputs as F1; OUTSIDE
+    # engine.run. Recommends offerings, never a student outcome.
+    perturbation_block = perturbation.perturbation_report(
+        [program], sections, ge_coverage=ge_coverage, active_courses=active_courses,
+        by_design=by_design)
+    if isinstance(report["results"], dict) and isinstance(report["results"].get("analysis"), dict):
+        report["results"]["analysis"]["minimal_perturbation"] = perturbation_block
+    report["inert_detectors"].append(_perturbation_detector_entry(perturbation_block))
     # E9: cross the MEASURED course-success data (offline CCCCO Data Mart export,
     # if supplied) with the now-computed supply signals (F2 bottlenecks / F5 demand)
     # to escalate courses that are BOTH supply-constrained AND historically

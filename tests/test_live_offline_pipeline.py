@@ -108,7 +108,8 @@ def test_build_live_workbook_emits_structured_report(lamc_routes, make_client,
         "time_block_conflict", "room_conflict", "program_buildability",
         "program_bottleneck", "grid_pressure", "demand_supply",
         "equity_exposure", "gateway_momentum", "corequisite_availability",
-        "infeasibility", "demand_success", "equity_success_gap"}
+        "infeasibility", "demand_success", "equity_success_gap",
+        "minimal_perturbation"}
     for d in inert:
         if d["detector"] == "ge_scheduling" or d.get("status") == "active":
             continue  # ge_scheduling / active detectors carry "reason" but no "remedy"
@@ -687,6 +688,52 @@ def test_analyze_live_infeasibility_inert_when_buildable(tmp_path):
     block = report["results"]["analysis"]["infeasibility"]
     assert block["status"] == "inert"
     det = next(d for d in report["inert_detectors"] if d["detector"] == "infeasibility")
+    assert det["status"] == "inert" and det.get("remedy")
+
+
+# --- E14: minimal-perturbation recommender (inverse of E11) -------------------
+def test_analyze_live_minimal_perturbation_active_recommends_add_section(tmp_path):
+    """A required course with NO offered section -> F1 not-buildable -> E14 fires
+    active and recommends ONE add_section that flips it buildable."""
+    records = [{"course": "MATH 227", "term": 2268, "class_nbr": "1",
+                "days": "MW", "times": "9:00 AM - 10:15 AM", "units": 5}]
+    program = {"code": "TEST", "title": "Two-course", "award": "AS", "courses": [
+        {"course_id": "MATH 227", "recommended_semester": 1},
+        {"course_id": "ENGL 101", "recommended_semester": 1}],  # ENGL not offered
+        "major_choices": []}
+    out = tmp_path / "perturb.xlsx"
+    report = build_live_workbook.analyze_live(
+        "LAMC", [2268], "(test)", str(out),
+        sections_override=records, program_override=program)
+    block = report["results"]["analysis"]["minimal_perturbation"]
+    assert block["status"] == "active"
+    p = block["programs"][0]
+    assert p["total_changes"] == 1
+    adds = [a for a in p["actions"] if a["action"] == "add_section"]
+    assert [a["course"] for a in adds] == ["ENGL 101"]
+    assert p["buildable_after"] is True
+    assert "OFFERING" in block["label"]
+    det = next(d for d in report["inert_detectors"]
+               if d["detector"] == "minimal_perturbation")
+    assert det["status"] == "active" and det["found"] >= 1
+    json.dumps(report)
+
+
+def test_analyze_live_minimal_perturbation_inert_when_buildable(tmp_path):
+    """Every required course offered, no conflict -> already buildable -> E14 inert
+    (with a remedy describing what would activate it)."""
+    records = [{"course": "MATH 227", "term": 2268, "class_nbr": "1",
+                "days": "MW", "times": "9:00 AM - 10:15 AM", "units": 5}]
+    program = {"code": "TEST", "title": "Test", "award": "AS", "courses": [
+        {"course_id": "MATH 227", "recommended_semester": 1}], "major_choices": []}
+    out = tmp_path / "perturb_inert.xlsx"
+    report = build_live_workbook.analyze_live(
+        "LAMC", [2268], "(test)", str(out),
+        sections_override=records, program_override=program)
+    block = report["results"]["analysis"]["minimal_perturbation"]
+    assert block["status"] == "inert"
+    det = next(d for d in report["inert_detectors"]
+               if d["detector"] == "minimal_perturbation")
     assert det["status"] == "inert" and det.get("remedy")
 
 

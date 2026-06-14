@@ -657,6 +657,70 @@ def test_equity_success_gap_inert_note():
     assert "Not computed" in html
 
 
+# ------------------------------------------------- E14 minimal-perturbation render
+def _perturbation_block():
+    return {
+        "status": "active",
+        "label": "Minimal-perturbation recommender: the fewest OFFERING changes ... "
+                 "NOT a student outcome and NOT a completion claim ...",
+        "horizon_terms": [2268, 2272],
+        "programs": [{
+            "code": "BIO-AS", "title": "Biology <AS>",
+            "total_changes": 3, "score_before": 60, "score_after": 90,
+            "buildable_after": True,
+            "actions": [
+                {"action": "add_section", "course": "ENGL <101>",
+                 "reason": "no section offered in the audited terms"},
+                {"action": "add_alt_time_section", "course": "MATH <1>",
+                 "resolves": ["PHYS <1>"],
+                 "reason": "every offered section conflicts with PHYS <1>"},
+                {"action": "add_choice_option",
+                 "options": ["HIST <1>", "HIST <2>"], "need": 2, "offered": 1,
+                 "shortfall": 1, "offer_candidates": ["HIST <2>"],
+                 "reason": "the disjunctive requirement is short"}],
+            "notes": ["GONE <9>: required but absent from the active catalog — excluded"],
+        }],
+        "not_assessed": [
+            {"check": "seat_instructor_room_feasibility", "status": "inert",
+             "reason": "an offering proxy cannot see capacity, faculty, or rooms"},
+            {"check": "student_completion", "status": "inert",
+             "reason": "no student-level outcome exists in any LACCD source"}],
+    }
+
+
+def test_minimal_perturbation_renders_and_escapes():
+    html = report_export._minimal_perturbation(
+        {"analysis": {"minimal_perturbation": _perturbation_block()}})
+    assert "offering" in html.lower()
+    assert "Biology &lt;AS&gt;" in html and "Biology <AS>" not in html   # escaped title
+    assert "ENGL &lt;101&gt;" in html                                    # escaped course
+    assert "alternate-time" in html.lower()                              # conflict action
+    assert "buildable after the changes" in html                        # verified flag
+    assert "60" in html and "90" in html                                # score before/after
+    assert "GONE &lt;9&gt;" in html                                      # dead-req note surfaced
+    assert "seat" in html.lower() or "instructor" in html.lower()       # not_assessed
+    assert "NOT a student outcome" in html or "NOT a completion" in html  # honesty label
+
+
+def test_minimal_perturbation_empty_when_absent():
+    assert report_export._minimal_perturbation({"analysis": {}}) == ""
+
+
+def test_minimal_perturbation_inert_note():
+    html = report_export._minimal_perturbation({"analysis": {"minimal_perturbation": {
+        "status": "inert", "label": "L",
+        "reason": "every audited program's required path is already structurally buildable"}}})
+    assert "Not computed" in html and "buildable" in html
+
+
+def test_minimal_perturbation_not_buildable_after_is_honest():
+    blk = _perturbation_block()
+    blk["programs"][0]["buildable_after"] = False
+    html = report_export._minimal_perturbation(
+        {"analysis": {"minimal_perturbation": blk}})
+    assert "NOT fully buildable by offerings alone" in html
+
+
 def test_equity_success_gap_discloses_reference_basis():
     # The reference basis must reach the reader: an All/overall row vs the
     # highest-performing subgroup (used only when there is no overall row) — so a

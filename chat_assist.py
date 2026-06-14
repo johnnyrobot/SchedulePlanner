@@ -458,6 +458,44 @@ def _ground_equity_success_gap(results: dict) -> list[str]:
     return []
 
 
+def _ground_minimal_perturbation(results: dict) -> list[str]:
+    mp = (results.get("analysis") or {}).get("minimal_perturbation")
+    if mp and mp.get("status") == "active":
+        el = []
+        for p in mp.get("programs", []):
+            after = ("buildable after" if p.get("buildable_after")
+                     else "NOT fully buildable by offerings alone")
+            acts = []
+            for a in p.get("actions", []):
+                kind = a.get("action")
+                if kind == "add_choice_option":
+                    acts.append(f"offer {a.get('shortfall')} more of "
+                                f"{{{', '.join(a.get('options', []))}}}")
+                elif kind == "add_alt_time_section":
+                    acts.append(f"add an alternate-time section of {a.get('course')}")
+                elif kind == "add_section":
+                    acts.append(f"add a section of {a.get('course')}")
+            el.append(f"- {p.get('title') or p.get('code')}: "
+                      f"{p.get('total_changes')} change(s) ({'; '.join(acts)}) — {after} "
+                      f"(score {p.get('score_before')} -> {p.get('score_after')}).")
+            # The per-program notes carry the ONLY disclosure of why a gap is not
+            # offering-fixable (a dead requirement) or that a choice bucket's need
+            # exceeds its option set — render them so the chat surface never silently
+            # drops the reason or overclaims an unbuildable recommendation.
+            for n in p.get("notes", []):
+                el.append(f"  (note) {n}")
+        # The OFFERING-recommendation-not-outcome caveat rides in the header so the
+        # model never reports this as a student or completion outcome. The scope
+        # clauses mirror MIN_PERTURBATION_LABEL so the three surfaces cannot drift.
+        return ["", "FEWEST OFFERING CHANGES TO BUILDABLE (a structural OFFERING "
+                "recommendation — the minimum sections to add so a program's required "
+                "path is schedulable (F1 proxy); NOT a student outcome, NOT a completion "
+                "claim, NOT the engine cohort plan, and NOT prerequisite-horizon "
+                "feasibility (that is the infeasibility explainer / E11); "
+                "seat/instructor/room feasibility is not assessed)", *el]
+    return []
+
+
 def _ground_evidence(results: dict) -> list[str]:
     block = (results.get("analysis") or {}).get("evidence")
     if not block:
@@ -494,6 +532,7 @@ GROUNDERS = [
     _ground_corequisite_availability,
     _ground_demand_success,
     _ground_equity_success_gap,
+    _ground_minimal_perturbation,
     _ground_evidence,
 ]
 

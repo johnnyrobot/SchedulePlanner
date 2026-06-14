@@ -195,6 +195,7 @@ _DET_LABELS = {
     "infeasibility": "Infeasibility explainer",
     "demand_success": "Course success signal",
     "equity_success_gap": "Equity course-success gap",
+    "minimal_perturbation": "Fewest offering changes to buildable",
 }
 _PLAN_LABELS = {"shared": "met by major", "concrete": "concrete", "reserve": "reserve"}
 _GE_PATTERN_NAMES = {"igetc": "IGETC", "cal-getc": "Cal-GETC", "csu-ge": "CSU GE"}
@@ -847,6 +848,55 @@ def _equity_success_gap(results: dict) -> str:
             f'{_gateway_not_assessed(block)}</section>')
 
 
+def _minimal_perturbation(results: dict) -> str:
+    """Minimal-perturbation recommender (E14): the fewest OFFERING changes that flip
+    a program's required path from structurally not-buildable to buildable — a
+    structural OFFERING recommendation, NOT a student outcome. Empty when absent;
+    honest inert note otherwise. All data HTML-escaped."""
+    block = (results.get("analysis") or {}).get("minimal_perturbation")
+    if not block:
+        return ""
+    label = _esc(block.get("label", ""))
+    if block.get("status") != "active":
+        return ('<section class="card" aria-labelledby="perturb"><h2 id="perturb">'
+                'Fewest offering changes to buildable</h2>'
+                f'<p>Not computed: '
+                f'{_esc(block.get("reason", "every program already buildable"))}</p>'
+                f'<p class="note">{label}</p></section>')
+
+    def _action(a):
+        kind = a.get("action")
+        if kind == "add_section":
+            return f'<li>Add a section of <b>{_esc(a.get("course"))}</b> — {_esc(a.get("reason"))}</li>'
+        if kind == "add_alt_time_section":
+            return (f'<li>Add an alternate-time section of <b>{_esc(a.get("course"))}</b> '
+                    f'— {_esc(a.get("reason"))}</li>')
+        if kind == "add_choice_option":
+            cand = ", ".join(_esc(o) for o in a.get("offer_candidates", [])) or "—"
+            return (f'<li>Offer {_esc(a.get("shortfall"))} more of '
+                    f'{{{_esc(", ".join(a.get("options", [])))}}} '
+                    f'(candidates: {cand}) — {_esc(a.get("reason"))}</li>')
+        return f'<li>{_esc(kind)}</li>'
+
+    progs = []
+    for p in block.get("programs", []):
+        after = ("buildable after the changes" if p.get("buildable_after")
+                 else "NOT fully buildable by offerings alone")
+        notes = "".join(f'<li class="note">{_esc(n)}</li>' for n in p.get("notes", []))
+        notes_html = f'<ul>{notes}</ul>' if notes else ""
+        acts = "".join(_action(a) for a in p.get("actions", []))
+        progs.append(
+            f'<li><b>{_esc(p.get("title") or p.get("code"))}</b>: '
+            f'{_esc(p.get("total_changes"))} change(s) — {after} '
+            f'(score {_esc(p.get("score_before"))} &rarr; {_esc(p.get("score_after"))})'
+            f'<ul>{acts}</ul>{notes_html}</li>')
+    return ('<section class="card" aria-labelledby="perturb"><h2 id="perturb">'
+            'Fewest offering changes to buildable</h2>'
+            f'<p class="note">{label}</p>'
+            f'<ul>{"".join(progs)}</ul>'
+            f'{_gateway_not_assessed(block)}</section>')
+
+
 def _reconciliation(results: dict) -> str:
     rec = results.get("reconciliation")
     if not rec:
@@ -1007,6 +1057,7 @@ SECTION_RENDERERS = [
     _corequisite_availability,
     _demand_success,
     _equity_success_gap,
+    _minimal_perturbation,
     _reconciliation,
     _detectors,
     _ge,
