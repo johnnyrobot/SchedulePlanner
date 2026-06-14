@@ -261,6 +261,30 @@ def _maximal_results() -> dict:
                     {"check": "student_completion_or_corequisite_effectiveness",
                      "status": "inert", "reason": "no student-level outcome exists"}],
             },
+            "infeasibility": {
+                "status": "active",
+                "label": "Infeasibility Explainer: a deterministic STRUCTURAL re-solve "
+                         "... NOT a student outcome or a prediction.",
+                "explained": [
+                    {"program": "Bio <AS>", "cohort": "Full-time", "horizon_terms": 4,
+                     "reproduced": True,
+                     "minimal_conflict_set": ["MATH <261>", "CHEM 101"],
+                     "background_only": False,
+                     "summary": "these 2 required course(s) cannot all be scheduled "
+                                "within the 4-term full-time plan; relaxing any one "
+                                "restores feasibility"},
+                    {"program": "Bio <AS>", "cohort": "Part-time", "horizon_terms": 8,
+                     "reproduced": False,
+                     "note": "the planner found no feasible plan, but the structural "
+                             "explainer could not reproduce it, so a minimal "
+                             "conflicting set is unavailable"},
+                ],
+                "not_assessed": [
+                    {"check": "season_mismatch_as_cause", "status": "inert",
+                     "reason": "season mismatches are treated as fixable"},
+                    {"check": "student_completion", "status": "inert",
+                     "reason": "no student-level outcome exists"}],
+            },
         },
         "reconciliation": {
             "matched_count": 6, "unmatched_count": 2,
@@ -284,6 +308,9 @@ def _maximal_results() -> dict:
             {"detector": "corequisite_availability", "status": "active", "found": 1,
              "reason": "checks whether a gateway's catalog corequisite is scheduled "
                        "in the SAME first-year term — a co-OFFERING STRUCTURE proxy"},
+            {"detector": "infeasibility", "status": "active", "found": 1,
+             "reason": "isolates the minimal set of required courses behind an "
+                       "unbuildable cohort — a deterministic structural diagnostic"},
         ],
         "ge_coverage": {
             "requested": True, "pattern": "igetc", "assist_status": "ok",
@@ -406,6 +433,9 @@ def _inert_each_section_results() -> dict:
             "corequisite_availability": {"status": "inert",
                                          "label": "... coreq STRUCTURE proxy ...",
                                          "reason": "no corequisite linkage available"},
+            "infeasibility": {"status": "inert",
+                              "label": "... infeasibility STRUCTURAL diagnostic ...",
+                              "reason": "every program cohort has a feasible plan to explain"},
         },
     }
 

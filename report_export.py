@@ -192,6 +192,7 @@ _DET_LABELS = {
     "equity_exposure": "Equity / archetype exposure",
     "gateway_momentum": "First-year gateway momentum",
     "corequisite_availability": "Corequisite co-availability",
+    "infeasibility": "Infeasibility explainer",
 }
 _PLAN_LABELS = {"shared": "met by major", "concrete": "concrete", "reserve": "reserve"}
 _GE_PATTERN_NAMES = {"igetc": "IGETC", "cal-getc": "Cal-GETC", "csu-ge": "CSU GE"}
@@ -720,6 +721,42 @@ def _corequisite_availability(results: dict) -> str:
             f'{win_html}{_gateway_not_assessed(block)}</section>')
 
 
+def _infeasibility(results: dict) -> str:
+    """Infeasibility explainer (E11): when the planner finds no feasible plan for a
+    program cohort, the minimal set of required courses behind it — a deterministic
+    STRUCTURAL diagnostic, NOT a student outcome. Empty when absent; honest inert
+    note otherwise. All data HTML-escaped."""
+    block = (results.get("analysis") or {}).get("infeasibility")
+    if not block:
+        return ""
+    label = _esc(block.get("label", ""))
+    if block.get("status") != "active":
+        return ('<section class="card" aria-labelledby="infeas"><h2 id="infeas">'
+                'Why a plan is infeasible</h2>'
+                f'<p>Not computed: '
+                f'{_esc(block.get("reason", "no unbuildable cohort"))}</p>'
+                f'<p class="note">{label}</p></section>')
+    rows = []
+    for e in block.get("explained", []):
+        head = (f'{_esc(e.get("program"))} — {_esc(e.get("cohort"))} '
+                f'({_esc(e.get("horizon_terms"))} terms)')
+        if not e.get("reproduced"):
+            rows.append(f'<li><b>{head}:</b> {_esc(e.get("note"))}</li>')
+            continue
+        mcs = ", ".join(_esc(c) for c in e.get("minimal_conflict_set", [])) or "—"
+        rows.append(f'<li><b>{head}:</b> {_esc(e.get("summary"))} '
+                    f'<span class="codes">{mcs}</span></li>')
+    tr = block.get("truncated") or {}
+    foot = (f'<p class="note">{_esc(tr["unbuildable_cohorts"])} more unbuildable '
+            'cohort(s) beyond those explained.</p>'
+            if tr.get("unbuildable_cohorts") else "")
+    return ('<section class="card" aria-labelledby="infeas"><h2 id="infeas">'
+            'Why a plan is infeasible</h2>'
+            f'<p class="note">{label}</p>'
+            f'<ul>{"".join(rows)}</ul>'
+            f'{foot}{_gateway_not_assessed(block)}</section>')
+
+
 def _reconciliation(results: dict) -> str:
     rec = results.get("reconciliation")
     if not rec:
@@ -875,6 +912,7 @@ SECTION_RENDERERS = [
     _grid_pressure,
     _demand_supply,
     _equity_exposure,
+    _infeasibility,
     _gateway_momentum,
     _corequisite_availability,
     _reconciliation,

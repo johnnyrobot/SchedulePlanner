@@ -169,6 +169,16 @@ def _maximal_results() -> dict:
                          "obstructions": ["corequisite MATH 150L is not offered in the "
                                           "analyzed schedule"]},
                 "both_gateways_coreq_co_offered_year1": False, "not_assessed": []},
+            "infeasibility": {"status": "active",
+                "label": "Infeasibility STRUCTURAL diagnostic label",
+                "explained": [
+                    {"program": "Biology AS-T", "cohort": "Full-time", "horizon_terms": 4,
+                     "reproduced": True, "minimal_conflict_set": ["MATH 261", "CHEM 101"],
+                     "background_only": False,
+                     "summary": "these 2 required course(s) cannot all be scheduled "
+                                "within the 4-term full-time plan; relaxing any one "
+                                "restores feasibility"}],
+                "not_assessed": []},
         },
         "reconciliation": {
             "matched_count": 6, "unmatched_count": 2,

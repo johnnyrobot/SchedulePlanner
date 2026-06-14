@@ -107,7 +107,8 @@ def test_build_live_workbook_emits_structured_report(lamc_routes, make_client,
         "modality_mismatch", "prerequisite_ordering", "ge_scheduling",
         "time_block_conflict", "room_conflict", "program_buildability",
         "program_bottleneck", "grid_pressure", "demand_supply",
-        "equity_exposure", "gateway_momentum", "corequisite_availability"}
+        "equity_exposure", "gateway_momentum", "corequisite_availability",
+        "infeasibility"}
     for d in inert:
         if d["detector"] == "ge_scheduling" or d.get("status") == "active":
             continue  # ge_scheduling / active detectors carry "reason" but no "remedy"
@@ -646,6 +647,47 @@ def test_analyze_live_corequisite_availability_inert_without_coreq_map(tmp_path)
     det = next(d for d in report["inert_detectors"]
                if d["detector"] == "corequisite_availability")
     assert det["status"] == "inert" and "elumen-live" in det["remedy"].lower()
+
+
+# --- E11: infeasibility explainer (MUS) --------------------------------------
+def test_analyze_live_infeasibility_active_isolates_minimal_conflict(tmp_path):
+    """End-to-end: a required course whose units (20) exceed BOTH cohort caps is
+    unbuildable in every cohort -> engine returns None plans -> E11 fires active
+    and isolates the minimal conflicting set (the over-unit course itself)."""
+    records = [{"course": "OVER 500", "term": 2268, "class_nbr": "1",
+                "days": "MW", "times": "9:00 AM - 10:15 AM", "units": 20}]
+    program = {"code": "TEST", "title": "Overload", "award": "AS", "courses": [
+        {"course_id": "OVER 500", "recommended_semester": 1}], "major_choices": []}
+    out = tmp_path / "infeasible.xlsx"
+    report = build_live_workbook.analyze_live(
+        "LAMC", [2268], "(test)", str(out),
+        sections_override=records, program_override=program)
+    block = report["results"]["analysis"]["infeasibility"]
+    assert block["status"] == "active"
+    ft = next(e for e in block["explained"] if e["cohort"] == "Full-time")
+    assert ft["reproduced"] is True
+    assert ft["minimal_conflict_set"] == ["OVER 500"]
+    assert ft["background_only"] is False
+    assert "STRUCTURAL" in block["label"]
+    det = next(d for d in report["inert_detectors"] if d["detector"] == "infeasibility")
+    assert det["status"] == "active" and det["found"] >= 1
+    json.dumps(report)
+
+
+def test_analyze_live_infeasibility_inert_when_buildable(tmp_path):
+    """A normal buildable program -> every cohort has a plan -> E11 inert."""
+    records = [{"course": "MATH 227", "term": 2268, "class_nbr": "1",
+                "days": "MW", "times": "9:00 AM - 10:15 AM", "units": 5}]
+    program = {"code": "TEST", "title": "Test", "award": "AS", "courses": [
+        {"course_id": "MATH 227", "recommended_semester": 1}], "major_choices": []}
+    out = tmp_path / "buildable.xlsx"
+    report = build_live_workbook.analyze_live(
+        "LAMC", [2268], "(test)", str(out),
+        sections_override=records, program_override=program)
+    block = report["results"]["analysis"]["infeasibility"]
+    assert block["status"] == "inert"
+    det = next(d for d in report["inert_detectors"] if d["detector"] == "infeasibility")
+    assert det["status"] == "inert" and det.get("remedy")
 
 
 def test_analyze_import_equity_online_inert_no_modality(tmp_path):

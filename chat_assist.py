@@ -326,6 +326,28 @@ def _ground_equity_exposure(results: dict) -> list[str]:
     return []
 
 
+def _ground_infeasibility(results: dict) -> list[str]:
+    inf = (results.get("analysis") or {}).get("infeasibility")
+    if inf and inf.get("status") == "active":
+        el = []
+        for e in inf.get("explained", []):
+            head = (f"{e.get('program')} ({e.get('cohort')}, "
+                    f"{e.get('horizon_terms')} terms)")
+            if not e.get("reproduced"):
+                el.append(f"- {head}: {e.get('note')}.")
+                continue
+            mcs = ", ".join(e.get("minimal_conflict_set", []))
+            el.append(f"- {head}: {e.get('summary')}"
+                      + (f" [{mcs}]" if mcs else "") + ".")
+        # The structural-diagnostic framing rides in the header so the model never
+        # reports this as a measured/predicted student outcome.
+        return ["", "WHY A PLAN IS INFEASIBLE (a deterministic STRUCTURAL diagnostic of "
+                "the minimal required-course set the planner cannot schedule in a "
+                "cohort's term horizon; NOT a student outcome — season mismatches are "
+                "excluded as fixable, and GE is held as fixed background)", *el]
+    return []
+
+
 def _ground_gateway_momentum(results: dict) -> list[str]:
     gm = (results.get("analysis") or {}).get("gateway_momentum")
     if gm and gm.get("status") == "active":
@@ -414,6 +436,7 @@ GROUNDERS = [
     _ground_demand_supply,
     _ground_grid_pressure,
     _ground_equity_exposure,
+    _ground_infeasibility,
     _ground_gateway_momentum,
     _ground_corequisite_availability,
     _ground_evidence,
