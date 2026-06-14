@@ -599,9 +599,12 @@ def _ground_contact_hours(results: dict) -> list[str]:
                       f"{f.get('contact_category')} band {band_txt}.")
         if not el:
             el.append(f"- {ch.get('assessed')} section(s) assessed; none outside the band.")
-        # Surface the not-assessed accounting the report + ui both render, so the
-        # proxy's coverage (how many sections could NOT be assessed, and why) is not
-        # silently dropped on the chat surface.
+        # Surface the not-assessed accounting the report + ui both render on this
+        # ACTIVE path, so the proxy's coverage (how many sections could NOT be
+        # assessed, and why) is not silently dropped on the chat surface. (On the
+        # INERT path the breakdown rides the detector entry's reason instead — see
+        # build_live_workbook._contact_hours_detector_entry — reaching report + ui;
+        # chat stays positive-only there, consistent with every other grounder.)
         na = ch.get("not_assessed") or {}
         for k in ("no_meeting_time", "missing_units", "missing_weeks", "category_unknown"):
             if na.get(k):

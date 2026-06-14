@@ -98,6 +98,17 @@ def minimal_conflict_cover(edges):
         # Every edge has two endpoints, so a cover always exists; defensive only.
         return nodes
     size = int(round(s1.ObjectiveValue()))
+    # A valid minimum-size cover (the lex tie-break below refines WHICH one) — also
+    # the deterministic fallback if phase 2 cannot run.
+    phase1_cover = sorted(n for n in nodes if s1.Value(v[n]) == 1)
+
+    # The base-2 positional weight below overflows int64 once the graph reaches ~63
+    # nodes; conflict graphs among required courses are tiny (a course with one
+    # async/TBA section breaks any all-overlap), so this is unreachable from real
+    # inputs — fall back to the phase-1 cover rather than feed CP-SAT an invalid
+    # (overflowing) coefficient.
+    if len(nodes) >= 62:
+        return phase1_cover
 
     # Phase 2: fix the size, then prefer covers that INCLUDE lexicographically-
     # earlier courses. A base-2 positional weight (2**i for the i-th sorted node)
@@ -105,12 +116,14 @@ def minimal_conflict_cover(edges):
     # the minimum is the UNIQUE cover whose membership bitmask is smallest — a true
     # lexicographic order. A plain linear ``i * v`` would TIE distinct covers
     # (e.g. {C0,C3} vs {C1,C2}, 0+3 == 1+2), leaving the pick to CP-SAT's internal
-    # heuristics, which are not stable across OR-Tools versions. (Conflict graphs
-    # among required courses are tiny, so 2**i never approaches the int64 ceiling.)
+    # heuristics, which are not stable across OR-Tools versions.
     m.Add(sum(v.values()) == size)
     m.Minimize(sum((1 << i) * v[n] for i, n in enumerate(nodes)))
     s2 = _solver()
-    s2.Solve(m)
+    # GUARD the phase-2 status (mirroring phase 1): never read a cover off an
+    # unsolved / invalid model — fall back to the valid phase-1 cover instead.
+    if s2.Solve(m) not in (cp_model.OPTIMAL, cp_model.FEASIBLE):
+        return phase1_cover
     return sorted(n for n in nodes if s2.Value(v[n]) == 1)
 
 

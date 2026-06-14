@@ -1106,10 +1106,21 @@ def _contact_hours_detector_entry(block):
     weeks-of-instruction + meeting time the normalization needs (the bare live fetch
     often omits woi). ``found`` counts the implausibly low/high outlier sections."""
     if not block or block.get("status") != "active":
+        base = ((block or {}).get("reason")
+                or "no section carries units + weeks-of-instruction + a meeting time")
+        # Surface the per-reason not-assessed counts (the common inert-with-data live
+        # case: sections exist but lack woi) on the entry's reason too, so the report
+        # _detectors card AND the ui inert note carry the breakdown — not only the
+        # dedicated report section. Conditional, so a count-less inert block is
+        # unchanged (no golden churn).
+        na = (block or {}).get("not_assessed") or {}
+        counts = [f"{na[k]} {k.replace('_', ' ')}"
+                  for k in ("no_meeting_time", "missing_units", "missing_weeks",
+                            "category_unknown") if na.get(k)]
+        reason = base + (f" (not assessed: {', '.join(counts)})" if counts else "")
         return {
             "detector": "contact_hours", "status": "inert",
-            "reason": ((block or {}).get("reason")
-                       or "no section carries units + weeks-of-instruction + a meeting time"),
+            "reason": reason,
             "remedy": ((block or {}).get("remedy")
                        or "supply per-section units, weeks-of-instruction (woi), and a "
                           "meeting day/time"),

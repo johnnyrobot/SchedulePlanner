@@ -4,7 +4,9 @@ The inverse of E11: the fewest OFFERING changes (add a section / add an
 alternate-time section) that flip a program's required path from
 structurally not-buildable (F1) to buildable. Deterministic; outside engine.run.
 """
+import inspect
 import json
+import re
 
 import perturbation
 
@@ -65,6 +67,32 @@ def test_cover_tie_graph_is_uniquely_resolved():
     cover = perturbation.minimal_conflict_cover(edges)
     assert len(cover) == 2 and all(a in cover or b in cover for a, b in edges)
     assert cover == ["C1", "C2"]   # the base-2-minimal of the two tied covers
+
+
+def test_cover_uses_a_strictly_dominating_lexicographic_weight():
+    # SOURCE-GUARD: the K(2,2) behavioral test above only confirms the PINNED
+    # solver's incidental output — under a linear ``i*v`` weight the two covers TIE
+    # and CP-SAT's heuristic still returns ['C1','C2'] on ortools 9.15.6755, so that
+    # test passes even if the cross-version-unique objective is reverted. Pin the
+    # OBJECTIVE FORM directly (mirrors test_determinism_e2e's source-pin style) so a
+    # revert to the linear, non-unique weight is caught regardless of solver luck.
+    # Anchor on the Minimize() CALL (not the whole source, whose comment legitimately
+    # mentions the linear form it warns against).
+    src = inspect.getsource(perturbation.minimal_conflict_cover)
+    assert re.search(r"Minimize\(\s*sum\(\s*\(1\s*<<\s*i\)", src), \
+        "phase-2 must Minimize a base-2 (1<<i) strictly-dominating positional weight"
+    assert not re.search(r"Minimize\(\s*sum\(\s*i\s*\*\s*v", src), \
+        "a linear index-sum (i*v) ties distinct min covers -> non-unique across solvers"
+
+
+def test_cover_large_graph_falls_back_safely_no_invalid_read():
+    # A conflict graph past the int64 base-2 ceiling (~63 nodes) is unreachable from
+    # real inputs, but must NEVER return an invalid cover read off an unsolved model:
+    # a 70-leaf star resolves to its center via the deterministic phase-1 fallback.
+    edges = [["X", f"A{i:02d}"] for i in range(70)]
+    cover = perturbation.minimal_conflict_cover(edges)
+    assert cover == ["X"]          # min cover of a star is its center, valid + stable
+    assert all(a in cover or b in cover for a, b in edges)
 
 
 # --------------------------------------------------------------- inert
