@@ -324,6 +324,34 @@ def _maximal_results() -> dict:
                     {"check": "suppressed_subgroups", "status": "inert",
                      "reason": "small cells below 10 were suppressed"}],
             },
+            "minimal_perturbation": {
+                "status": "active",
+                "label": "Minimal-perturbation recommender: the fewest OFFERING changes "
+                         "... NOT a student outcome and NOT a completion claim ...",
+                "horizon_terms": [2268, 2272],
+                "programs": [{
+                    "code": "BIO-AS", "title": "Biology <AS>",
+                    "total_changes": 3, "score_before": 60, "score_after": 90,
+                    "buildable_after": True,
+                    "actions": [
+                        {"action": "add_section", "course": "ENGL <101>",
+                         "reason": "no section offered in the audited terms"},
+                        {"action": "add_alt_time_section", "course": "MATH <1>",
+                         "resolves": ["PHYS <1>"],
+                         "reason": "every offered section conflicts with PHYS <1>"},
+                        {"action": "add_choice_option",
+                         "options": ["HIST <1>", "HIST <2>", "HIST <3>"],
+                         "need": 2, "offered": 1, "shortfall": 1,
+                         "offer_candidates": ["HIST <2>", "HIST <3>"],
+                         "reason": "the disjunctive requirement is short"}],
+                    "notes": ["GONE <9>: required but absent from the active catalog — excluded"],
+                }],
+                "not_assessed": [
+                    {"check": "seat_instructor_room_feasibility", "status": "inert",
+                     "reason": "an offering proxy cannot see capacity, faculty, or rooms"},
+                    {"check": "student_completion", "status": "inert",
+                     "reason": "no student-level outcome exists in any LACCD source"}],
+            },
         },
         "reconciliation": {
             "matched_count": 6, "unmatched_count": 2,
@@ -356,6 +384,9 @@ def _maximal_results() -> dict:
             {"detector": "equity_success_gap", "status": "active", "found": 1,
              "reason": "measures the aggregate course-success gap between subgroups "
                        "(small cells <10 suppressed) — a measured difference, not causal"},
+            {"detector": "minimal_perturbation", "status": "active", "found": 1,
+             "reason": "recommends the fewest OFFERING changes that flip a program's "
+                       "required path to buildable — a structural offering recommendation"},
         ],
         "ge_coverage": {
             "requested": True, "pattern": "igetc", "assist_status": "ok",
@@ -487,6 +518,10 @@ def _inert_each_section_results() -> dict:
             "equity_success_gap": {"status": "inert",
                                    "label": "... equity gap MEASURED ...",
                                    "reason": "no disaggregated course-success export supplied"},
+            "minimal_perturbation": {"status": "inert",
+                                     "label": "... minimal-perturbation OFFERING ...",
+                                     "reason": "every audited program's required path is "
+                                               "already structurally buildable"},
         },
     }
 

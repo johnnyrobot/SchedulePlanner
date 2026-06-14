@@ -333,6 +333,52 @@ def test_context_omits_equity_success_gap_when_inert():
     assert "EQUITY COURSE-SUCCESS GAP" not in chat_assist._context(results).upper()
 
 
+# ------------------------------------------------- E14 minimal-perturbation grounding
+def test_context_includes_minimal_perturbation_offering_framing():
+    results = {"analysis": {"minimal_perturbation": {"status": "active", "label": "L",
+        "horizon_terms": [2268], "programs": [{
+            "code": "BIO-AS", "title": "Biology AS", "total_changes": 2,
+            "score_before": 70, "score_after": 95, "buildable_after": True,
+            "actions": [
+                {"action": "add_section", "course": "ENGL 101", "reason": "none offered"},
+                {"action": "add_alt_time_section", "course": "MATH 1",
+                 "resolves": ["PHYS 1"], "reason": "all overlap"}],
+            "notes": []}], "not_assessed": []}}}
+    blob = chat_assist._context(results)
+    assert "FEWEST OFFERING CHANGES TO BUILDABLE" in blob.upper()
+    assert "Biology AS" in blob and "ENGL 101" in blob and "MATH 1" in blob
+    assert "buildable after" in blob.lower()
+    assert "not a student outcome" in blob.lower() or "not a completion" in blob.lower()
+
+
+def test_context_omits_minimal_perturbation_when_inert():
+    results = {"analysis": {"minimal_perturbation": {"status": "inert",
+                                                     "reason": "already buildable"}}}
+    assert "FEWEST OFFERING CHANGES" not in chat_assist._context(results).upper()
+
+
+def test_minimal_perturbation_grounder_renders_notes_no_silent_drop():
+    # The per-program `notes` are the ONLY surface that discloses WHY a gap is not
+    # offering-fixable (a dead requirement) or that a choice bucket cannot be
+    # cleared. They must reach the chat surface too (report + ui already render
+    # them) — never a silent drop, never an overclaim when buildable_after False.
+    results = {"analysis": {"minimal_perturbation": {"status": "active", "label": "L",
+        "horizon_terms": [2268], "programs": [{
+            "code": "P", "title": "Prog", "total_changes": 2,
+            "score_before": 45, "score_after": 45, "buildable_after": False,
+            "actions": [{"action": "add_choice_option", "options": ["HIST 1", "HIST 2"],
+                         "need": 3, "offered": 0, "shortfall": 3,
+                         "offer_candidates": ["HIST 1", "HIST 2"], "reason": "short"}],
+            "notes": ["its need exceeds the option set; cannot be cleared by adding offerings",
+                      "GONE 999: required but absent from the active catalog — excluded"]}],
+        "not_assessed": []}}}
+    blob = chat_assist._context(results)
+    assert "exceeds the option set" in blob
+    assert "GONE 999" in blob
+    # header scope must disclaim prereq-horizon feasibility (E11), matching the label
+    assert "infeasibility explainer" in blob.lower() or "prereq" in blob.lower()
+
+
 # ------------------------------------------------------------------ router
 def test_route_parses_offering_and_fills_defaults(monkeypatch):
     _patch_chat(monkeypatch, lambda *a, **k: '{"lookup":"offering","courses":["BIOLOGY 6"]}')

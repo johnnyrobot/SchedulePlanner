@@ -200,6 +200,22 @@ def _maximal_results() -> dict:
                                                   "success_rate": 0.45, "gap": -0.17}],
                              "suppressed_subgroups": 2}],
                 "courses_with_gap": 1, "not_assessed": []},
+            "minimal_perturbation": {"status": "active",
+                "label": "Minimal-perturbation OFFERING recommendation label",
+                "horizon_terms": [2268, 2272],
+                "programs": [{
+                    "code": "BIO-AS", "title": "Biology AS",
+                    "total_changes": 2, "score_before": 70, "score_after": 95,
+                    "buildable_after": True,
+                    "actions": [
+                        {"action": "add_section", "course": "ENGL 101",
+                         "reason": "no section offered"},
+                        {"action": "add_choice_option",
+                         "options": ["HIST 1", "HIST 2"], "need": 2, "offered": 1,
+                         "shortfall": 1, "offer_candidates": ["HIST 2"],
+                         "reason": "short by one"}],
+                    "notes": []}],
+                "not_assessed": []},
         },
         "reconciliation": {
             "matched_count": 6, "unmatched_count": 2,

@@ -798,6 +798,7 @@ const DET_LABELS={
   infeasibility:'Infeasibility explainer',
   demand_success:'Course success signal',
   equity_success_gap:'Equity course-success gap',
+  minimal_perturbation:'Fewest offering changes to buildable',
 };
 // GE-coverage card maps, hoisted to module scope for the same reason.
 const PNAME = {igetc:'IGETC', 'cal-getc':'Cal-GETC', 'csu-ge':'CSU GE', local:'Local AA/AS GE'};
@@ -1158,6 +1159,37 @@ const LIVE_CARDS = [
       '<p class="hint">Join granularity: '+escapeHtml(eg.granularity||'')+
       ' · small cells (&lt;'+escapeHtml(String(eg.suppression_min||10))+') suppressed.</p>'+
       rows+'</div>';
+  }
+  return '';
+  } },
+  // (f2) E14 minimal-perturbation recommender: the fewest OFFERING changes that flip
+  // a program's required path from not-buildable to buildable — an OFFERING proxy,
+  // not a student outcome.
+  { target:'html', render:(res)=>{
+  const mp = res.analysis && res.analysis.minimal_perturbation;
+  if(mp && mp.status==='active'){
+    const act=(a)=>{
+      if(a.action==='add_section') return 'add a section of <b>'+escapeHtml(a.course||'')+'</b>';
+      if(a.action==='add_alt_time_section') return 'add an alternate-time section of <b>'+escapeHtml(a.course||'')+'</b>';
+      if(a.action==='add_choice_option') return 'offer '+escapeHtml(String(a.shortfall||0))+' more of {'+
+        (a.options||[]).map(escapeHtml).join(', ')+'}';
+      return escapeHtml(a.action||'');
+    };
+    const prog=(p)=>{
+      const after=p.buildable_after?'buildable after the changes':'NOT fully buildable by offerings alone';
+      const acts=(p.actions||[]).map(a=>'<li>'+act(a)+'</li>').join('');
+      const notes=(p.notes||[]).map(n=>'<li class="why">'+escapeHtml(n)+'</li>').join('');
+      return '<div class="inert"><div class="det">⚠ '+escapeHtml(p.title||p.code||'')+': '+
+        escapeHtml(String(p.total_changes||0))+' change(s) — '+after+
+        ' (score '+escapeHtml(String(p.score_before))+' → '+escapeHtml(String(p.score_after))+')</div>'+
+        '<ul>'+acts+notes+'</ul></div>';
+    };
+    const rows=(mp.programs||[]).map(prog).join('');
+    const na=(mp.not_assessed||[]).map(n=>'<li>'+escapeHtml(String(n.check||'').replace(/_/g,' '))+
+      ': '+escapeHtml(n.reason||'')+'</li>').join('');
+    const naHtml=na?'<p class="hint">Not assessed:</p><ul>'+na+'</ul>':'';
+    return '<div class="card"><h3>Fewest offering changes to buildable</h3>'+
+      '<p class="hint">'+escapeHtml(mp.label||'')+'</p>'+rows+naHtml+'</div>';
   }
   return '';
   } },
