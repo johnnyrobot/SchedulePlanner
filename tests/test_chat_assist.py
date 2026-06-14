@@ -379,6 +379,23 @@ def test_minimal_perturbation_grounder_renders_notes_no_silent_drop():
     assert "infeasibility explainer" in blob.lower() or "prereq" in blob.lower()
 
 
+# ------------------------------------------------- E7 schedule-fetch coverage
+def test_context_surfaces_skipped_terms_on_chat_no_silent_drop():
+    # A partial fetch (a term skipped) must reach the CHAT surface too — report and
+    # ui already show it via inert_detectors; chat reads results["analysis"].
+    results = {"analysis": {"schedule_fetch": {
+        "status": "warning", "skipped_terms": [2266],
+        "reason": "one or more terms could not be fetched and were SKIPPED — "
+                  "coverage is PARTIAL"}}}
+    blob = chat_assist._context(results)
+    assert "PARTIAL" in blob or "partial" in blob
+    assert "2266" in blob
+
+
+def test_context_omits_schedule_fetch_when_complete():
+    assert "PARTIAL" not in chat_assist._context({"analysis": {}})
+
+
 # ------------------------------------------------- E2 plan-optimality caveat
 def test_term_plan_grounding_discloses_not_proven_optimal():
     base = {"programs": {"P": {"title": "Prog", "official_map_issues": [],

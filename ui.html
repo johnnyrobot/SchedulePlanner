@@ -800,6 +800,7 @@ const DET_LABELS={
   equity_success_gap:'Equity course-success gap',
   minimal_perturbation:'Fewest offering changes to buildable',
   contact_hours:'Contact-hour conformance',
+  schedule_fetch:'Schedule fetch coverage',
 };
 // GE-coverage card maps, hoisted to module scope for the same reason.
 const PNAME = {igetc:'IGETC', 'cal-getc':'Cal-GETC', 'csu-ge':'CSU GE', local:'Local AA/AS GE'};
@@ -1233,6 +1234,7 @@ const LIVE_CARDS = [
     // surface the honest "joined N/M sections" count when present.
     const notes=inert.map(d=>{
       const active=d.status==='active';
+      const warning=d.status==='warning';
       const label=DET_LABELS[d.detector]||d.detector;
       const why=d.reason||d.label||'';
       const rem=d.remedy||d.metric||'';
@@ -1250,11 +1252,16 @@ const LIVE_CARDS = [
           ' applied'+(d.prereq_summary.fallback_count?
             ' ('+escapeHtml(String(d.prereq_summary.fallback_count))+' relaxed)':'')+'</div>';
       }
-      return '<div class="inert"><div class="det'+(active?' on':'')+'">'+(active?'✓ ':'⊘ ')+escapeHtml(label)+
-        (active?' — on':' — needs more data')+'</div>'+
+      // Three states: active (✓ on), WARNING (⚠ PARTIAL coverage — a degraded
+      // result that IS firing, e.g. E7 partial schedule coverage), inert (⊘).
+      const mark=active?'✓ ':(warning?'⚠ ':'⊘ ');
+      const state=active?' — on':(warning?' — PARTIAL coverage':' — needs more data');
+      const remPrefix=active?'how: ':(warning?'to fix: ':'to enable: ');
+      return '<div class="inert"><div class="det'+(active?' on':'')+'">'+mark+escapeHtml(label)+
+        state+'</div>'+
         join+
         (why?'<div class="why">'+escapeHtml(why)+'</div>':'')+
-        (rem?'<div class="rem">'+(active?'how: ':'to enable: ')+escapeHtml(rem)+'</div>':'')+'</div>';
+        (rem?'<div class="rem">'+remPrefix+escapeHtml(rem)+'</div>':'')+'</div>';
     }).join('');
     return '<div class="card"><h3>What this live build can measure</h3>'+
       '<p class="hint">These depend on data the public schedule API doesn’t include. '+
