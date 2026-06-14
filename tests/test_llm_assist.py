@@ -197,6 +197,47 @@ def test_parse_prereq_text_rejects_list_of_scalars(monkeypatch):
 
 
 # --------------------------------------------------------------------------- #
+# E3: pin the in-engine prereq parse (temperature 0 + fixed seed) so the CNF   #
+# the engine derives is reproducible run-to-run, closing the LLM nondeterminism #
+# hole inside engine.run.                                                       #
+# --------------------------------------------------------------------------- #
+def _capture_chat_body(monkeypatch):
+    captured = {}
+
+    def fake_urlopen(req, *a, **k):
+        captured["body"] = json.loads(req.data.decode())
+        return _FakeHTTPResponse({"message": {"content": "[]"}})
+    monkeypatch.setattr(llm_assist.urllib.request, "urlopen", fake_urlopen)
+    return captured
+
+
+def test_chat_includes_deterministic_options_when_given(monkeypatch):
+    captured = _capture_chat_body(monkeypatch)
+    llm_assist._chat("hello", options={"temperature": 0, "seed": 42})
+    assert captured["body"]["options"] == {"temperature": 0, "seed": 42}
+
+
+def test_chat_omits_options_when_not_given(monkeypatch):
+    # explain()/chat() outside engine.run keep Ollama's default sampling — only the
+    # in-engine prereq parse is pinned, so the no-options body must be unchanged.
+    captured = _capture_chat_body(monkeypatch)
+    llm_assist._chat("hello")
+    assert "options" not in captured["body"]
+
+
+def test_parse_prereq_text_pins_temperature_zero_and_seed(monkeypatch):
+    _patch_available(monkeypatch, True)
+    seen = {}
+
+    def rec(prompt, model=llm_assist.MODEL, system="", options=None):
+        seen["options"] = options
+        return "[]"
+    monkeypatch.setattr(llm_assist, "_chat", rec)
+    llm_assist.parse_prereq_text("MATH 101")
+    assert seen["options"] == {"temperature": 0, "seed": 42}
+
+
+# --------------------------------------------------------------------------- #
 # 4. explain() — success JSON, malformed, timeout/exception -> fallback.       #
 # --------------------------------------------------------------------------- #
 def test_explain_uses_llm_when_available(monkeypatch, results):
