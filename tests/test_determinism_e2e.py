@@ -212,3 +212,48 @@ def test_ge_plan_is_deterministic(tmp_path):
     a = engine.run(str(out))["programs"]["A"]["cohorts"]["full_time"]["plan"]
     b = engine.run(str(out))["programs"]["A"]["cohorts"]["full_time"]["plan"]
     assert a == b
+
+
+# ----------------------------------------------------- cross-version plan golden
+def _default_plan_hash():
+    """sha256 over the cohort PLANS engine.run produces on the bundled data."""
+    import hashlib
+    res = engine.run(engine._default_data_path())
+    plans = {f"{pc}/{ck}": c["plan"]
+             for pc, prog in res["programs"].items()
+             for ck, c in prog.get("cohorts", {}).items()
+             if isinstance(c, dict) and "plan" in c}
+    return hashlib.sha256(json.dumps(plans, sort_keys=True).encode()).hexdigest()
+
+
+# The byte-identity tests above are SAME-PROCESS self-compares: they prove a run
+# equals another run on THIS machine, but cannot catch a plan that shifts under a
+# different OR-Tools build / CPU (the cross-machine vector the determinism doctrine
+# rests on but does not itself enforce). Pin the actual solver output so a plan
+# change — from a lock-bump that moves ortools, or any model edit — fails loudly
+# and forces a deliberate re-pin + determinism review rather than silently shipping
+# a different schedule. Regenerate intentionally with UPDATE_DETERMINISM_GOLDEN=1.
+_DEFAULT_PLANS_SHA256 = "46c4fab2b144919567101fc81379699279de7b8cffd6938e2af275dfb43f4392"
+
+
+def test_default_data_plans_match_the_stored_determinism_golden():
+    import os
+    actual = _default_plan_hash()
+    if os.environ.get("UPDATE_DETERMINISM_GOLDEN"):
+        print(f"\nUPDATE_DETERMINISM_GOLDEN: _DEFAULT_PLANS_SHA256 = {actual!r}")
+        return
+    assert actual == _DEFAULT_PLANS_SHA256, (
+        "engine.run's cohort plans on the bundled data changed vs the stored golden. "
+        "If this is INTENTIONAL (a model edit, or a reviewed OR-Tools bump), re-pin "
+        "with UPDATE_DETERMINISM_GOLDEN=1 after confirming the new plan is correct; "
+        "otherwise a determinism regression has slipped in.")
+
+
+def test_determinism_golden_covers_several_solved_cohorts_not_an_empty_hash():
+    # Guard the guard: the golden must hash REAL plans, never an empty dict that
+    # would make the comparison vacuous (the audit's lesson on hollow tests).
+    res = engine.run(engine._default_data_path())
+    n = sum(1 for prog in res["programs"].values()
+            for c in prog.get("cohorts", {}).values()
+            if isinstance(c, dict) and "plan" in c)
+    assert n >= 4, "expected several solved cohorts feeding the determinism golden"

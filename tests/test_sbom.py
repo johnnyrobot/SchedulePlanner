@@ -97,3 +97,67 @@ def test_real_lock_passes_the_gate(tmp_path):
     assert rc == 0
     doc = json.loads((tmp_path / "sbom.json").read_text())
     assert doc["bomFormat"] == "CycloneDX"
+
+
+# --- unverifiable-license gate (ship-review fast-follow: Licenses bypass) ----------
+# license_of() returns "" for a package NOT installed on the gate runner
+# (platform-conditional deps: clr-loader/colorama/pythonnet/qtpy/tzdata don't
+# install on macOS CI). Before the fix that became license "UNKNOWN", which
+# is_copyleft() treats as not-copyleft -> a GPL win32-only package would SILENTLY
+# PASS the gate. The gate must instead resolve such licenses from a human-vetted
+# map and FAIL on any license it still cannot verify.
+def test_unverified_unknown_license_cannot_silently_pass():
+    # A copyleft platform-conditional package fails by ONE of two paths, never slips:
+    gpl = {"name": "x", "version": "1", "license": "GPL-3.0", "gate_exempt": False}
+    assert gpl in sbom.copyleft_offenders([gpl])              # (a) vetted GPL -> offender
+    unk = {"name": "y", "version": "1", "license": "UNKNOWN", "gate_exempt": False}
+    assert unk in sbom.unverified_components([unk])           # (b) unverifiable -> flagged
+    # a resolved-permissive or gate-exempt component is neither
+    ok = {"name": "z", "version": "1", "license": "MIT", "gate_exempt": False}
+    exempt = {"name": "w", "version": "1", "license": "UNKNOWN", "gate_exempt": True}
+    assert sbom.unverified_components([ok, exempt]) == []
+
+
+def test_unresolvable_license_fails_the_gate_via_main(tmp_path, monkeypatch):
+    # A lock package whose license cannot be resolved (not installed, not vetted)
+    # must FAIL the gate (exit 2), not pass silently as UNKNOWN.
+    monkeypatch.setattr(sbom, "license_of", lambda name: "")
+    lock = tmp_path / "x.lock"
+    lock.write_text("totally-unknown-pkg==1.0.0\n")
+    rc = sbom.main(["--lock", str(lock), "--out", str(tmp_path / "s.json")])
+    assert rc == 2
+
+
+def test_platform_conditional_license_resolved_from_vetted_map(tmp_path, monkeypatch):
+    # When a platform-conditional package is not installed (license_of -> ""), its
+    # license comes from the vetted map, NOT a silent UNKNOWN, so the gate evaluates
+    # its REAL license (and would catch it if it were copyleft).
+    monkeypatch.setattr(sbom, "license_of", lambda name: "")
+    lock = tmp_path / "pc.lock"
+    lock.write_text("pythonnet==3.1.0\n")
+    comp = next(c for c in sbom.build_components(str(lock)) if c["name"] == "pythonnet")
+    assert comp["license"] != "UNKNOWN"
+    assert not sbom.is_copyleft(comp["license"])
+
+
+def test_real_lock_has_no_unverifiable_license():
+    # Every shipped component's license is resolved (installed metadata OR the vetted
+    # fallback map OR gate-exempt) — no UNKNOWN ships ungated.
+    assert sbom.unverified_components(sbom.build_components(str(LOCK))) == []
+
+
+def test_metadata_less_packages_resolve_from_the_vetted_map(monkeypatch):
+    # Regression for the CI failure: cffi/pycparser expose NO readable license
+    # metadata on some runners (their license is resolvable locally, so the bug only
+    # showed on CI). Simulate that — they must resolve from VETTED_LICENSE_FALLBACKS,
+    # not fail the gate as UNKNOWN.
+    real = sbom.license_of
+    monkeypatch.setattr(
+        sbom, "license_of",
+        lambda n: "" if n.lower().replace("_", "-") in ("cffi", "pycparser") else real(n))
+    comps = sbom.build_components(str(LOCK))
+    assert sbom.unverified_components(comps) == []
+    for name in ("cffi", "pycparser"):
+        c = next((x for x in comps if x["name"].lower().replace("_", "-") == name), None)
+        if c is not None:                       # only assert if the lock carries it
+            assert c["license"] != "UNKNOWN" and not sbom.is_copyleft(c["license"])

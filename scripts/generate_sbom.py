@@ -63,6 +63,25 @@ BUNDLED_EXTERNALS = [
     },
 ]
 
+# Vetted SPDX licenses for lock packages whose license is NOT machine-readable on a
+# gate runner — EITHER the package is platform-conditional and not installed there
+# (pywebview's Windows/.NET/Qt backends are absent on macOS CI), OR its installed
+# metadata exposes no license string (e.g. a PEP 639 package that ships only a
+# License-File, so importlib.metadata returns ""). Without this the gate saw
+# "UNKNOWN" and silently passed them — a copyleft dep could slip through. Each
+# license was vetted from the package's PyPI page; keys are normalized
+# (lower, '_'->'-'). A NEW package the gate cannot read FAILS the gate until it is
+# vetted in here (see unverified_components).
+VETTED_LICENSE_FALLBACKS = {
+    "clr-loader": "MIT",          # pythonnet loader (Windows/.NET), platform-conditional
+    "colorama": "BSD-3-Clause",   # Windows ANSI shim, platform-conditional
+    "pythonnet": "MIT",           # .NET interop backend, platform-conditional
+    "qtpy": "MIT",                # Qt abstraction backend, platform-conditional
+    "tzdata": "Apache-2.0",       # IANA tz database, platform-conditional
+    "cffi": "MIT",                # metadata-less on some runners (PEP 639 license-file)
+    "pycparser": "BSD-3-Clause",  # metadata-less on some runners
+}
+
 
 def parse_lock(path):
     """Ordered, deduped ``[(name, version)]`` parsed from a pip/uv lock file.
@@ -125,11 +144,20 @@ def build_components(lock_path):
     the explicitly-noted bundled externals. Deterministically ordered."""
     comps = []
     for name, version in parse_lock(lock_path):
+        key = name.lower().replace("_", "-")
         lic = license_of(name)
+        source = "installed-metadata" if lic else ""
+        if not lic:
+            # Not installed on this runner (platform-conditional): resolve from the
+            # human-vetted map rather than letting it ride as UNKNOWN.
+            vetted = VETTED_LICENSE_FALLBACKS.get(key)
+            if vetted:
+                lic, source = vetted, "vetted-platform-conditional"
         comps.append({
             "type": "library", "name": name, "version": version,
             "license": lic or "UNKNOWN",
-            "purl": f"pkg:pypi/{name.lower().replace('_', '-')}@{version}",
+            "license_source": source or "unresolved",
+            "purl": f"pkg:pypi/{key}@{version}",
             "gate_exempt": False,
         })
     comps.extend(dict(e) for e in BUNDLED_EXTERNALS)
@@ -155,6 +183,10 @@ def build_sbom(components):
         if c.get("gate_exempt"):
             props.append({"name": "edgesched:license-gate",
                           "value": f"exempt: {c.get('exempt_reason', '')}"})
+        if c.get("license_source") == "vetted-platform-conditional":
+            props.append({"name": "edgesched:license-source",
+                          "value": "manually vetted (platform-conditional dep; not installed "
+                                   "on the gate runner)"})
         if props:
             comp["properties"] = props
         out_components.append(comp)
@@ -176,6 +208,18 @@ def copyleft_offenders(components):
             if not c.get("gate_exempt") and is_copyleft(c.get("license", ""))]
 
 
+def unverified_components(components):
+    """Non-exempt components whose license could NOT be verified (UNKNOWN).
+
+    An unverifiable license is a gate FAILURE, not a pass: it could be copyleft.
+    This closes the bypass where a platform-conditional package absent from the
+    gate runner showed UNKNOWN and slipped the copyleft check. Fix by vetting the
+    package's real license into VETTED_LICENSE_FALLBACKS."""
+    return [c for c in components
+            if not c.get("gate_exempt")
+            and (c.get("license", "") or "UNKNOWN").upper() == "UNKNOWN"]
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--lock", default="requirements.lock")
@@ -191,14 +235,24 @@ def main(argv=None):
           f"({sum(1 for c in components if c.get('gate_exempt'))} gate-exempt external).")
 
     offenders = copyleft_offenders(components)
-    if offenders:
-        print("LICENSE GATE FAILED — strong-copyleft (GPL/AGPL) component(s) in the bundle:",
-              file=sys.stderr)
-        for c in offenders:
-            print(f"  - {c['name']} {c.get('version', '')}: {c.get('license')}",
+    unverified = unverified_components(components)
+    if offenders or unverified:
+        if offenders:
+            print("LICENSE GATE FAILED — strong-copyleft (GPL/AGPL) component(s) in the bundle:",
                   file=sys.stderr)
+            for c in offenders:
+                print(f"  - {c['name']} {c.get('version', '')}: {c.get('license')}",
+                      file=sys.stderr)
+        if unverified:
+            print("LICENSE GATE FAILED — component(s) with an UNVERIFIABLE license (not "
+                  "installed on this runner and not vetted in VETTED_LICENSE_FALLBACKS); "
+                  "an unknown license could be copyleft. Vet each from PyPI and add its SPDX "
+                  "license to that map:", file=sys.stderr)
+            for c in unverified:
+                print(f"  - {c['name']} {c.get('version', '')}: license could not be resolved",
+                      file=sys.stderr)
         return 2
-    print("License gate PASS (no non-exempt GPL/AGPL component).")
+    print("License gate PASS (no non-exempt GPL/AGPL component; all licenses verified).")
     return 0
 
 

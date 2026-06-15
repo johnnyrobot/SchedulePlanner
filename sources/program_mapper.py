@@ -46,13 +46,32 @@ COLLEGE_CONFIGS = {
 }
 
 
+def _config_for(campus):
+    """Return the COLLEGE_CONFIGS entry for ``campus``.
+
+    Raises a NAMED SourceDataError (listing the known campuses) for an unknown
+    campus rather than the bare KeyError that used to surface to the user as a
+    raw "'NOPE'" string — mirrors assist.institution_id_for /
+    elumen_client.tenant_for so a typo'd or free-text campus fails the same way
+    across every live source.
+    """
+    key = str(campus).strip().upper()
+    try:
+        return COLLEGE_CONFIGS[key]
+    except KeyError:
+        raise SourceDataError(
+            f"{SOURCE}: unknown campus {campus!r}; known campuses are "
+            f"{sorted(COLLEGE_CONFIGS)}."
+        ) from None
+
+
 def _headers(campus):
-    cfg = COLLEGE_CONFIGS[campus]
+    cfg = _config_for(campus)
     return {"Origin": cfg["origin"], "Referer": f"{cfg['origin']}/"}
 
 
 def _site_url(campus, suffix):
-    scid = COLLEGE_CONFIGS[campus]["site_content_id"]
+    scid = _config_for(campus)["site_content_id"]
     return f"{API_BASE}/site-contents/{scid}{suffix}"
 
 
