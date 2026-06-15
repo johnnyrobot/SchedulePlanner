@@ -440,7 +440,13 @@ def solve_cohort(pcode, prog, course_seasons, units, prereqs, cohort, allow_fixe
         ge_out[r["area"]] = {"title": r["area_title"], "resolution": r["resolution"],
                              "chosen": sorted(chosen), "units": r["units"]}
 
+    # ``terms_per_year`` = len(cadence): the EXACT divisor the report/UI need to turn
+    # abstract ``terms_used`` into calendar years (2 for Fall/Spring, 3 with Summer,
+    # 4 with Winter). Surfaced here so the surfaces never re-derive (and mis-derive)
+    # it as a hardcoded 2. Deterministic — a pure function of the offered seasons —
+    # so engine.run stays reproducible run-to-run; it changes no plan.
     result = {"terms_used": int(solver.Value(last)),
+              "terms_per_year": len(cadence),
               "plan": {int(t): sorted(v) for t, v in sorted(plan.items())},
               "fixes": fixes,
               # E2: True iff the solver PROVED this the minimum-term plan (OPTIMAL),
