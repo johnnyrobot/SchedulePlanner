@@ -65,6 +65,14 @@ def get_all_programs(campus, *, client=None):
         data = get_json(_site_url(campus, f"/program-groups/{gid}"),
                         headers=_headers(campus), client=client,
                         source=f"{SOURCE} program-groups/{gid} ({campus})")
+        # Drift guard, mirroring the home-page and program-map guards: a per-group
+        # payload that is not a JSON object would make data.get(...) raise a bare
+        # AttributeError that escapes get_json's named-error discipline. A dict that
+        # merely omits 'programs' stays tolerated (the .get default -> no programs).
+        if not isinstance(data, dict):
+            raise SourceDataError(
+                f"{SOURCE} program-groups/{gid} ({campus}): expected a JSON object, "
+                f"got {type(data).__name__}. The Program Mapper schema may have changed.")
         for program in data.get("programs", []):
             prog = dict(program)
             prog["group_title"] = group.get("title")
