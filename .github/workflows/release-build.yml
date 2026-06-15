@@ -1,8 +1,9 @@
 name: Release build (macOS, unsigned)
 
 # Builds the macOS SchedulePlanner.app with PyInstaller from the PINNED,
-# hash-checked dependency set (requirements.lock), then runs the headless
-# resource/Mach-O verifier and uploads the bundle as an artifact.
+# hash-checked dependency set (requirements.lock), runs the headless
+# resource/Mach-O verifier, then (E5) zips the bundle and attaches a Sigstore-
+# signed, keyless SLSA build-provenance attestation before uploading.
 #
 # MANUAL dispatch only for now. This workflow has not yet been executed on a
 # GitHub-hosted runner; validate it with one manual run before wiring it to
@@ -13,7 +14,9 @@ name: Release build (macOS, unsigned)
 #   * No code signing or notarization. The .app is UNSIGNED and un-notarized;
 #     macOS Gatekeeper blocks it on first open (see BUILD.md "macOS Gatekeeper
 #     bypass"). Signing needs an Apple Developer ID certificate + notarytool and
-#     is out of scope.
+#     is out of scope. The SLSA attestation (E5) proves build ORIGIN (this repo +
+#     commit + workflow), NOT safety, and COMPLEMENTS — never replaces — Apple
+#     notarization; verify it with `gh attestation verify <zip> --repo <owner>/<repo>`.
 #   * No Windows or Linux build. PyInstaller is not a cross-compiler; those
 #     artifacts are built manually via scripts/build_windows.ps1 / build_linux.sh.
 #   * No claim of bit-for-bit identical BINARIES. PyInstaller embeds timestamps
@@ -30,6 +33,10 @@ jobs:
   build-macos:
     name: build dist/SchedulePlanner.app (unsigned)
     runs-on: macos-latest
+    permissions:
+      contents: read
+      id-token: write      # E5: Sigstore OIDC token for keyless signing
+      attestations: write  # E5: write the SLSA build-provenance attestation
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -47,10 +54,39 @@ jobs:
         run: bash scripts/build_macos.sh
       - name: Verify bundled resources (headless)
         run: bash scripts/verify_macos_build.sh
-      - name: Upload unsigned .app artifact
+      - name: Generate CycloneDX SBOM + no-copyleft license gate (E16)
+        # Fails the release if a non-exempt GPL/AGPL component is in the bundle; the
+        # SBOM (with the bundled Temurin JRE noted) ships beside the .app.
+        run: python3 scripts/generate_sbom.py --out dist/sbom.cyclonedx.json
+      - name: Archive the .app into a single attestable artifact
+        # attest-build-provenance attests a FILE, not a directory tree, so the
+        # bundle is zipped first (ditto = macOS-native, preserves the .app layout
+        # and resource forks, same tool the packaging scripts use).
+        run: ditto -c -k --sequesterRsrc --keepParent
+             dist/SchedulePlanner.app dist/SchedulePlanner-macos-unsigned.zip
+      - name: Generate SLSA build provenance (Sigstore-signed, keyless)
+        # E5: a Sigstore-signed, keyless SLSA Build L2 statement binding the zip to
+        # THIS repo + commit + workflow, verifiable with `gh attestation verify
+        # dist/SchedulePlanner-macos-unsigned.zip --repo <owner>/<repo>`. HONEST
+        # framing: provenance proves ORIGIN (who/where/how it was built), NOT safety;
+        # it COMPLEMENTS, never replaces, Apple notarization (which this unsigned
+        # build still lacks — see the HONEST SCOPE note above).
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: dist/SchedulePlanner-macos-unsigned.zip
+      - name: Upload unsigned .app artifact (+ its SBOM)
         uses: actions/upload-artifact@v4
         with:
           name: SchedulePlanner-macos-unsigned
-          path: dist/SchedulePlanner.app
+          path: |
+            dist/SchedulePlanner.app
+            dist/sbom.cyclonedx.json
+          if-no-files-found: error
+          retention-days: 14
+      - name: Upload the attested zip artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: SchedulePlanner-macos-unsigned-zip
+          path: dist/SchedulePlanner-macos-unsigned.zip
           if-no-files-found: error
           retention-days: 14

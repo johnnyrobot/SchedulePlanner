@@ -40,6 +40,36 @@ def test_fixtures_exist_and_are_shape_faithful(lamc_routes):
                for e in pmap["pathwayElements"])
 
 
+def test_live_workbook_carries_multiblock_meetings_no_instructor(
+        lamc_routes, make_client, tmp_path):
+    """The live pipeline carries a section's FULL meeting footprint into the engine
+    workbook. Multi-pattern sections (the LAMC Fall fixture has several — e.g.
+    BIOLOGY 003) get a non-empty ``Meetings`` cell, so the engine separates two
+    required courses that clash only on a SECONDARY block — the gated multi-block
+    wiring, proven end-to-end through write_workbook (not just the synthetic engine
+    unit test).
+
+    PRIVACY DOCTRINE: the column encodes days/times ONLY. The raw blocks carry
+    instructor/room; those must NOT be reintroduced into the workbook — asserted
+    structurally (each encoded block has exactly the keys ``{days, times}``)."""
+    import pandas as pd
+    client = make_client(lamc_routes)
+    sections = schedule.fetch_sections("LAMC", [2268], client=client)
+    program = pm.fetch_program("LAMC", "Biology", client=client)
+    out = tmp_path / "live_meetings.xlsx"
+    mapping.write_workbook(sections, program, str(out))
+
+    sec = pd.read_excel(out, sheet_name="sections")
+    assert "Meetings" in sec.columns
+    nonempty = [str(c) for c in sec["Meetings"].fillna("") if str(c).strip()]
+    assert nonempty, "expected >=1 multi-block section to carry a Meetings cell"
+    for cell in nonempty:
+        blocks = json.loads(cell)
+        assert len(blocks) >= 2, "a non-empty Meetings cell means a multi-block section"
+        # privacy + shape: days/times ONLY, never instructor / room / facility id
+        assert all(set(b) == {"days", "times"} for b in blocks)
+
+
 def test_full_chain_offline_through_engine(lamc_routes, make_client, tmp_path):
     client = make_client(lamc_routes)
 
@@ -107,7 +137,9 @@ def test_build_live_workbook_emits_structured_report(lamc_routes, make_client,
         "modality_mismatch", "prerequisite_ordering", "ge_scheduling",
         "time_block_conflict", "room_conflict", "program_buildability",
         "program_bottleneck", "grid_pressure", "demand_supply",
-        "equity_exposure"}
+        "equity_exposure", "gateway_momentum", "corequisite_availability",
+        "infeasibility", "demand_success", "equity_success_gap",
+        "minimal_perturbation", "contact_hours"}
     for d in inert:
         if d["detector"] == "ge_scheduling" or d.get("status") == "active":
             continue  # ge_scheduling / active detectors carry "reason" but no "remedy"
@@ -565,6 +597,326 @@ def test_analyze_live_equity_exposure_active_online_computable(tmp_path):
     json.dumps(report)
 
 
+# --- F8: first-year gateway momentum -----------------------------------------
+def test_analyze_live_gateway_momentum_active_identifies_english_and_math(tmp_path):
+    """End-to-end through the registry: a program with required ENGL/MATH courses
+    offered in the first-year window -> F8 active, both gateways identified via the
+    major-subject fallback and schedulable, with an active inert-detector entry."""
+    records = [
+        {"course": "ENGLISH 101", "term": 2268, "class_nbr": str(i),
+         "days": "MW", "times": "9:00 AM - 10:15 AM", "units": 3} for i in (1, 2)
+    ] + [
+        {"course": "MATH 227", "term": 2268, "class_nbr": str(i),
+         "days": "TTh", "times": "11:00 AM - 12:15 PM", "units": 5} for i in (3, 4)
+    ]
+    program = {"code": "TEST", "title": "Test", "award": "AS", "courses": [
+        {"course_id": "ENGLISH 101", "recommended_semester": 1},
+        {"course_id": "MATH 227", "recommended_semester": 1}], "major_choices": []}
+    out = tmp_path / "gw.xlsx"
+    report = build_live_workbook.analyze_live(
+        "LAMC", [2268], "(test)", str(out),
+        sections_override=records, program_override=program)
+    block = report["results"]["analysis"]["gateway_momentum"]
+    assert block["status"] == "active"
+    assert block["english"]["course"] == "ENGLISH 101"
+    assert block["english"]["via"] == "major_subject"
+    assert block["english"]["schedulable_year1"] is True
+    assert block["math"]["course"] == "MATH 227"
+    assert block["both_gateways_year1"] is True
+    assert "PROXY" in block["label"]
+    det = next(d for d in report["inert_detectors"] if d["detector"] == "gateway_momentum")
+    assert det["status"] == "active" and det["found"] == 2
+    json.dumps(report)
+
+
+# --- F9: AB1705 corequisite co-availability ----------------------------------
+def test_analyze_live_corequisite_availability_active_with_injected_coreq(tmp_path):
+    """End-to-end through the registry: a transfer-level gateway whose injected
+    corequisite is co-offered in the same first-year term -> F9 active, co-offering
+    detected, with an active inert-detector entry. The coreq map is injected (the
+    live path derives the same shape from eLumen --elumen-live)."""
+    records = [
+        {"course": "MATH 227", "term": 2268, "class_nbr": str(i),
+         "days": "MW", "times": "9:00 AM - 10:15 AM", "units": 5} for i in (1, 2)
+    ] + [
+        {"course": "MATH 227L", "term": 2268, "class_nbr": str(i),
+         "days": "TTh", "times": "11:00 AM - 12:15 PM", "units": 1} for i in (3, 4)
+    ]
+    program = {"code": "TEST", "title": "Test", "award": "AS", "courses": [
+        {"course_id": "MATH 227", "recommended_semester": 1}], "major_choices": []}
+    out = tmp_path / "coreq.xlsx"
+    report = build_live_workbook.analyze_live(
+        "LAMC", [2268], "(test)", str(out),
+        sections_override=records, program_override=program,
+        elumen_coreq={"MATH 227": ["MATH 227L"]})
+    block = report["results"]["analysis"]["corequisite_availability"]
+    assert block["status"] == "active"
+    assert block["math"]["course"] == "MATH 227"
+    assert block["math"]["has_corequisite"] is True
+    assert block["math"]["co_offered_year1"] is True
+    assert block["math"]["co_offered_terms"] == ["2268"]
+    assert "STRUCTURE proxy" in block["label"]
+    det = next(d for d in report["inert_detectors"]
+               if d["detector"] == "corequisite_availability")
+    assert det["status"] == "active" and det["found"] == 1
+    json.dumps(report)
+
+
+def test_analyze_live_corequisite_availability_inert_without_coreq_map(tmp_path):
+    """The default path supplies no corequisite linkage (coreqs are excluded from
+    the prereq fetch) -> F9 inert with a remedy naming --elumen-live."""
+    records = [{"course": "MATH 227", "term": 2268, "class_nbr": "1",
+                "days": "MW", "times": "9:00 AM - 10:15 AM", "units": 5}]
+    program = {"code": "TEST", "title": "Test", "award": "AS", "courses": [
+        {"course_id": "MATH 227", "recommended_semester": 1}], "major_choices": []}
+    out = tmp_path / "coreq_inert.xlsx"
+    report = build_live_workbook.analyze_live(
+        "LAMC", [2268], "(test)", str(out),
+        sections_override=records, program_override=program)
+    block = report["results"]["analysis"]["corequisite_availability"]
+    assert block["status"] == "inert"
+    det = next(d for d in report["inert_detectors"]
+               if d["detector"] == "corequisite_availability")
+    assert det["status"] == "inert" and "elumen-live" in det["remedy"].lower()
+
+
+# --- E11: infeasibility explainer (MUS) --------------------------------------
+def test_analyze_live_infeasibility_active_isolates_minimal_conflict(tmp_path):
+    """End-to-end: a required course whose units (20) exceed BOTH cohort caps is
+    unbuildable in every cohort -> engine returns None plans -> E11 fires active
+    and isolates the minimal conflicting set (the over-unit course itself)."""
+    records = [{"course": "OVER 500", "term": 2268, "class_nbr": "1",
+                "days": "MW", "times": "9:00 AM - 10:15 AM", "units": 20}]
+    program = {"code": "TEST", "title": "Overload", "award": "AS", "courses": [
+        {"course_id": "OVER 500", "recommended_semester": 1}], "major_choices": []}
+    out = tmp_path / "infeasible.xlsx"
+    report = build_live_workbook.analyze_live(
+        "LAMC", [2268], "(test)", str(out),
+        sections_override=records, program_override=program)
+    block = report["results"]["analysis"]["infeasibility"]
+    assert block["status"] == "active"
+    ft = next(e for e in block["explained"] if e["cohort"] == "Full-time")
+    assert ft["reproduced"] is True
+    assert ft["minimal_conflict_set"] == ["OVER 500"]
+    assert ft["background_only"] is False
+    assert "STRUCTURAL" in block["label"]
+    det = next(d for d in report["inert_detectors"] if d["detector"] == "infeasibility")
+    assert det["status"] == "active" and det["found"] >= 1
+    json.dumps(report)
+
+
+def test_analyze_live_infeasibility_inert_when_buildable(tmp_path):
+    """A normal buildable program -> every cohort has a plan -> E11 inert."""
+    records = [{"course": "MATH 227", "term": 2268, "class_nbr": "1",
+                "days": "MW", "times": "9:00 AM - 10:15 AM", "units": 5}]
+    program = {"code": "TEST", "title": "Test", "award": "AS", "courses": [
+        {"course_id": "MATH 227", "recommended_semester": 1}], "major_choices": []}
+    out = tmp_path / "buildable.xlsx"
+    report = build_live_workbook.analyze_live(
+        "LAMC", [2268], "(test)", str(out),
+        sections_override=records, program_override=program)
+    block = report["results"]["analysis"]["infeasibility"]
+    assert block["status"] == "inert"
+    det = next(d for d in report["inert_detectors"] if d["detector"] == "infeasibility")
+    assert det["status"] == "inert" and det.get("remedy")
+
+
+# --- E14: minimal-perturbation recommender (inverse of E11) -------------------
+def test_analyze_live_minimal_perturbation_active_recommends_add_section(tmp_path):
+    """A required course with NO offered section -> F1 not-buildable -> E14 fires
+    active and recommends ONE add_section that flips it buildable."""
+    records = [{"course": "MATH 227", "term": 2268, "class_nbr": "1",
+                "days": "MW", "times": "9:00 AM - 10:15 AM", "units": 5}]
+    program = {"code": "TEST", "title": "Two-course", "award": "AS", "courses": [
+        {"course_id": "MATH 227", "recommended_semester": 1},
+        {"course_id": "ENGL 101", "recommended_semester": 1}],  # ENGL not offered
+        "major_choices": []}
+    out = tmp_path / "perturb.xlsx"
+    report = build_live_workbook.analyze_live(
+        "LAMC", [2268], "(test)", str(out),
+        sections_override=records, program_override=program)
+    block = report["results"]["analysis"]["minimal_perturbation"]
+    assert block["status"] == "active"
+    p = block["programs"][0]
+    assert p["total_changes"] == 1
+    adds = [a for a in p["actions"] if a["action"] == "add_section"]
+    assert [a["course"] for a in adds] == ["ENGL 101"]
+    assert p["buildable_after"] is True
+    assert "OFFERING" in block["label"]
+    det = next(d for d in report["inert_detectors"]
+               if d["detector"] == "minimal_perturbation")
+    assert det["status"] == "active" and det["found"] >= 1
+    json.dumps(report)
+
+
+def test_analyze_live_minimal_perturbation_inert_when_buildable(tmp_path):
+    """Every required course offered, no conflict -> already buildable -> E14 inert
+    (with a remedy describing what would activate it)."""
+    records = [{"course": "MATH 227", "term": 2268, "class_nbr": "1",
+                "days": "MW", "times": "9:00 AM - 10:15 AM", "units": 5}]
+    program = {"code": "TEST", "title": "Test", "award": "AS", "courses": [
+        {"course_id": "MATH 227", "recommended_semester": 1}], "major_choices": []}
+    out = tmp_path / "perturb_inert.xlsx"
+    report = build_live_workbook.analyze_live(
+        "LAMC", [2268], "(test)", str(out),
+        sections_override=records, program_override=program)
+    block = report["results"]["analysis"]["minimal_perturbation"]
+    assert block["status"] == "inert"
+    det = next(d for d in report["inert_detectors"]
+               if d["detector"] == "minimal_perturbation")
+    assert det["status"] == "inert" and det.get("remedy")
+
+
+# --- E7: per-term fail-open surfaces a skipped term ---------------------------
+def test_analyze_live_surfaces_a_skipped_term(lamc_routes, make_client, error_resp,
+                                              tmp_path):
+    """A term whose live listing fails (404) is SKIPPED (fail-open) but surfaced —
+    the analysis proceeds on the surviving term and a schedule_fetch WARNING reaches
+    the report, so partial coverage is never read as complete."""
+    routes = {**lamc_routes, "/listing/LAMC/2266": error_resp(404)}
+    client = make_client(routes)
+    out = tmp_path / "skip.xlsx"
+    report = build_live_workbook.analyze_live(
+        "LAMC", [2266, 2268], "Biology", str(out), client=client)
+    json.dumps(report)
+    assert report["section_count"] > 0                       # 2268 still loaded
+    assert report["fetch_status"]["skipped"][0]["term"] == 2266
+    warn = next(d for d in report["inert_detectors"]
+                if d["detector"] == "schedule_fetch")
+    assert warn["status"] == "warning" and 2266 in warn["skipped_terms"]
+    assert "PARTIAL" in warn["reason"]
+    # the CHAT-readable analysis block carries it too (no silent drop on chat)
+    sf = report["results"]["analysis"]["schedule_fetch"]
+    assert sf["status"] == "warning" and 2266 in sf["skipped_terms"]
+
+
+# --- E15/F10: Title 5 contact-hour conformance --------------------------------
+def test_analyze_live_contact_hours_active_flags_implausible_section(tmp_path):
+    """A 1-unit section scheduled MTWThF 8 AM-12 PM (20 hrs/week) with woi=18 is
+    implausibly OVER the Title 5 lecture band -> F10 active, flagged high."""
+    records = [{"course": "PE 1", "term": 2268, "class_nbr": "1",
+                "days": "MTWThF", "times": "8:00 AM - 12:00 PM",
+                "units": "1", "woi": "18", "contact": "LEC"}]
+    program = {"code": "TEST", "title": "Test", "award": "AS", "courses": [
+        {"course_id": "PE 1", "recommended_semester": 1}], "major_choices": []}
+    out = tmp_path / "ch.xlsx"
+    report = build_live_workbook.analyze_live(
+        "LAMC", [2268], "(test)", str(out),
+        sections_override=records, program_override=program)
+    block = report["results"]["analysis"]["contact_hours"]
+    assert block["status"] == "active"
+    assert len(block["flagged"]) == 1
+    assert block["flagged"][0]["direction"] == "high"
+    assert "CONFORMANCE" in block["label"].upper()
+    det = next(d for d in report["inert_detectors"] if d["detector"] == "contact_hours")
+    assert det["status"] == "active" and det["found"] >= 1
+    json.dumps(report)
+
+
+def test_analyze_live_contact_hours_inert_without_woi(tmp_path):
+    """A section with a meeting time + units but NO weeks-of-instruction cannot be
+    normalized -> F10 inert (with a remedy), never a false flag."""
+    records = [{"course": "MATH 227", "term": 2268, "class_nbr": "1",
+                "days": "MW", "times": "9:00 AM - 10:15 AM", "units": "5"}]
+    program = {"code": "TEST", "title": "Test", "award": "AS", "courses": [
+        {"course_id": "MATH 227", "recommended_semester": 1}], "major_choices": []}
+    out = tmp_path / "ch_inert.xlsx"
+    report = build_live_workbook.analyze_live(
+        "LAMC", [2268], "(test)", str(out),
+        sections_override=records, program_override=program)
+    block = report["results"]["analysis"]["contact_hours"]
+    assert block["status"] == "inert"
+    det = next(d for d in report["inert_detectors"] if d["detector"] == "contact_hours")
+    assert det["status"] == "inert" and det.get("remedy")
+
+
+# --- E9: course-success / demand-vs-success escalation ------------------------
+def test_analyze_live_demand_success_active_with_export(tmp_path):
+    """A supplied CCCCO Data Mart export -> E9 active, joining the measured success
+    rate onto the offered course; inert (with remedy) when no export is supplied."""
+    success = tmp_path / "success.csv"
+    success.write_text("Course,Success Rate,Retention Rate\nMATH 227,55%,82%\n")
+    records = [{"course": "MATH 227", "term": 2268, "class_nbr": "1",
+                "days": "MW", "times": "9:00 AM - 10:15 AM", "units": 5}]
+    program = {"code": "TEST", "title": "Test", "award": "AS", "courses": [
+        {"course_id": "MATH 227", "recommended_semester": 1}], "major_choices": []}
+    out = tmp_path / "ds.xlsx"
+    report = build_live_workbook.analyze_live(
+        "LAMC", [2268], "(test)", str(out),
+        sections_override=records, program_override=program,
+        course_success_path=str(success))
+    block = report["results"]["analysis"]["demand_success"]
+    assert block["status"] == "active"
+    assert block["granularity"] == "Course"
+    assert block["matched"] == 1
+    row = block["with_outcome"][0]
+    assert row["course"] == "MATH 227" and row["success_rate"] == 0.55
+    assert "MEASURED" in block["label"]
+    det = next(d for d in report["inert_detectors"] if d["detector"] == "demand_success")
+    assert det["status"] == "active"
+    json.dumps(report)
+
+
+def test_analyze_live_demand_success_inert_without_export(tmp_path):
+    records = [{"course": "MATH 227", "term": 2268, "class_nbr": "1",
+                "days": "MW", "times": "9:00 AM - 10:15 AM", "units": 5}]
+    program = {"code": "TEST", "title": "Test", "award": "AS", "courses": [
+        {"course_id": "MATH 227", "recommended_semester": 1}], "major_choices": []}
+    out = tmp_path / "ds_inert.xlsx"
+    report = build_live_workbook.analyze_live(
+        "LAMC", [2268], "(test)", str(out),
+        sections_override=records, program_override=program)
+    block = report["results"]["analysis"]["demand_success"]
+    assert block["status"] == "inert"
+    det = next(d for d in report["inert_detectors"] if d["detector"] == "demand_success")
+    assert det["status"] == "inert" and det.get("remedy")
+
+
+# --- E13: equity-disaggregated course-success gap ----------------------------
+def test_analyze_live_equity_success_gap_active_with_disaggregated_export(tmp_path):
+    """A supplied disaggregated export -> E13 active: a below-reference subgroup gap
+    surfaces and a <10 small cell is SUPPRESSED (counted, not shown)."""
+    disagg = tmp_path / "disagg.csv"
+    disagg.write_text("Course,Subgroup,Enrollment,Success Rate\n"
+                      "MATH 227,All,1000,0.62\n"
+                      "MATH 227,Group B,300,0.45\n"
+                      "MATH 227,Group C,7,0.40\n")   # count 7 < 10 -> suppressed
+    records = [{"course": "MATH 227", "term": 2268, "class_nbr": "1",
+                "days": "MW", "times": "9:00 AM - 10:15 AM", "units": 5}]
+    program = {"code": "TEST", "title": "Test", "award": "AS", "courses": [
+        {"course_id": "MATH 227", "recommended_semester": 1}], "major_choices": []}
+    out = tmp_path / "eq.xlsx"
+    report = build_live_workbook.analyze_live(
+        "LAMC", [2268], "(test)", str(out),
+        sections_override=records, program_override=program,
+        equity_success_path=str(disagg))
+    block = report["results"]["analysis"]["equity_success_gap"]
+    assert block["status"] == "active"
+    course = block["courses"][0]
+    assert course["course"] == "MATH 227" and course["reference_subgroup"] == "All"
+    assert "Group B" in {g["subgroup"] for g in course["below_reference"]}
+    assert course["suppressed_subgroups"] == 1            # Group C (7) suppressed
+    assert "MEASURED" in block["label"]
+    det = next(d for d in report["inert_detectors"] if d["detector"] == "equity_success_gap")
+    assert det["status"] == "active"
+    json.dumps(report)
+
+
+def test_analyze_live_equity_success_gap_inert_without_export(tmp_path):
+    records = [{"course": "MATH 227", "term": 2268, "class_nbr": "1",
+                "days": "MW", "times": "9:00 AM - 10:15 AM", "units": 5}]
+    program = {"code": "TEST", "title": "Test", "award": "AS", "courses": [
+        {"course_id": "MATH 227", "recommended_semester": 1}], "major_choices": []}
+    out = tmp_path / "eq_inert.xlsx"
+    report = build_live_workbook.analyze_live(
+        "LAMC", [2268], "(test)", str(out),
+        sections_override=records, program_override=program)
+    block = report["results"]["analysis"]["equity_success_gap"]
+    assert block["status"] == "inert"
+    det = next(d for d in report["inert_detectors"] if d["detector"] == "equity_success_gap")
+    assert det["status"] == "inert" and det.get("remedy")
+
+
 def test_analyze_import_equity_online_inert_no_modality(tmp_path):
     """A real schedule export carries no modality -> F6 active with evening/two_day
     computable but the online archetype NOT ASSESSED (computable:False)."""
@@ -580,3 +932,15 @@ def test_analyze_import_equity_online_inert_no_modality(tmp_path):
     for key in ("evening", "two_day"):
         assert next(a for a in block["archetypes"] if a["key"] == key)["computable"] is True
     json.dumps(report)
+
+
+def test_contact_hours_inert_detector_entry_surfaces_not_assessed_counts():
+    # E15 nit fix: on the inert-with-data path the per-reason breakdown must ride the
+    # detector entry's reason so report + ui surface it (not only the report section).
+    entry = build_live_workbook._contact_hours_detector_entry({
+        "status": "inert", "reason": "no normalizable section",
+        "not_assessed": {"no_meeting_time": 3, "missing_weeks": 12,
+                         "missing_units": 0, "category_unknown": 0}})
+    assert entry["status"] == "inert"
+    assert "no meeting time" in entry["reason"] and "3" in entry["reason"]
+    assert "missing weeks" in entry["reason"] and "12" in entry["reason"]

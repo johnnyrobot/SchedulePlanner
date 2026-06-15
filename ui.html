@@ -793,6 +793,14 @@ const DET_LABELS={
   grid_pressure:'Grid conformance & morning compression',
   demand_supply:'Demand-vs-supply action list',
   equity_exposure:'Equity / archetype exposure',
+  gateway_momentum:'First-year gateway momentum',
+  corequisite_availability:'Corequisite co-availability',
+  infeasibility:'Infeasibility explainer',
+  demand_success:'Course success signal',
+  equity_success_gap:'Equity course-success gap',
+  minimal_perturbation:'Fewest offering changes to buildable',
+  contact_hours:'Contact-hour conformance',
+  schedule_fetch:'Schedule fetch coverage',
 };
 // GE-coverage card maps, hoisted to module scope for the same reason.
 const PNAME = {igetc:'IGETC', 'cal-getc':'Cal-GETC', 'csu-ge':'CSU GE', local:'Local AA/AS GE'};
@@ -1027,6 +1035,194 @@ const LIVE_CARDS = [
   }
   return '';
   } },
+  // (f3) First-year gateway momentum (F8): whether each program's transfer-level
+  // English (GE Area 1A) / Math (Area 2) gateway course can be SCHEDULED in the
+  // first year — an OFFERING proxy, NOT a measured completion rate (gm.label). A
+  // major-subject-fallback gateway is discipline-level, transfer-level UNVERIFIED.
+  { target:'html', render:(res)=>{
+  const gm = res.analysis && res.analysis.gateway_momentum;
+  if(gm && gm.status==='active'){
+    const rows=['english','math'].map(k=>{
+      const g=gm[k]||{}; const name=k.charAt(0).toUpperCase()+k.slice(1);
+      if(!g.identified) return '<div class="inert"><div class="det">⊘ '+name+': '+
+        escapeHtml(g.reason||'no gateway identified')+'</div></div>';
+      const ok=g.schedulable_year1;
+      const obstr=(g.obstructions||[]).map(escapeHtml).join('; ');
+      return '<div class="inert"><div class="det'+(ok?' on':'')+'">'+(ok?'✓ ':'⊘ ')+
+        name+': '+escapeHtml(g.course||'')+' (via '+escapeHtml(g.via||'')+
+        ', transfer-level '+escapeHtml(g.transfer_level||'')+') — '+
+        (ok?'schedulable in year 1':'NOT schedulable in year 1')+'</div>'+
+        (obstr?'<div class="why">'+obstr+'</div>':'')+'</div>';
+    }).join('');
+    const terms=(gm.first_year_terms||[]).map(escapeHtml).join(', ');
+    return '<div class="card"><h3>First-year gateway momentum</h3>'+
+      '<p class="hint">'+escapeHtml(gm.label||'')+'</p>'+rows+
+      '<p class="hint">First-year window: '+terms+' · both gateways schedulable: '+
+      (gm.both_gateways_year1?'yes':'no')+'</p></div>';
+  }
+  return '';
+  } },
+  // (f4) Corequisite co-availability (F9): whether a transfer-level gateway's
+  // catalog corequisite is co-offered in the SAME first-year term — a co-OFFERING
+  // STRUCTURE proxy, NOT a measured or causal outcome (ca.label carries the AB1705
+  // "direct placement was the dominant lever" caveat). All data escaped.
+  { target:'html', render:(res)=>{
+  const ca = res.analysis && res.analysis.corequisite_availability;
+  if(ca && ca.status==='active'){
+    const rows=['english','math'].map(k=>{
+      const g=ca[k]||{}; const name=k.charAt(0).toUpperCase()+k.slice(1);
+      if(!g.identified) return '<div class="inert"><div class="det">⊘ '+name+': '+
+        escapeHtml(g.reason||'no gateway identified')+'</div></div>';
+      if(!g.has_corequisite) return '<div class="inert"><div class="det">⊘ '+name+': '+
+        escapeHtml(g.course||'')+' — '+
+        escapeHtml(g.reason||'no corequisite in the catalog data')+'</div></div>';
+      const ok=g.co_offered_year1;
+      const coreqs=(g.corequisites||[]).map(escapeHtml).join(', ');
+      const obstr=(g.obstructions||[]).map(escapeHtml).join('; ');
+      return '<div class="inert"><div class="det'+(ok?' on':'')+'">'+(ok?'✓ ':'⊘ ')+
+        name+': '+escapeHtml(g.course||'')+' (corequisite '+coreqs+') — '+
+        (ok?'co-offered in year 1':'NOT co-offered in year 1')+'</div>'+
+        (obstr?'<div class="why">'+obstr+'</div>':'')+'</div>';
+    }).join('');
+    const cterms=(ca.first_year_terms||[]).map(escapeHtml).join(', ');
+    return '<div class="card"><h3>Corequisite co-availability (AB1705)</h3>'+
+      '<p class="hint">'+escapeHtml(ca.label||'')+'</p>'+rows+
+      '<p class="hint">First-year window: '+cterms+
+      ' · both gateway corequisites co-offered in year 1: '+
+      (ca.both_gateways_coreq_co_offered_year1?'yes':'no')+'</p></div>';
+  }
+  return '';
+  } },
+  // (f5) Why a plan is infeasible (E11): when the planner finds no feasible plan
+  // for a cohort, the minimal required-course set behind it — a deterministic
+  // STRUCTURAL diagnostic, NOT a student outcome (inf.label carries the caveat).
+  { target:'html', render:(res)=>{
+  const inf = res.analysis && res.analysis.infeasibility;
+  if(inf && inf.status==='active'){
+    const rows=(inf.explained||[]).map(e=>{
+      const head=escapeHtml(e.program||'')+' — '+escapeHtml(e.cohort||'')+
+        ' ('+escapeHtml(String(e.horizon_terms||''))+' terms)';
+      if(!e.reproduced) return '<div class="inert"><div class="det">⊘ '+head+
+        '</div><div class="why">'+escapeHtml(e.note||'')+'</div></div>';
+      const mcs=(e.minimal_conflict_set||[]).map(escapeHtml).join(', ')||'—';
+      return '<div class="inert"><div class="det">⊘ '+head+'</div>'+
+        '<div class="why">'+escapeHtml(e.summary||'')+'</div>'+
+        '<div class="rem">'+mcs+'</div></div>';
+    }).join('');
+    return '<div class="card"><h3>Why a plan is infeasible</h3>'+
+      '<p class="hint">'+escapeHtml(inf.label||'')+'</p>'+rows+'</div>';
+  }
+  return '';
+  } },
+  // (f6) Course success signal (E9): MEASURED aggregate course retention/success
+  // (offline CCCCO Data Mart) crossed with the supply signals — NOT a completion
+  // or student-level claim (ds.label carries the caveat). All data escaped.
+  { target:'html', render:(res)=>{
+  const ds = res.analysis && res.analysis.demand_success;
+  if(ds && ds.status==='active'){
+    const pct=(v)=> (typeof v==='number')? Math.round(v*100)+'%' : '—';
+    const row=(r)=> '<div class="inert"><div class="det'+(r.supply_constrained?'':' on')+'">'+
+      (r.supply_constrained?'⚠ ':'• ')+escapeHtml(r.course||'')+' — success '+pct(r.success_rate)+
+      (r.retention_rate!=null?', retention '+pct(r.retention_rate):'')+
+      (r.supply_constrained?' · supply-constrained':'')+'</div></div>';
+    const esc=(ds.escalated||[]).map(row).join('');
+    const escHtml=esc?'<p class="hint">Escalated — supply-constrained + lower success:</p>'+esc:'';
+    const all=(ds.with_outcome||[]).map(row).join('');
+    return '<div class="card"><h3>Course success signal</h3>'+
+      '<p class="hint">'+escapeHtml(ds.label||'')+'</p>'+
+      '<p class="hint">Join granularity: '+escapeHtml(ds.granularity||'')+' · matched '+
+      escapeHtml(String(ds.matched||0))+' offered course(s); '+
+      escapeHtml(String(ds.offered_without_outcome||0))+' without data.</p>'+
+      escHtml+all+'</div>';
+  }
+  return '';
+  } },
+  // (f7) Equity course-success gap (E13): MEASURED aggregate subgroup difference in
+  // course success (small cells <10 suppressed) — NOT a completion gap, NOT
+  // student-level, NOT causal (eg.label carries the caveat). All data escaped.
+  { target:'html', render:(res)=>{
+  const eg = res.analysis && res.analysis.equity_success_gap;
+  if(eg && eg.status==='active'){
+    const pct=(v)=> (typeof v==='number')? Math.round(v*100)+'%' : '—';
+    const pp=(g)=> (typeof g==='number')? (g>0?'+':'')+Math.round(g*100)+' pp' : '—';
+    const row=(c)=>{
+      const below=(c.below_reference||[]).map(g=>escapeHtml(g.subgroup||'')+' ('+
+        pct(g.success_rate)+', '+pp(g.gap)+')').join(', ')||'—';
+      const supp=c.suppressed_subgroups||0;
+      const basis=(c.reference_basis==='highest_subgroup')?'highest subgroup — no overall row':'overall row';
+      return '<div class="inert"><div class="det">⚠ '+escapeHtml(c.course||'')+
+        ' (ref '+escapeHtml(c.reference_subgroup||'')+' '+pct(c.reference_rate)+', '+basis+')</div>'+
+        '<div class="why">below-reference: '+below+
+        (supp?' · '+escapeHtml(String(supp))+' suppressed':'')+'</div></div>';
+    };
+    const rows=(eg.courses||[]).map(row).join('');
+    return '<div class="card"><h3>Equity course-success gap</h3>'+
+      '<p class="hint">'+escapeHtml(eg.label||'')+'</p>'+
+      '<p class="hint">Join granularity: '+escapeHtml(eg.granularity||'')+
+      ' · small cells (&lt;'+escapeHtml(String(eg.suppression_min||10))+') suppressed.</p>'+
+      rows+'</div>';
+  }
+  return '';
+  } },
+  // (f2) E14 minimal-perturbation recommender: the fewest OFFERING changes that flip
+  // a program's required path from not-buildable to buildable — an OFFERING proxy,
+  // not a student outcome.
+  { target:'html', render:(res)=>{
+  const mp = res.analysis && res.analysis.minimal_perturbation;
+  if(mp && mp.status==='active'){
+    const act=(a)=>{
+      if(a.action==='add_section') return 'add a section of <b>'+escapeHtml(a.course||'')+'</b>';
+      if(a.action==='add_alt_time_section') return 'add an alternate-time section of <b>'+escapeHtml(a.course||'')+'</b>';
+      if(a.action==='add_choice_option') return 'offer '+escapeHtml(String(a.shortfall||0))+' more of {'+
+        (a.options||[]).map(escapeHtml).join(', ')+'}';
+      return escapeHtml(a.action||'');
+    };
+    const prog=(p)=>{
+      const after=p.buildable_after?'buildable after the changes':'NOT fully buildable by offerings alone';
+      const acts=(p.actions||[]).map(a=>'<li>'+act(a)+'</li>').join('');
+      const notes=(p.notes||[]).map(n=>'<li class="why">'+escapeHtml(n)+'</li>').join('');
+      return '<div class="inert"><div class="det">⚠ '+escapeHtml(p.title||p.code||'')+': '+
+        escapeHtml(String(p.total_changes||0))+' change(s) — '+after+
+        ' (score '+escapeHtml(String(p.score_before))+' → '+escapeHtml(String(p.score_after))+')</div>'+
+        '<ul>'+acts+notes+'</ul></div>';
+    };
+    const rows=(mp.programs||[]).map(prog).join('');
+    const na=(mp.not_assessed||[]).map(n=>'<li>'+escapeHtml(String(n.check||'').replace(/_/g,' '))+
+      ': '+escapeHtml(n.reason||'')+'</li>').join('');
+    const naHtml=na?'<p class="hint">Not assessed:</p><ul>'+na+'</ul>':'';
+    return '<div class="card"><h3>Fewest offering changes to buildable</h3>'+
+      '<p class="hint">'+escapeHtml(mp.label||'')+'</p>'+rows+naHtml+'</div>';
+  }
+  return '';
+  } },
+  // (f3) E15/F10 Title 5 contact-hour conformance: observed scheduled in-class time
+  // vs a wide implied per-unit band — a CONFORMANCE proxy, not a compliance ruling.
+  { target:'html', render:(res)=>{
+  const ch = res.analysis && res.analysis.contact_hours;
+  if(ch && ch.status==='active'){
+    const flag=(f)=>{
+      const band=(f.expected_band||[]);
+      const bandTxt=(band.length===2)?escapeHtml(String(band[0]))+'–'+escapeHtml(String(band[1])):'—';
+      return '<div class="inert"><div class="det">⚠ '+escapeHtml(f.course||'')+': '+
+        escapeHtml(String(f.per_unit_term_hours))+' contact hrs/unit implausibly '+
+        escapeHtml(f.direction||'')+' for the '+escapeHtml(f.contact_category||'')+
+        ' band '+bandTxt+'</div></div>';
+    };
+    const rows=(ch.flagged||[]).map(flag).join('')||
+      '<p class="hint">No section falls outside the band.</p>';
+    const na=ch.not_assessed||{};
+    const naItems=Object.keys(na).sort().map(k=>'<li>'+escapeHtml(k.replace(/_/g,' '))+
+      ': '+escapeHtml(String(na[k]))+'</li>').join('');
+    const naHtml=naItems?'<p class="hint">Not assessed:</p><ul>'+naItems+'</ul>':'';
+    return '<div class="card"><h3>Contact-hour conformance</h3>'+
+      '<p class="hint">'+escapeHtml(ch.label||'')+'</p>'+
+      '<p class="hint">'+escapeHtml(String(ch.assessed||0))+' assessed · '+
+      escapeHtml(String(ch.consistent||0))+' within band · '+
+      escapeHtml(String((ch.flagged||[]).length))+' flagged.</p>'+
+      rows+naHtml+'</div>';
+  }
+  return '';
+  } },
   // (g) Inert-detector notes ("What this live build can measure") — the only
   // consumer of DET_LABELS.
   { target:'html', render:(res)=>{
@@ -1038,6 +1234,7 @@ const LIVE_CARDS = [
     // surface the honest "joined N/M sections" count when present.
     const notes=inert.map(d=>{
       const active=d.status==='active';
+      const warning=d.status==='warning';
       const label=DET_LABELS[d.detector]||d.detector;
       const why=d.reason||d.label||'';
       const rem=d.remedy||d.metric||'';
@@ -1055,11 +1252,16 @@ const LIVE_CARDS = [
           ' applied'+(d.prereq_summary.fallback_count?
             ' ('+escapeHtml(String(d.prereq_summary.fallback_count))+' relaxed)':'')+'</div>';
       }
-      return '<div class="inert"><div class="det'+(active?' on':'')+'">'+(active?'✓ ':'⊘ ')+escapeHtml(label)+
-        (active?' — on':' — needs more data')+'</div>'+
+      // Three states: active (✓ on), WARNING (⚠ PARTIAL coverage — a degraded
+      // result that IS firing, e.g. E7 partial schedule coverage), inert (⊘).
+      const mark=active?'✓ ':(warning?'⚠ ':'⊘ ');
+      const state=active?' — on':(warning?' — PARTIAL coverage':' — needs more data');
+      const remPrefix=active?'how: ':(warning?'to fix: ':'to enable: ');
+      return '<div class="inert"><div class="det'+(active?' on':'')+'">'+mark+escapeHtml(label)+
+        state+'</div>'+
         join+
         (why?'<div class="why">'+escapeHtml(why)+'</div>':'')+
-        (rem?'<div class="rem">'+(active?'how: ':'to enable: ')+escapeHtml(rem)+'</div>':'')+'</div>';
+        (rem?'<div class="rem">'+remPrefix+escapeHtml(rem)+'</div>':'')+'</div>';
     }).join('');
     return '<div class="card"><h3>What this live build can measure</h3>'+
       '<p class="hint">These depend on data the public schedule API doesn’t include. '+
@@ -1154,12 +1356,16 @@ function badge(p){
 
 function cohortCard(label, c){
   if(!c) return '<div class="cohort"><div class="lab">'+label+'</div><div class="big">—</div></div>';
-  const yrs=Math.ceil(c.terms_used/2);
+  const tpy=c.terms_per_year||2;   // cadence length (2 Fall/Spring, 3 w/ Summer); engine.run supplies it
+  const yrs=Math.ceil(c.terms_used/tpy);
   const terms=Object.entries(c.plan).map(([t,cs])=>
     '<div class="term"><b>T'+t+'</b> '+cs.map(escapeHtml).join(', ')+'</div>').join('');
   const fix=(c.fixes&&c.fixes.length)?
     '<div class="fix">fix: '+c.fixes.map(f=>'+ '+escapeHtml(f.course)+' in '+escapeHtml(f.season)).join(', ')+'</div>':'';
-  const tag=c.needs_fix?' <span style="color:var(--red)">(with fix)</span>':'';
+  let tag=c.needs_fix?' <span style="color:var(--red)">(with fix)</span>':'';
+  // E2: deterministic-budget caveat, co-located with the plan (only when the
+  // solver did not prove this the minimum-term plan; absent/true -> none).
+  if(c.proven_optimal===false) tag+=' <span style="color:var(--red)" title="feasible but not proven the minimum">(not proven optimal)</span>';
   return '<div class="cohort"><div class="lab">'+label+'</div>'+
          '<div class="big">'+c.terms_used+' terms'+tag+'</div>'+
          '<div class="hint">~'+yrs+' year'+(yrs>1?'s':'')+'</div>'+terms+fix+'</div>';

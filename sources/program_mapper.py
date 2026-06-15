@@ -13,6 +13,15 @@ from .http import SourceDataError, get_json
 
 API_BASE = "https://b.api.programmapper.com"
 SOURCE = "Program Mapper"
+# Program Mapper rejects requests that lack a browser User-Agent AND the campus
+# Origin/Referer for the site-content id; a 403 here almost always means one of
+# those was missing or blocked. Threaded into get_json so this accurate remedy is
+# named for Program Mapper only (the shared transport's default 403 hint is
+# source-agnostic — see sources/http.py).
+_FORBIDDEN_HINT = (
+    "Program Mapper requires a browser User-Agent and the campus Origin/Referer "
+    "header for this site-content id."
+)
 
 # "Choose a course from Area 3A." / "... Area 4." -> the area code ("3A" / "4").
 _AREA_RE = re.compile(r"\bArea\s+([0-9]+[A-Z]{0,2})\b", re.IGNORECASE)
@@ -50,6 +59,7 @@ def _site_url(campus, suffix):
 def get_all_programs(campus, *, client=None):
     home = get_json(_site_url(campus, "/home-page-content"),
                     headers=_headers(campus), client=client,
+                    forbidden_hint=_FORBIDDEN_HINT,
                     source=f"{SOURCE} home-page-content ({campus})")
     if not isinstance(home, dict) or "programGroups" not in home:
         raise SourceDataError(
@@ -64,7 +74,16 @@ def get_all_programs(campus, *, client=None):
             continue
         data = get_json(_site_url(campus, f"/program-groups/{gid}"),
                         headers=_headers(campus), client=client,
+                        forbidden_hint=_FORBIDDEN_HINT,
                         source=f"{SOURCE} program-groups/{gid} ({campus})")
+        # Drift guard, mirroring the home-page and program-map guards: a per-group
+        # payload that is not a JSON object would make data.get(...) raise a bare
+        # AttributeError that escapes get_json's named-error discipline. A dict that
+        # merely omits 'programs' stays tolerated (the .get default -> no programs).
+        if not isinstance(data, dict):
+            raise SourceDataError(
+                f"{SOURCE} program-groups/{gid} ({campus}): expected a JSON object, "
+                f"got {type(data).__name__}. The Program Mapper schema may have changed.")
         for program in data.get("programs", []):
             prog = dict(program)
             prog["group_title"] = group.get("title")
@@ -85,6 +104,7 @@ def search_program(campus, query, *, client=None):
 def get_program_courses(campus, program_id, *, client=None):
     detail = get_json(_site_url(campus, f"/programs/{program_id}"),
                       headers=_headers(campus), client=client,
+                      forbidden_hint=_FORBIDDEN_HINT,
                       source=f"{SOURCE} programs/{program_id} ({campus})")
     pathways = detail.get("pathways", []) if isinstance(detail, dict) else []
     chosen = next((p for p in pathways if p.get("defaultPathway")),
@@ -94,6 +114,7 @@ def get_program_courses(campus, program_id, *, client=None):
         map_id = chosen["programMapId"]
         reqs = get_json(_site_url(campus, f"/program-maps/{map_id}"),
                         headers=_headers(campus), client=client,
+                        forbidden_hint=_FORBIDDEN_HINT,
                         source=f"{SOURCE} program-maps/{map_id} ({campus})")
         if not isinstance(reqs, dict) or "pathwayElements" not in reqs:
             raise SourceDataError(

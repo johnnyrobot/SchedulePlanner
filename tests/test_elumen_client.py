@@ -126,6 +126,82 @@ def test_course_identity_uses_wrapper_code_not_subject_number(fixture_wrappers):
     assert ec.course_record(micro)["course_id"] == "MICRO 20"
 
 
+# ===================================================== COREQUISITE EXTRACTION (F9)
+# F9 reads the SAME raw requisites tree the prereq path walks, but keeps the
+# itemType=Co-Requisite leaves the prereq filter drops. The two paths are
+# independent: extracting coreqs must NOT perturb the prereq dnf (byte-identity).
+def test_micro20_corequisites_extracted(fixture_wrappers):
+    # MICRO 20 pairs each Prerequisite with a Co-Requisite CHEM (051/065). The
+    # coreq extractor keeps EXACTLY those Co-Req leaves (the inverse of the prereq
+    # filter), normalized to catalog Course ID form.
+    micro = next(w for w in fixture_wrappers if w["code"] == "MICRO020")
+    rec = ec.course_record(micro)
+    assert set(rec["coreqs"]) == {"CHEM 51", "CHEM 65"}
+    # The prereq dnf is UNCHANGED by coreq extraction (no Co-Req leaked in).
+    flat = {lit for branch in rec["dnf"] for lit in branch}
+    assert flat == {"BIOLOGY 3", "BIOLOGY 5", "BIOTECH 2"}
+
+
+def test_coreqs_are_normalize_course_code_form(fixture_wrappers):
+    # Coreq ids share the eLumen identity the prereq path uses (idempotent under
+    # mapping._norm), so a downstream join against catalog ids is consistent.
+    micro = next(w for w in fixture_wrappers if w["code"] == "MICRO020")
+    for cid in ec.course_record(micro)["coreqs"]:
+        assert mapping_norm(cid) == cid
+
+
+def test_prereq_only_record_has_empty_coreqs(fixture_wrappers):
+    # ANATOMY 1 carries only Prerequisite leaves -> no corequisites.
+    anatomy = next(w for w in fixture_wrappers if w["code"] == "ANATOMY001")
+    assert ec.course_record(anatomy)["coreqs"] == []
+
+
+def test_no_info_record_has_empty_coreqs():
+    # A wrapper with no fullCourseInfo -> empty coreqs (not a crash, not missing).
+    rec = ec.course_record({"code": "ENGL101"})
+    assert rec["coreqs"] == [] and rec["dnf"] == []
+
+
+def test_corequisite_map_only_includes_courses_with_coreqs(fixture_records):
+    # The helper maps course_id -> coreq ids for records that HAVE coreqs only.
+    cmap = ec.corequisite_map(fixture_records)
+    assert set(cmap["MICRO 20"]) == {"CHEM 51", "CHEM 65"}
+    # ANATOMY 1 (prereq-only) is absent from the map (no coreq linkage).
+    assert "ANATOMY 1" not in cmap
+
+
+def test_corequisite_map_tolerates_prereq_only_fixture_records():
+    # The FIXTURE-ONLY elumen.load_elumen_fixture shape ({course_id, raw, dnf}) has
+    # no 'coreqs' key; the helper must yield an empty map, never KeyError.
+    records = [{"course_id": "MATH 227", "raw": "", "dnf": []}]
+    assert ec.corequisite_map(records) == {}
+
+
+def test_collect_corequisites_excludes_prereq_and_advisory_constructed():
+    # CONSTRUCTED: an AND of a Prerequisite + Co-Requisite + Advisory -> coreq only.
+    tree = {"type": "AND", "blockList": [
+        _leaf("CHEM051", item_type="Prerequisite"),
+        _leaf("CHEM065", item_type="Co-Requisite"),
+        _leaf("MATH227", item_type="Advisory"),
+    ]}
+    assert ec.corequisites_of(tree) == ["CHEM 65"]
+
+
+def test_collect_corequisites_dedupes_and_hyphen_collapses_constructed():
+    # CONSTRUCTED: "Corequisite" (no hyphen) collapses equal to "Co-Requisite";
+    # a repeated coreq is deduped first-seen.
+    tree = {"type": "OR", "blockList": [
+        _leaf("ENGL101L", item_type="Corequisite"),
+        _leaf("ENGL101L", item_type="Co-Requisite"),
+    ]}
+    assert ec.corequisites_of(tree) == ["ENGL 101L"]
+
+
+def test_collect_corequisites_drops_non_course_leaf_constructed():
+    tree = _leaf("SOMENOTE", item_type="Co-Requisite", is_course=False)
+    assert ec.corequisites_of(tree) == []
+
+
 # ============================================================ PARSER (constructed)
 def _leaf(code, item_type="Prerequisite", is_course=True, node_type="SINGLE"):
     """Build a CONSTRUCTED leaf node in the verified grammar (a node carrying an
@@ -477,9 +553,10 @@ def test_course_record_malformed_fullcourseinfo_raises():
 
 
 def test_course_record_missing_fullcourseinfo_is_no_prereq():
-    # A wrapper with no course info is a valid "no prerequisite" record.
+    # A wrapper with no course info is a valid "no prerequisite" record (and, since
+    # F9, a no-corequisite one too: the record carries an empty coreqs list).
     rec = ec.course_record({"code": "CHEM101"})
-    assert rec == {"course_id": "CHEM 101", "raw": "", "dnf": []}
+    assert rec == {"course_id": "CHEM 101", "raw": "", "dnf": [], "coreqs": []}
 
 
 def test_course_record_missing_code_falls_back_to_subject_number():

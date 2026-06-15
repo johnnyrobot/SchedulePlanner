@@ -74,15 +74,22 @@ from types import SimpleNamespace
 import httpx
 
 import buildability
+import contact_hours
+import corequisite_availability
 import cross_program_bottleneck
+import demand_success
 import demand_supply
 import equity_exposure
+import equity_success_gap
 import evidence
+import gateway_momentum
 import grid_pressure
+import infeasibility
+import perturbation
 import engine
-from sources import (assist, catalog_ge, course_master, elumen, elumen_client,
-                     enrollment, enrollment_ir, ge, live_demand, mapping,
-                     pdf_loader, program_lists, program_mapper, schedule,
+from sources import (assist, catalog_ge, course_master, course_success, elumen,
+                     elumen_client, enrollment, enrollment_ir, ge, live_demand,
+                     mapping, pdf_loader, program_lists, program_mapper, schedule,
                      schedule_import, timeblocks)
 # Imported under an alias so the module name does not shadow the loaded ``facility``
 # room-map that analyze_live / analyze_import pass around as a local variable.
@@ -91,7 +98,7 @@ from sources.http import SourceDataError
 
 
 def build(campus, terms, program_query, *, client=None,
-          program_id=None, program_title="", program_award=""):
+          program_id=None, program_title="", program_award="", status=None):
     """Fetch sections + program from the live sources (or an injected client).
 
     Network IO lives HERE, outside engine.run(). The m7 enrichment (enrollment
@@ -109,10 +116,10 @@ def build(campus, terms, program_query, *, client=None,
         return program_mapper.fetch_program(campus, program_query, client=c)
 
     if client is not None:
-        sections = schedule.fetch_sections(campus, terms, client=client)
+        sections = schedule.fetch_sections(campus, terms, client=client, status=status)
         return sections, _fetch_program(client)
     with httpx.Client(timeout=30.0) as owned:
-        sections = schedule.fetch_sections(campus, terms, client=owned)
+        sections = schedule.fetch_sections(campus, terms, client=owned, status=status)
         return sections, _fetch_program(owned)
 
 
@@ -508,14 +515,17 @@ def _program_subjects(sections, program):
 
 
 def _section_meetings_by_course(sections):
-    """Map normalized course id -> list of meeting-blocks (one entry per offered section)."""
+    """Map normalized course id -> list of meeting-blocks (one entry per offered section).
+
+    Uses ``timeblocks.section_meeting`` so EVERY meeting block of a section is included
+    (M1): a required-course time conflict that lives on a section's secondary block is
+    now seen instead of silently missed when ``meetings[1:]`` were dropped at ingest."""
     by_course = {}
     for r in sections:
         cid = mapping._norm(r.get("course", ""))
         if not cid:
             continue
-        by_course.setdefault(cid, []).append(
-            timeblocks.parse_meeting(r.get("days", ""), r.get("times", "")))
+        by_course.setdefault(cid, []).append(timeblocks.section_meeting(r))
     return by_course
 
 
@@ -634,22 +644,27 @@ def _room_collisions(sections):
     """
     by_room = {}
     for r in sections:
-        meeting = timeblocks.parse_meeting(r.get("days", ""), r.get("times", ""))
-        if not meeting:
-            continue  # async / TBA: no physical time slot to clash over
-        if facilities.is_physical_room(r.get("facil_id", "")):
-            room_key = facilities.norm_facil(r.get("facil_id", ""))
-        else:
-            label = mapping._norm(str(r.get("room", "") or ""))
-            if not label or "ONLINE" in label or label == "TBA":
-                continue
-            room_key = label
-        by_room.setdefault((r.get("term"), room_key), []).append({
-            "course": mapping._norm(r.get("course", "")),
-            "class_nbr": str(r.get("class_nbr", "") or ""),
-            "comb": str(r.get("Comb Sects ID", "") or "").strip(),
-            "meeting": meeting,
-        })
+        course = mapping._norm(r.get("course", ""))
+        class_nbr = str(r.get("class_nbr", "") or "")
+        comb = str(r.get("Comb Sects ID", "") or "").strip()
+        term = r.get("term")
+        # Evaluate EVERY meeting block of the section (M1): each block can sit in a
+        # different room at a different time, so a double-booking can live on a
+        # secondary block that the old meetings[0]-only logic never saw.
+        for blk, meeting in timeblocks.iter_section_blocks(r):
+            if not meeting:
+                continue  # async / TBA block: no physical time slot to clash over
+            if facilities.is_physical_room(blk.get("facil_id", "")):
+                room_key = facilities.norm_facil(blk.get("facil_id", ""))
+            else:
+                label = mapping._norm(str(blk.get("room", "") or ""))
+                if not label or "ONLINE" in label or label == "TBA":
+                    continue
+                room_key = label
+            by_room.setdefault((term, room_key), []).append({
+                "course": course, "class_nbr": class_nbr, "comb": comb,
+                "meeting": meeting,
+            })
 
     findings, seen = [], set()
     for (term, room_key), secs in sorted(
@@ -790,6 +805,144 @@ def _room_detector_entry(sections, collisions, *, facility_used, capacity=None,
     return entry
 
 
+def _infeasibility_detector_entry(block):
+    """Honest active/inert entry for the E11 infeasibility explainer. Inert when
+    every cohort has a feasible plan (nothing to explain); active when >=1 cohort
+    is unbuildable. ``found`` counts the cohorts a minimal conflicting set was
+    isolated for."""
+    if not block or block.get("status") != "active":
+        return {
+            "detector": "infeasibility", "status": "inert",
+            "reason": ((block or {}).get("reason")
+                       or "every program cohort has a feasible plan to explain"),
+            "remedy": ((block or {}).get("remedy")
+                       or "this fires only when the planner finds NO feasible plan"),
+        }
+    found = sum(1 for e in block.get("explained", []) if e.get("reproduced"))
+    return {
+        "detector": "infeasibility", "status": "active", "found": found,
+        "reason": ("when the planner finds NO feasible plan for a program cohort, a "
+                   "deterministic CP-SAT re-solve isolates the minimal set of required "
+                   "courses behind it — a structural diagnostic, not a student outcome"),
+    }
+
+
+def _perturbation_detector_entry(block):
+    """Honest active/inert entry for the E14 minimal-perturbation recommender.
+    Inert when every audited program's required path is already buildable (nothing
+    to recommend); active when >=1 program needs offering changes. ``found`` counts
+    the programs with a recommended action set."""
+    if not block or block.get("status") != "active":
+        return {
+            "detector": "minimal_perturbation", "status": "inert",
+            "reason": ((block or {}).get("reason")
+                       or "every audited program's required path is already buildable"),
+            "remedy": ("this fires only when a program's required path has an "
+                       "offering-fixable structural gap (a missing required course, "
+                       "a short choice bucket, or an all-section time conflict)"),
+        }
+    return {
+        "detector": "minimal_perturbation", "status": "active",
+        "found": len(block.get("programs", [])),
+        "reason": ("recommends the fewest OFFERING changes (add a section / an "
+                   "alternate-time section) that flip a program's required path from "
+                   "structurally not-buildable to buildable — a structural offering "
+                   "recommendation, NOT a student outcome or completion claim"),
+    }
+
+
+def _course_success_block(sections, course_success_path, results):
+    """E9 demand-vs-success block: derive the supply-constrained courses from the
+    already-computed F2/F5 analysis, load the OFFLINE success export (if supplied),
+    and cross them. A supplied-but-unreadable export goes inert with the named
+    error (never silent)."""
+    analysis = (results or {}).get("analysis") if isinstance(results, dict) else None
+    supply = set()
+    if isinstance(analysis, dict):
+        bnk = analysis.get("bottlenecks") or {}
+        if bnk.get("status") == "active":
+            supply |= {b.get("course") for b in bnk.get("leaderboard", [])
+                       if b.get("course")}
+        dsl = analysis.get("demand_supply") or {}
+        if dsl.get("status") == "active":
+            supply |= {d.get("course") for d in dsl.get("add_list", [])
+                       if d.get("course")}
+    if not course_success_path:
+        return demand_success.demand_success_report(sections, None)
+    try:
+        smap, gran = course_success.load_course_success(course_success_path)
+    except SourceDataError as exc:
+        return {"status": "inert", "label": demand_success.DEMAND_SUCCESS_LABEL,
+                "reason": f"the supplied course-success export could not be read: {exc}",
+                "remedy": ("supply a valid CCCCO Data Mart Credit Course "
+                           "Retention/Success export")}
+    return demand_success.demand_success_report(
+        sections, smap, supply_constrained=supply, granularity=gran)
+
+
+def _equity_success_gap_block(sections, equity_success_path):
+    """E13 equity-gap block: load the OFFLINE disaggregated success export (if
+    supplied) and compute the measured subgroup gaps. A supplied-but-unreadable
+    export (e.g. missing the required count column the <10 suppression needs) goes
+    inert with the named error — never silent, never an unsuppressed read."""
+    if not equity_success_path:
+        return equity_success_gap.equity_success_gap_report(sections, None)
+    try:
+        dmap, gran, supp = course_success.load_course_success_disaggregated(
+            equity_success_path)
+    except SourceDataError as exc:
+        return {"status": "inert", "label": equity_success_gap.EQUITY_SUCCESS_GAP_LABEL,
+                "reason": f"the supplied disaggregated export could not be read: {exc}",
+                "remedy": ("supply a valid disaggregated CCCCO Data Mart export with a "
+                           "subgroup column and an enrollment/count column")}
+    return equity_success_gap.equity_success_gap_report(
+        sections, dmap, granularity=gran, suppression_min=supp)
+
+
+def _equity_success_gap_detector_entry(block):
+    """Honest active/inert entry for the E13 equity-gap detector. Inert when no
+    disaggregated export was supplied; active when the measured subgroup gaps are
+    computed. ``found`` counts the courses carrying a below-reference gap."""
+    if not block or block.get("status") != "active":
+        return {
+            "detector": "equity_success_gap", "status": "inert",
+            "reason": ((block or {}).get("reason")
+                       or "no disaggregated course-success export supplied"),
+            "remedy": ((block or {}).get("remedy")
+                       or "supply a disaggregated CCCCO Data Mart export by subgroup"),
+        }
+    return {
+        "detector": "equity_success_gap", "status": "active",
+        "found": block.get("courses_with_gap", 0),
+        "reason": ("measures the AGGREGATE course-success gap between demographic "
+                   "subgroups (small cells <10 suppressed) — a measured difference, "
+                   "NOT a completion gap, NOT student-level, and NOT causal"),
+    }
+
+
+def _demand_success_detector_entry(block):
+    """Honest active/inert entry for the E9 demand-vs-success escalation detector.
+    Inert when no success export was supplied (the live default); active when the
+    measured aggregate data is crossed with the supply signals. ``found`` counts
+    the escalated (supply-constrained + lower-success) courses."""
+    if not block or block.get("status") != "active":
+        return {
+            "detector": "demand_success", "status": "inert",
+            "reason": ((block or {}).get("reason")
+                       or "no course-success export supplied"),
+            "remedy": ((block or {}).get("remedy")
+                       or "supply a CCCCO Data Mart Credit Course Retention/Success export"),
+        }
+    return {
+        "detector": "demand_success", "status": "active",
+        "found": len(block.get("escalated", [])),
+        "reason": ("crosses MEASURED aggregate course retention/success (offline CCCCO "
+                   "Data Mart) with the supply signals to escalate courses that are "
+                   "both supply-constrained and historically lower-success — a measured "
+                   "course outcome, NOT a completion or student-level claim"),
+    }
+
+
 def _buildability_detector_entry(block):
     """Honest active/inert entry for the program-buildability audit (mirrors the
     other detector entries). Inert carries the audit's own reason."""
@@ -899,7 +1052,98 @@ def _equity_exposure_detector_entry(block):
     }
 
 
-# Append-only registry of the feature-analysis detectors (F1+F4, F2, F5, F3, F6).
+def _gateway_momentum_detector_entry(block):
+    """Honest active/inert entry for the first-year gateway-momentum detector (F8;
+    mirrors ``_equity_exposure_detector_entry``). Inert carries the report's own
+    reason + remedy (no sections, or neither English/Math gateway identifiable).
+    ``found`` counts the gateways that are schedulable in the first-year window."""
+    if not block or block.get("status") != "active":
+        return {
+            "detector": "gateway_momentum", "status": "inert",
+            "remedy": ((block or {}).get("remedy")
+                       or "supply a program whose GE requirements name a "
+                          "transfer-level English/Math course, or a required "
+                          "ENGL/MATH major course"),
+            "reason": ((block or {}).get("reason")
+                       or "no gateway course identifiable / no offered sections"),
+        }
+    found = sum(1 for k in ("english", "math")
+                if (block.get(k) or {}).get("schedulable_year1"))
+    return {
+        "detector": "gateway_momentum", "status": "active",
+        "found": found,
+        "reason": ("checks whether each program's English-Composition (GE Area 1A) "
+                   "and Math (Area 2) gateway course can be SCHEDULED in the first "
+                   "year of the analyzed schedule — an OFFERING proxy, not a measured "
+                   "completion rate; a gateway found via the ENGL/MATH subject "
+                   "fallback is discipline-level, not verified transfer-level"),
+    }
+
+
+def _corequisite_availability_detector_entry(block):
+    """Honest active/inert entry for the AB1705 corequisite co-availability detector
+    (F9; mirrors ``_gateway_momentum_detector_entry``). Inert carries the report's
+    own reason + remedy (no sections, no coreq linkage supplied — the default path,
+    no gateway, or no corequisite for the gateway). ``found`` counts the identified
+    gateways whose corequisite is co-offered in a first-year term."""
+    if not block or block.get("status") != "active":
+        return {
+            "detector": "corequisite_availability", "status": "inert",
+            "remedy": ((block or {}).get("remedy")
+                       or "run with --elumen-live so the catalog corequisite "
+                          "(itemType=Co-Requisite) leaves are captured"),
+            "reason": ((block or {}).get("reason")
+                       or "no corequisite linkage / no gateway / no offered sections"),
+        }
+    found = sum(1 for k in ("english", "math")
+                if (block.get(k) or {}).get("co_offered_year1"))
+    return {
+        "detector": "corequisite_availability", "status": "active",
+        "found": found,
+        "reason": ("checks whether a transfer-level English (GE Area 1A) / Math "
+                   "(Area 2) gateway's catalog corequisite (itemType=Co-Requisite) is "
+                   "scheduled in the SAME first-year term — a co-OFFERING STRUCTURE "
+                   "proxy, NOT a measured or causal outcome (per AB1705, direct "
+                   "placement was the dominant lever; corequisite is one supported form)"),
+    }
+
+
+def _contact_hours_detector_entry(block):
+    """Honest active/inert entry for the F10/E15 contact-hour conformance detector
+    (mirrors the other detector entries). Inert when no section carries the units +
+    weeks-of-instruction + meeting time the normalization needs (the bare live fetch
+    often omits woi). ``found`` counts the implausibly low/high outlier sections."""
+    if not block or block.get("status") != "active":
+        base = ((block or {}).get("reason")
+                or "no section carries units + weeks-of-instruction + a meeting time")
+        # Surface the per-reason not-assessed counts (the common inert-with-data live
+        # case: sections exist but lack woi) on the entry's reason too, so the report
+        # _detectors card AND the ui inert note carry the breakdown — not only the
+        # dedicated report section. Conditional, so a count-less inert block is
+        # unchanged (no golden churn).
+        na = (block or {}).get("not_assessed") or {}
+        counts = [f"{na[k]} {k.replace('_', ' ')}"
+                  for k in ("no_meeting_time", "missing_units", "missing_weeks",
+                            "category_unknown") if na.get(k)]
+        reason = base + (f" (not assessed: {', '.join(counts)})" if counts else "")
+        return {
+            "detector": "contact_hours", "status": "inert",
+            "reason": reason,
+            "remedy": ((block or {}).get("remedy")
+                       or "supply per-section units, weeks-of-instruction (woi), and a "
+                          "meeting day/time"),
+        }
+    return {
+        "detector": "contact_hours", "status": "active",
+        "found": len(block.get("flagged", [])),
+        "reason": ("compares each section's OBSERVED scheduled in-class time (weekly "
+                   "minutes × weeks-of-instruction) to a wide Title 5 §55002.5 per-unit "
+                   "band and flags implausible outliers — a CONFORMANCE proxy, NOT a "
+                   "compliance ruling or the official contact-hour record"),
+    }
+
+
+# Append-only registry of the feature-analysis detectors (F1+F4, F2, F5, F3, F6, F8, F9, F10).
 # Each entry pairs a results["analysis"] key with a compute fn(ctx) -> block and
 # the block's inert-detector entry helper; analyze_live runs them in ONE loop
 # below the five heterogeneous detectors (modality/prereq/ge/time_block/room),
@@ -939,6 +1183,20 @@ ANALYSIS_DETECTORS = (
             [c.program], c.sections, ge_coverage=c.ge_coverage,
             active_courses=c.active_courses, by_design=c.by_design),
         _equity_exposure_detector_entry),
+    AnalysisDetector(
+        "gateway_momentum",
+        lambda c: gateway_momentum.gateway_momentum_report(
+            c.sections, program=c.program),
+        _gateway_momentum_detector_entry),
+    AnalysisDetector(
+        "corequisite_availability",
+        lambda c: corequisite_availability.corequisite_availability_report(
+            c.sections, program=c.program, coreq_map=c.coreq_map),
+        _corequisite_availability_detector_entry),
+    AnalysisDetector(
+        "contact_hours",
+        lambda c: contact_hours.contact_hours_report(c.sections),
+        _contact_hours_detector_entry),
 )
 
 
@@ -951,7 +1209,9 @@ def analyze_live(campus, terms, program_query, out_path, *, client=None,
                  catalog_pdf=None, odl_json=None, facility=None,
                  active_courses=None, program_demand=None,
                  demand_program_ids=None,
-                 sections_override=None, program_override=None, by_design=None):
+                 sections_override=None, program_override=None, by_design=None,
+                 elumen_coreq=None, course_success_path=None,
+                 equity_success_path=None):
     """Run the full live pipeline and return a structured, JSON-serializable report.
 
     The report carries the reconciliation (matched/unmatched program courses)
@@ -1013,12 +1273,13 @@ def analyze_live(campus, terms, program_query, out_path, *, client=None,
     # (enrollment join, GE, reconcile, write_workbook, engine.run, time-block /
     # room detectors) is reused byte-for-byte with zero network. sections_override
     # is None on the live path, so build() runs exactly as before.
+    fetch_status = {}
     if sections_override is not None:
         sections, program = sections_override, program_override
     else:
         sections, program = build(campus, terms, program_query, client=client,
                                   program_id=program_id, program_title=program_title,
-                                  program_award=program_award)
+                                  program_award=program_award, status=fetch_status)
 
     # --- FF4: bounded live cross-program demand fan-out (outside engine.run) ---
     # F2's cross-program bottleneck leaderboard needs a programs-per-course demand
@@ -1097,6 +1358,11 @@ def analyze_live(campus, terms, program_query, out_path, *, client=None,
     elumen_source = None
     elumen_live_active = False
     elumen_coverage = None
+    # F9 corequisite linkage: an injected map (offline/test) by default; the live
+    # path DERIVES it from the SAME fetched records below (coreqs ride the same
+    # fetch — itemType=Co-Requisite leaves the prereq filter drops). The FIXTURE
+    # path carries no requisites tree, so it leaves this as-injected (usually None).
+    coreq_map = elumen_coreq
     if elumen_live:
         # The course-id universe we can JOIN a prereq onto: every section course
         # plus every program course, normalized the same way the catalog is.
@@ -1134,6 +1400,8 @@ def analyze_live(campus, terms, program_query, out_path, *, client=None,
         if prereq_max_clauses is not None:
             kwargs["max_clauses"] = prereq_max_clauses
         prereq_map, prereq_results = elumen.build_prereq_map(records, **kwargs)
+        # F9: derive the corequisite map from the SAME records (no extra fetch).
+        coreq_map = elumen_client.corequisite_map(records)
         elumen_coverage = elumen_client.compute_coverage(
             records, known_course_ids, requested_course_ids=requested_course_ids)
         # Surface an aggregate wall-clock-cap truncation honestly: prerequisite
@@ -1240,6 +1508,28 @@ def analyze_live(campus, terms, program_query, out_path, *, client=None,
                                   coverage=elumen_coverage)]
     )
     report["inert_detectors"].append(_ge_detector_entry(ge_coverage))
+    # E7: a term whose live fetch failed was SKIPPED (per-term fail-open) rather
+    # than nuking the whole multi-term fetch — surface it loudly so a PARTIAL fetch
+    # is never read as complete coverage. Only present when a term was skipped, so
+    # the normal (all-terms-ok) path is unchanged.
+    if fetch_status.get("skipped"):
+        skipped_terms = [s.get("term") for s in fetch_status["skipped"]]
+        report["fetch_status"] = fetch_status
+        # Surface the skip on the top-line report too, so a consumer reading only
+        # report["terms"] is not misled into thinking the full span loaded.
+        report["terms_skipped"] = skipped_terms
+        report["terms_loaded"] = [t for t in report.get("terms", []) if t not in skipped_terms]
+        report["inert_detectors"].append({
+            "detector": "schedule_fetch", "status": "warning",
+            "found": len(fetch_status["skipped"]),
+            "skipped_terms": skipped_terms,
+            "reason": ("one or more terms could not be fetched and were SKIPPED — the "
+                       "analysis covers only the terms that loaded, so coverage is "
+                       "PARTIAL (rotation / buildability / supply signals may understate)"),
+            "remedy": ("re-run when the skipped term(s) are reachable; if it persists, "
+                       "the schedule API may have changed (the bounded retry already "
+                       "absorbs brief transient blips)"),
+        })
 
     os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
     mapping.write_workbook(sections, program, out_path, prereqs=prereq_map,
@@ -1260,15 +1550,35 @@ def analyze_live(campus, terms, program_query, out_path, *, client=None,
         analysis = report["results"]["analysis"]
         analysis["time_block_collisions"] = collisions
         analysis["off_grid_sections"] = _off_grid_sections(sections)
+        # E7: mirror the per-term skip into results["analysis"] so the CHAT surface
+        # (which reads analysis blocks, not inert_detectors) carries the partial-
+        # coverage caveat too — report + ui already show it via inert_detectors.
+        # Conditional, so the no-skip path's analysis-key set is unchanged.
+        if fetch_status.get("skipped"):
+            analysis["schedule_fetch"] = {
+                "status": "warning",
+                "skipped_terms": [s.get("term") for s in fetch_status["skipped"]],
+                "reason": ("one or more terms could not be fetched and were SKIPPED — "
+                           "coverage is PARTIAL (rotation / buildability / supply "
+                           "signals may understate)"),
+            }
         # Room double-bookings (and, when a facility table is supplied, over-capacity)
         # are computed HERE from the raw section room/days/times the workbook drops.
         analysis["room_conflicts"] = room_conflicts
         if facility:
             analysis["room_capacity"] = room_capacity
+    # E11 infeasibility explainer: a DETERMINISTIC CP-SAT re-solve (outside
+    # engine.run) that, when the planner found NO feasible plan for a cohort,
+    # isolates the minimal set of required courses behind it. Re-derives the
+    # planner's exact inputs from the written workbook; engine.run is untouched.
+    infeasibility_block = infeasibility.infeasibility_report(out_path, report["results"])
+    if isinstance(report["results"], dict) and isinstance(report["results"].get("analysis"), dict):
+        report["results"]["analysis"]["infeasibility"] = infeasibility_block
     report["inert_detectors"].append(_time_block_detector_entry(sections, collisions))
     report["inert_detectors"].append(_room_detector_entry(
         sections, room_conflicts, facility_used=bool(facility),
         capacity=room_capacity, lab_stats=_lab_pool_stats(sections, facility)))
+    report["inert_detectors"].append(_infeasibility_detector_entry(infeasibility_block))
 
     # Feature-analysis detectors (F1+F4 buildability, F2 bottlenecks, F5
     # demand_supply, F3 grid_pressure): each is deterministic, advisory, and
@@ -1283,12 +1593,39 @@ def analyze_live(campus, terms, program_query, out_path, *, client=None,
     ctx = SimpleNamespace(
         sections=sections, program=program, ge_coverage=ge_coverage,
         active_courses=active_courses, program_demand=program_demand,
-        facility=facility, by_design=by_design)
+        facility=facility, by_design=by_design, coreq_map=coreq_map)
     for d in ANALYSIS_DETECTORS:
         block = d.compute(ctx)
         if isinstance(report["results"], dict) and isinstance(report["results"].get("analysis"), dict):
             report["results"]["analysis"][d.analysis_key] = block
         report["inert_detectors"].append(d.entry(block))
+    # E14 minimal-perturbation recommender: the INVERSE of E11 — the fewest
+    # OFFERING changes that flip the program's required path from structurally
+    # not-buildable (F1) to buildable. Pure + deterministic (a CP-SAT vertex cover
+    # over the conflict graph); reuses the SAME audit inputs as F1; OUTSIDE
+    # engine.run. Recommends offerings, never a student outcome.
+    perturbation_block = perturbation.perturbation_report(
+        [program], sections, ge_coverage=ge_coverage, active_courses=active_courses,
+        by_design=by_design)
+    if isinstance(report["results"], dict) and isinstance(report["results"].get("analysis"), dict):
+        report["results"]["analysis"]["minimal_perturbation"] = perturbation_block
+    report["inert_detectors"].append(_perturbation_detector_entry(perturbation_block))
+    # E9: cross the MEASURED course-success data (offline CCCCO Data Mart export,
+    # if supplied) with the now-computed supply signals (F2 bottlenecks / F5 demand)
+    # to escalate courses that are BOTH supply-constrained AND historically
+    # lower-success. Heterogeneous (reads the analysis it follows); OUTSIDE engine.run.
+    ds_block = _course_success_block(sections, course_success_path, report["results"])
+    if isinstance(report["results"], dict) and isinstance(report["results"].get("analysis"), dict):
+        report["results"]["analysis"]["demand_success"] = ds_block
+    report["inert_detectors"].append(_demand_success_detector_entry(ds_block))
+    # E13: the equity-disaggregated course-success GAP (offline export, <10
+    # small-cell suppressed). A MEASURED subgroup difference, never completion /
+    # student-level / causal; NOT wired into the F7 evidence trust root (no vetted
+    # subgroup figure to cite). OUTSIDE engine.run.
+    eq_gap_block = _equity_success_gap_block(sections, equity_success_path)
+    if isinstance(report["results"], dict) and isinstance(report["results"].get("analysis"), dict):
+        report["results"]["analysis"]["equity_success_gap"] = eq_gap_block
+    report["inert_detectors"].append(_equity_success_gap_detector_entry(eq_gap_block))
     # F7: map the now-fully-computed structural flags to curated ✅ research
     # evidence (PURE consumer — reads results["analysis"][...] / ge_coverage, writes
     # only this JSON key, OUTSIDE engine.run → the workbook bytes are untouched, so
@@ -1476,9 +1813,13 @@ def _print_banner(report):
         return
     prog = report["program"]
     rec = report["reconciliation"]
+    skipped = report.get("terms_skipped") or []
+    span = (f"{len(report['terms']) - len(skipped)} of {len(report['terms'])} "
+            f"requested terms ({len(skipped)} SKIPPED: "
+            f"{', '.join(str(t) for t in skipped)})" if skipped
+            else f"{len(report['terms'])} terms")
     print(f"Wrote {report['workbook']}: {report['section_count']} sections across "
-          f"{len(report['terms'])} terms; program {prog['title']!r} "
-          f"({prog['course_count']} courses).")
+          f"{span}; program {prog['title']!r} ({prog['course_count']} courses).")
     print(f"Course reconciliation: {rec['matched_count']} matched, "
           f"{rec['unmatched_count']} unmatched (not offered in fetched terms): "
           f"{rec['unmatched']}")

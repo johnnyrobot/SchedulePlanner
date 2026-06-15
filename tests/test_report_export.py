@@ -112,6 +112,36 @@ def test_export_report_before_analysis_returns_error(tmp_path):
     assert not (tmp_path / "never.html").exists()
 
 
+def _one_program_results(cohort):
+    return {
+        "terms_in_data": cohort.get("terms_used", 0),
+        "analysis": {"rotation_gaps": [], "single_section": [],
+                     "modality_mismatch": [], "under_supply": []},
+        "programs": {"P": {"title": "P", "official_map_issues": [],
+                           "cohorts": {"full_time": cohort, "part_time": None}}},
+    }
+
+
+def test_report_years_uses_terms_per_year_not_hardcoded_two():
+    """The "~N years" label divides terms_used by the cohort's ``terms_per_year``
+    (the cadence length the solver used), not a hardcoded 2. A 6-term plan on a
+    3-season (Fall/Spring/Summer) cadence is ~2 years — NOT the "~3 years" the old
+    ``ceil(terms_used / 2)`` produced."""
+    doc = report_export.render_report(_one_program_results(
+        {"terms_used": 6, "terms_per_year": 3, "plan": {}, "fixes": []}))
+    assert "~2 years" in doc
+    assert "~3 year" not in doc
+
+
+def test_report_years_defaults_to_two_when_terms_per_year_absent():
+    """Backward-compatible: a cohort dict WITHOUT ``terms_per_year`` (a pre-feature
+    or hand-built dict) falls back to the legacy 2-season divisor, so existing
+    2-season plans and goldens render identically."""
+    doc = report_export.render_report(_one_program_results(
+        {"terms_used": 6, "plan": {}, "fixes": []}))
+    assert "~3 years" in doc          # ceil(6/2) == 3, legacy behavior preserved
+
+
 def test_report_renders_time_conflicts_block():
     """A time_block_collisions finding in analysis renders in the Supply-diagnostics card."""
     results = {
@@ -129,6 +159,48 @@ def test_report_renders_time_conflicts_block():
     assert "Time conflicts" in doc
     assert "every offered section overlaps" in doc
     assert "CHEM 101 &amp; MATH 245" in doc   # & is HTML-escaped
+
+
+def test_report_renders_room_conflicts_block():
+    """Room double-bookings + over-capacity in analysis render in the Supply-diagnostics
+    card. Previously these were injected by analyze_live and shown ONLY in the live UI —
+    silently dropped from the exported report (H1, a no-silent-drop doctrine violation)."""
+    results = {
+        "terms_in_data": 3,
+        "analysis": {
+            "rotation_gaps": [], "single_section": [],
+            "modality_mismatch": [], "under_supply": [],
+            "room_conflicts": [
+                {"kind": "double_book", "term": 2268, "room": "INST 2007",
+                 "courses": ["BIO 3", "CHEM 101"], "class_nbrs": ["10001", "10002"],
+                 "summary": "Room INST 2007 (term 2268): BIO 3 & CHEM 101 booked into the "
+                            "same room at overlapping times (classes 10001, 10002)"}],
+            "room_capacity": [
+                {"kind": "over_capacity", "course": "BIO 3", "class_nbr": "10001",
+                 "summary": "BIO 3 (class 10001) has 40 enrolled in room INST 2007 "
+                            "(seats 32) — over capacity by 8"}],
+        },
+        "programs": {},
+    }
+    doc = report_export.render_report(results)
+    assert "Room double-bookings" in doc
+    assert "booked into the same room" in doc
+    assert "BIO 3 &amp; CHEM 101" in doc          # & is HTML-escaped
+    assert "Room over capacity" in doc
+    assert "over capacity by 8" in doc
+
+
+def test_report_omits_room_blocks_when_not_computed():
+    """Workbook/demo path has no room_conflicts key (room analysis runs only in
+    analyze_live). The report must NOT show a room block then — never claim 'none found'
+    for a check that did not run."""
+    results = {"terms_in_data": 4,
+               "analysis": {"rotation_gaps": [], "single_section": [],
+                            "modality_mismatch": [], "under_supply": []},
+               "programs": {}}
+    doc = report_export.render_report(results)
+    assert "Room double-bookings" not in doc
+    assert "Room over capacity" not in doc
 
 
 def test_report_renders_buildability_section():
@@ -410,3 +482,406 @@ def test_equity_exposure_truncation_footnote():
     blk["truncated"]["newly_unavailable"] = 5
     html = report_export._equity_exposure({"analysis": {"equity_exposure": blk}})
     assert "5 more" in html
+
+
+# ---------------------------------------------------- F8 gateway momentum render
+def _gateway_block():
+    """An active F8 block: English schedulable, Math obstructed (matches the real
+    gateway_momentum_report shape)."""
+    return {
+        "status": "active",
+        "label": "First-Year Gateway-Momentum: an OFFERING PROXY ... NOT a measured "
+                 "completion rate.",
+        "first_year_terms": ["2248", "2252"],
+        "english": {"identified": True, "course": "ENGL <1>", "via": "ge_area_1A",
+                    "transfer_level": "area-defined", "recommended_semester": 1,
+                    "schedulable_year1": True, "sections_in_window": 2,
+                    "obstructions": []},
+        "math": {"identified": True, "course": "MATH 227", "via": "major_subject",
+                 "transfer_level": "unverified", "recommended_semester": 1,
+                 "schedulable_year1": False, "sections_in_window": 0,
+                 "obstructions": ["not offered in the analyzed schedule"]},
+        "both_gateways_year1": False,
+        "not_assessed": [
+            {"check": "placement_prerequisite_blocking", "status": "inert",
+             "reason": "no placement data exists"},
+            {"check": "student_completion", "status": "inert",
+             "reason": "no student-level outcome exists"}],
+    }
+
+
+def test_gateway_momentum_section_renders_and_escapes():
+    html = report_export._gateway_momentum({"analysis": {"gateway_momentum": _gateway_block()}})
+    assert "gateway" in html.lower() and "momentum" in html.lower()
+    assert "ENGL &lt;1&gt;" in html and "ENGL <1>" not in html          # escaped
+    assert "MATH 227" in html
+    assert "PROXY" in html                                              # caveat carried
+    assert "not offered in the analyzed schedule" in html              # obstruction
+    assert "placement" in html and "student completion" in html.replace("_", " ")  # not_assessed
+    assert "unverified" in html                                        # transfer-level honesty
+
+
+def test_gateway_momentum_section_empty_when_absent():
+    assert report_export._gateway_momentum({"analysis": {}}) == ""
+
+
+def test_gateway_momentum_section_inert_note():
+    html = report_export._gateway_momentum({"analysis": {"gateway_momentum": {
+        "status": "inert", "label": "L",
+        "reason": "neither a transfer-level English nor Math gateway could be identified"}}})
+    assert "Not computed" in html and "gateway" in html.lower()
+
+
+# ------------------------------------------------ F9 corequisite co-availability
+def _coreq_block():
+    """An active F9 block: English coreq co-offered, Math coreq not offered."""
+    return {
+        "status": "active",
+        "label": "Corequisite Co-Availability (AB1705): a co-OFFERING STRUCTURE proxy "
+                 "... DIRECT PLACEMENT was the dominant lever ... NOT a measured "
+                 "completion rate.",
+        "first_year_terms": ["2248"],
+        "english": {"identified": True, "course": "ENGL 101", "via": "ge_area_1A",
+                    "transfer_level": "area-defined", "has_corequisite": True,
+                    "corequisites": ["ENGL <101L>"],
+                    "corequisite_detail": [{"course": "ENGL <101L>", "offered": True,
+                                            "co_offered_terms": ["2248"],
+                                            "co_offered_year1": True}],
+                    "co_offered_year1": True, "all_corequisites_co_offered_year1": True,
+                    "co_offered_terms": ["2248"], "obstructions": []},
+        "math": {"identified": True, "course": "MATH 150", "via": "major_subject",
+                 "transfer_level": "unverified", "has_corequisite": True,
+                 "corequisites": ["MATH 150L"],
+                 "corequisite_detail": [{"course": "MATH 150L", "offered": False,
+                                         "co_offered_terms": [], "co_offered_year1": False}],
+                 "co_offered_year1": False, "all_corequisites_co_offered_year1": False,
+                 "co_offered_terms": [],
+                 "obstructions": ["corequisite MATH 150L is not offered in the analyzed schedule"]},
+        "both_gateways_coreq_co_offered_year1": False,
+        "not_assessed": [
+            {"check": "placement_prerequisite_blocking", "status": "inert",
+             "reason": "no placement data exists"},
+            {"check": "corequisite_enrollment_linkage", "status": "inert",
+             "reason": "catalog co-offering is not registration linkage"},
+            {"check": "student_completion_or_corequisite_effectiveness", "status": "inert",
+             "reason": "no student-level outcome exists"}],
+    }
+
+
+def test_corequisite_availability_section_renders_and_escapes():
+    html = report_export._corequisite_availability(
+        {"analysis": {"corequisite_availability": _coreq_block()}})
+    assert "corequisite" in html.lower()
+    assert "ENGL &lt;101L&gt;" in html and "ENGL <101L>" not in html    # escaped coreq
+    assert "MATH 150L" in html
+    assert "STRUCTURE proxy" in html or "PROXY" in html                # caveat
+    assert "DIRECT PLACEMENT" in html                                  # AB1705 honesty
+    assert "not offered in the analyzed schedule" in html              # obstruction
+    assert "linkage" in html                                           # not_assessed disclosed
+
+
+def test_corequisite_availability_section_empty_when_absent():
+    assert report_export._corequisite_availability({"analysis": {}}) == ""
+
+
+def test_corequisite_availability_section_inert_note():
+    html = report_export._corequisite_availability(
+        {"analysis": {"corequisite_availability": {
+            "status": "inert", "label": "L",
+            "reason": "no corequisite linkage available",
+            "remedy": "run with --elumen-live"}}})
+    assert "Not computed" in html and "corequisite" in html.lower()
+
+
+# ------------------------------------------------- E11 infeasibility render
+def _infeasibility_block():
+    return {
+        "status": "active",
+        "label": "Infeasibility Explainer: a deterministic STRUCTURAL re-solve ... "
+                 "NOT a student outcome or a prediction.",
+        "explained": [
+            {"program": "Bio <AS>", "cohort": "Full-time", "horizon_terms": 4,
+             "reproduced": True, "minimal_conflict_set": ["MATH <261>", "CHEM 101"],
+             "background_only": False,
+             "summary": "these 2 required course(s) cannot all be scheduled within "
+                        "the 4-term full-time plan; relaxing any one restores feasibility"},
+            {"program": "Bio <AS>", "cohort": "Part-time", "horizon_terms": 8,
+             "reproduced": False,
+             "note": "the planner found no feasible plan, but the structural explainer "
+                     "could not reproduce it, so a minimal conflicting set is unavailable"},
+        ],
+        "not_assessed": [
+            {"check": "season_mismatch_as_cause", "status": "inert",
+             "reason": "season mismatches are treated as fixable"},
+            {"check": "student_completion", "status": "inert",
+             "reason": "no student-level outcome exists"}],
+    }
+
+
+def test_infeasibility_section_renders_and_escapes():
+    html = report_export._infeasibility({"analysis": {"infeasibility": _infeasibility_block()}})
+    assert "infeasib" in html.lower() or "unbuildable" in html.lower()
+    assert "MATH &lt;261&gt;" in html and "MATH <261>" not in html   # escaped course
+    assert "Full-time" in html and "Part-time" in html
+    assert "relaxing any one restores feasibility" in html
+    assert "could not reproduce" in html                              # not-reproduced note
+    assert "season" in html.lower()                                   # not_assessed surfaced
+    assert "STRUCTURAL" in html                                       # honesty label
+
+
+def test_infeasibility_section_empty_when_absent():
+    assert report_export._infeasibility({"analysis": {}}) == ""
+
+
+def test_infeasibility_section_inert_note():
+    html = report_export._infeasibility({"analysis": {"infeasibility": {
+        "status": "inert", "label": "L",
+        "reason": "every program cohort has a feasible plan to explain"}}})
+    assert "Not computed" in html and "feasible" in html
+
+
+# ------------------------------------------------- E9 demand-success render
+def _demand_success_block():
+    return {
+        "status": "active",
+        "label": "Course Success Signal: a MEASURED, AGGREGATE retention/success "
+                 "outcome ... NOT a program-completion label ...",
+        "granularity": "Course",
+        "with_outcome": [
+            {"course": "CHEM <101>", "success_rate": 0.40, "retention_rate": 0.70,
+             "enrollment": 300, "supply_constrained": True},
+            {"course": "MATH 125", "success_rate": 0.55, "retention_rate": None,
+             "enrollment": None, "supply_constrained": False}],
+        "escalated": [
+            {"course": "CHEM <101>", "success_rate": 0.40, "retention_rate": 0.70,
+             "enrollment": 300, "supply_constrained": True}],
+        "matched": 2, "offered_without_outcome": 3,
+        "not_assessed": [
+            {"check": "student_completion", "status": "inert",
+             "reason": "an aggregate course rate is not a completion rate"},
+            {"check": "causation", "status": "inert",
+             "reason": "a low rate next to a constraint is a co-occurrence"}],
+    }
+
+
+def test_demand_success_section_renders_and_escapes():
+    html = report_export._demand_success({"analysis": {"demand_success": _demand_success_block()}})
+    assert "success" in html.lower()
+    assert "CHEM &lt;101&gt;" in html and "CHEM <101>" not in html   # escaped course
+    assert "MEASURED" in html                                        # honesty label
+    assert "40%" in html                                             # rate rendered
+    assert "Course" in html                                          # granularity disclosed
+    assert "causation" in html.lower()                               # not_assessed surfaced
+    assert "supply-constrained" in html                              # escalation flag
+
+
+def test_demand_success_section_empty_when_absent():
+    assert report_export._demand_success({"analysis": {}}) == ""
+
+
+def test_demand_success_section_inert_note():
+    html = report_export._demand_success({"analysis": {"demand_success": {
+        "status": "inert", "label": "L",
+        "reason": "no course-success export supplied"}}})
+    assert "Not computed" in html and "success" in html.lower()
+
+
+# ------------------------------------------------- E13 equity-success-gap render
+def _equity_gap_block():
+    return {
+        "status": "active",
+        "label": "Equity Course-Success Gap: a MEASURED, AGGREGATE gap between "
+                 "demographic subgroups ... NOT a completion gap ...",
+        "granularity": "Course", "suppression_min": 10,
+        "courses": [{
+            "course": "CHEM <101>", "reference_subgroup": "All", "reference_rate": 0.62,
+            "reference_basis": "all_row",
+            "below_reference": [{"subgroup": "Group B", "success_rate": 0.45, "gap": -0.17}],
+            "suppressed_subgroups": 2}],
+        "courses_with_gap": 1,
+        "not_assessed": [
+            {"check": "causation", "status": "inert",
+             "reason": "a gap is a difference, not a cause"},
+            {"check": "suppressed_subgroups", "status": "inert",
+             "reason": "small cells below 10 were suppressed"}],
+    }
+
+
+def test_equity_success_gap_renders_and_escapes():
+    html = report_export._equity_success_gap({"analysis": {"equity_success_gap": _equity_gap_block()}})
+    assert "gap" in html.lower()
+    assert "CHEM &lt;101&gt;" in html and "CHEM <101>" not in html   # escaped course
+    assert "MEASURED" in html                                        # honesty label
+    assert "Group B" in html
+    assert "-17" in html                                             # gap in pp
+    assert "suppress" in html.lower() and "2" in html                # suppressed count surfaced
+    assert "causation" in html.lower()                               # not_assessed
+
+
+def test_equity_success_gap_empty_when_absent():
+    assert report_export._equity_success_gap({"analysis": {}}) == ""
+
+
+def test_equity_success_gap_inert_note():
+    html = report_export._equity_success_gap({"analysis": {"equity_success_gap": {
+        "status": "inert", "label": "L",
+        "reason": "no disaggregated course-success export supplied"}}})
+    assert "Not computed" in html
+
+
+# ------------------------------------------------- E14 minimal-perturbation render
+def _perturbation_block():
+    return {
+        "status": "active",
+        "label": "Minimal-perturbation recommender: the fewest OFFERING changes ... "
+                 "NOT a student outcome and NOT a completion claim ...",
+        "horizon_terms": [2268, 2272],
+        "programs": [{
+            "code": "BIO-AS", "title": "Biology <AS>",
+            "total_changes": 3, "score_before": 60, "score_after": 90,
+            "buildable_after": True,
+            "actions": [
+                {"action": "add_section", "course": "ENGL <101>",
+                 "reason": "no section offered in the audited terms"},
+                {"action": "add_alt_time_section", "course": "MATH <1>",
+                 "resolves": ["PHYS <1>"],
+                 "reason": "every offered section conflicts with PHYS <1>"},
+                {"action": "add_choice_option",
+                 "options": ["HIST <1>", "HIST <2>"], "need": 2, "offered": 1,
+                 "shortfall": 1, "offer_candidates": ["HIST <2>"],
+                 "reason": "the disjunctive requirement is short"}],
+            "notes": ["GONE <9>: required but absent from the active catalog — excluded"],
+        }],
+        "not_assessed": [
+            {"check": "seat_instructor_room_feasibility", "status": "inert",
+             "reason": "an offering proxy cannot see capacity, faculty, or rooms"},
+            {"check": "student_completion", "status": "inert",
+             "reason": "no student-level outcome exists in any LACCD source"}],
+    }
+
+
+def test_minimal_perturbation_renders_and_escapes():
+    html = report_export._minimal_perturbation(
+        {"analysis": {"minimal_perturbation": _perturbation_block()}})
+    assert "offering" in html.lower()
+    assert "Biology &lt;AS&gt;" in html and "Biology <AS>" not in html   # escaped title
+    assert "ENGL &lt;101&gt;" in html                                    # escaped course
+    assert "alternate-time" in html.lower()                              # conflict action
+    assert "buildable after the changes" in html                        # verified flag
+    assert "60" in html and "90" in html                                # score before/after
+    assert "GONE &lt;9&gt;" in html                                      # dead-req note surfaced
+    assert "seat" in html.lower() or "instructor" in html.lower()       # not_assessed
+    assert "NOT a student outcome" in html or "NOT a completion" in html  # honesty label
+
+
+def test_minimal_perturbation_empty_when_absent():
+    assert report_export._minimal_perturbation({"analysis": {}}) == ""
+
+
+def test_minimal_perturbation_inert_note():
+    html = report_export._minimal_perturbation({"analysis": {"minimal_perturbation": {
+        "status": "inert", "label": "L",
+        "reason": "every audited program's required path is already structurally buildable"}}})
+    assert "Not computed" in html and "buildable" in html
+
+
+def test_minimal_perturbation_not_buildable_after_is_honest():
+    blk = _perturbation_block()
+    blk["programs"][0]["buildable_after"] = False
+    html = report_export._minimal_perturbation(
+        {"analysis": {"minimal_perturbation": blk}})
+    assert "NOT fully buildable by offerings alone" in html
+
+
+# ------------------------------------------------- E7 schedule-fetch warning
+def test_detectors_renders_warning_state_distinct_from_inert():
+    # A schedule_fetch WARNING (a partial fetch) must render as a WARNING, not as a
+    # benign "needs more data" inert note — otherwise the partial-coverage caveat is
+    # visually demoted to "not yet measurable".
+    html = report_export._detectors({"inert_detectors": [{
+        "detector": "schedule_fetch", "status": "warning", "skipped_terms": [2266],
+        "reason": "coverage is PARTIAL", "remedy": "re-run when reachable"}]})
+    assert "⚠" in html and "PARTIAL" in html
+    assert "needs more data" not in html.lower() or "partial" in html.lower()
+
+
+# ------------------------------------------------- E2 plan-optimality caveat
+def test_cohort_tags_not_proven_optimal_only_when_false():
+    base = {"terms_used": 4, "plan": {1: ["MATH 245"]}, "fixes": []}
+    # explicitly not proven optimal -> caveat travels with the plan
+    not_opt = report_export._cohort("Full-time", {**base, "proven_optimal": False})
+    assert "not proven optimal" in not_opt.lower()
+    # proven optimal (the normal case) -> no caveat
+    opt = report_export._cohort("Full-time", {**base, "proven_optimal": True})
+    assert "not proven optimal" not in opt.lower()
+    # absent field (pre-E2 / hand-built dict) -> no caveat, byte-identical to before
+    absent = report_export._cohort("Full-time", base)
+    assert "not proven optimal" not in absent.lower()
+
+
+# ------------------------------------------------- E15/F10 contact-hours render
+def _contact_hours_block():
+    return {
+        "status": "active",
+        "label": "Contact-hour conformance: a Title 5 §55002.5 CONFORMANCE PROXY ... "
+                 "NOT a compliance ruling and NOT the official record ...",
+        "assessed": 3, "consistent": 2,
+        "flagged": [{
+            "course": "PE <1>", "term": 2268, "units": 1.0, "weekly_minutes": 1200,
+            "woi": 18.0, "contact_category": "lecture", "term_contact_hours": 360.0,
+            "per_unit_term_hours": 360.0, "expected_band": [9.0, 27.0],
+            "within_band": False, "direction": "high"}],
+        "used_all_blocks": False,
+        "not_assessed": {"no_meeting_time": 1, "missing_units": 0, "missing_weeks": 2,
+                         "category_unknown": 1,
+                         "meeting_block_coverage": "only the first meeting block was "
+                         "visible — a multi-block section may be UNDERCOUNTED"},
+    }
+
+
+def test_contact_hours_renders_and_escapes():
+    html = report_export._contact_hours({"analysis": {"contact_hours": _contact_hours_block()}})
+    assert "contact" in html.lower()
+    assert "PE &lt;1&gt;" in html and "PE <1>" not in html        # escaped course
+    assert "CONFORMANCE" in html                                  # honesty label
+    assert "implausibly high" in html
+    assert "360.0" in html and "9.0" in html and "27.0" in html   # value + band
+    assert "undercount" in html.lower() or "block" in html.lower()  # coverage disclosed
+
+
+def test_contact_hours_empty_when_absent():
+    assert report_export._contact_hours({"analysis": {}}) == ""
+
+
+def test_contact_hours_inert_note():
+    html = report_export._contact_hours({"analysis": {"contact_hours": {
+        "status": "inert", "label": "L",
+        "reason": "no section carries units + weeks-of-instruction + a meeting time"}}})
+    assert "Not computed" in html and "week" in html.lower()
+
+
+def test_contact_hours_inert_surfaces_not_assessed_breakdown_when_present():
+    # The common live case is inert-with-data: sections existed but none had
+    # units+woi+meeting. The per-reason breakdown the inert block computes must be
+    # visible so the reader sees WHY nothing was assessable, not just the aggregate.
+    html = report_export._contact_hours({"analysis": {"contact_hours": {
+        "status": "inert", "label": "L", "reason": "no normalizable section",
+        "not_assessed": {"no_meeting_time": 3, "missing_units": 0,
+                         "missing_weeks": 12, "category_unknown": 0}}}})
+    assert "Not computed" in html
+    assert "missing weeks" in html.lower() and "12" in html
+    assert "no meeting time" in html.lower() and "3" in html
+
+
+def test_equity_success_gap_discloses_reference_basis():
+    # The reference basis must reach the reader: an All/overall row vs the
+    # highest-performing subgroup (used only when there is no overall row) — so a
+    # gap measured against the best group is never mistaken for an official baseline.
+    blk = _equity_gap_block()                          # all_row
+    html_all = report_export._equity_success_gap({"analysis": {"equity_success_gap": blk}})
+    assert "overall" in html_all.lower()
+    blk2 = _equity_gap_block()
+    blk2["courses"][0]["reference_basis"] = "highest_subgroup"
+    blk2["courses"][0]["reference_subgroup"] = "Group A"
+    html_hi = report_export._equity_success_gap({"analysis": {"equity_success_gap": blk2}})
+    assert "highest subgroup" in html_hi.lower()

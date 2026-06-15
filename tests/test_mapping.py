@@ -1,3 +1,5 @@
+import json
+
 import pandas as pd
 
 import engine
@@ -31,11 +33,13 @@ def test_build_sections_df_schema_and_zero_enrollment():
     df = mapping.build_sections_df(SECTIONS)
     assert list(df.columns) == ["Term", "CLASS", "Class Status",
                                 "Cap Enrl", "Tot Enrl", "Wait Tot", "Avail Status",
-                                "Days", "Times"]
+                                "Days", "Times", "Meetings"]
     assert (df["Class Status"] == "Active").all()
     assert (df[["Cap Enrl", "Tot Enrl", "Wait Tot"]] == 0).all().all()
     # these synthetic records carry no live 'status' -> Avail Status blank
     assert (df["Avail Status"] == "").all()
+    # single-pattern (no 'meetings') -> empty Meetings, engine falls back to Days/Times
+    assert (df["Meetings"] == "").all()
     assert set(df["CLASS"]) == {"CS 101", "MATH 245"}
     assert pd.api.types.is_integer_dtype(df["Term"])
 
@@ -152,6 +156,60 @@ def test_build_sections_df_defaults_zero_without_enrollment():
     assert (df[["Cap Enrl", "Tot Enrl", "Wait Tot"]] == 0).all().all()
 
 
+def test_build_sections_df_emits_meetings_for_multiblock_days_times_only():
+    """A section meeting on >1 pattern carries ALL blocks in the optional
+    ``Meetings`` column (JSON), so the engine can see secondary blocks the flat
+    Days/Times (block[0]) hide.
+
+    PRIVACY DOCTRINE: only days/times are encoded — instructor and room are NOT
+    reintroduced into the workbook via this column."""
+    rec = {"term": 2268, "course": "BIOL 3", "units": "4.00",
+           "days": "MW", "times": "9:00 AM - 10:00 AM",
+           "meetings": [
+               {"days": "MW", "times": "9:00 AM - 10:00 AM", "room": "S 101",
+                "facil_id": "S101", "instr": "Ada Lovelace"},
+               {"days": "F", "times": "9:00 AM - 11:00 AM", "room": "S 102",
+                "facil_id": "S102", "instr": "Alan Turing"}]}
+    df = mapping.build_sections_df([rec])
+    assert "Meetings" in df.columns
+    raw = df.iloc[0]["Meetings"]
+    blocks = json.loads(raw)
+    # both blocks carried; days/times ONLY (no extra keys); order-robust
+    assert all(set(b) == {"days", "times"} for b in blocks)
+    assert {(b["days"], b["times"]) for b in blocks} == {
+        ("MW", "9:00 AM - 10:00 AM"), ("F", "9:00 AM - 11:00 AM")}
+    # privacy: no instructor / room / facility id leaks through the new column
+    assert "Lovelace" not in raw and "Turing" not in raw
+    assert "S101" not in raw and "S102" not in raw
+
+
+def test_build_sections_df_meetings_canonical_block_order():
+    """The Meetings encoding is CANONICAL: the same two blocks in either source
+    order produce byte-identical column cells, so block-order variance from the live
+    API can never desync the workbook (determinism). Block order is semantically
+    irrelevant — a section that 'meets MW and F' is the same as 'meets F and MW'."""
+    mw = {"days": "MW", "times": "9:00 AM - 10:00 AM"}
+    fr = {"days": "F", "times": "9:00 AM - 10:00 AM"}
+    a = mapping.build_sections_df([{"term": 2268, "course": "X 1",
+                                    "meetings": [mw, fr]}]).iloc[0]["Meetings"]
+    b = mapping.build_sections_df([{"term": 2268, "course": "X 1",
+                                    "meetings": [fr, mw]}]).iloc[0]["Meetings"]
+    assert a == b
+    assert len(json.loads(a)) == 2          # still carries both blocks
+
+
+def test_build_sections_df_meetings_empty_for_single_block():
+    """A single-block (or no-meeting) section leaves ``Meetings`` empty so the
+    engine falls back to Days/Times and stays byte-identical for that section."""
+    df = mapping.build_sections_df([{"term": 2268, "course": "CS 101"}])
+    assert df.iloc[0]["Meetings"] == ""
+    one = mapping.build_sections_df([{"term": 2268, "course": "CS 101",
+                                      "days": "MW", "times": "9:00 AM - 10:00 AM",
+                                      "meetings": [{"days": "MW",
+                                                    "times": "9:00 AM - 10:00 AM"}]}])
+    assert one.iloc[0]["Meetings"] == ""
+
+
 def test_build_catalog_df_threads_prereqs_map():
     # The prereqs map populates the structured-prereq column for matching course
     # ids; non-listed courses stay blank.
@@ -196,14 +254,15 @@ def test_column_constants_match_engine_required_columns():
     assert mapping.CATALOG_COLUMNS == engine.REQUIRED_COLUMNS["catalog"]
     assert mapping.PROGRAM_COLUMNS == engine.REQUIRED_COLUMNS["programs"]
     # Sections carries every REQUIRED column (as a prefix) plus OPTIONAL additive
-    # columns the engine reads optionally — "Avail Status" (live waitlist signal)
-    # and "Days"/"Times" (meeting times for time-block conflict avoidance) —
-    # intentionally NOT in REQUIRED_COLUMNS so demo / IR workbooks without them
+    # columns the engine reads optionally — "Avail Status" (live waitlist signal),
+    # "Days"/"Times" (first-block meeting times for time-block conflict avoidance),
+    # and "Meetings" (the full multi-block footprint for secondary-block conflicts)
+    # — intentionally NOT in REQUIRED_COLUMNS so demo / IR workbooks without them
     # still validate.
     req = engine.REQUIRED_COLUMNS["sections"]
     assert mapping.SECTION_COLUMNS[:len(req)] == req
-    assert mapping.SECTION_COLUMNS == req + ["Avail Status", "Days", "Times"]
-    for opt in ("Avail Status", "Days", "Times"):
+    assert mapping.SECTION_COLUMNS == req + ["Avail Status", "Days", "Times", "Meetings"]
+    for opt in ("Avail Status", "Days", "Times", "Meetings"):
         assert opt not in req
 
 

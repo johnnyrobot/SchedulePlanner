@@ -169,6 +169,22 @@ def test_under_supply_ir_headcount_beats_live_breadth():
                                     "sections_waitlisted": 1, "sections_total": 1}]
 
 
+def test_analyze_handles_required_course_absent_from_sections():
+    """A required course with NO offered sections must be handled by the
+    empty-frame path (groupby-refactor M7): it surfaces only as a rotation gap
+    (offered 0 < n_terms) and never in single_section / modality / under_supply —
+    byte-identical to the old per-course boolean filter on an absent CLASS."""
+    sec = pd.DataFrame([
+        {"Term": 2268, "CLASS": "BIO 1", "Class Status": "Active", "Cap Enrl": 30,
+         "Tot Enrl": 5, "Wait Tot": 0},
+    ])
+    prog = pd.DataFrame([{"Course ID": "BIO 1"}, {"Course ID": "GHOST 9"}])
+    out = engine.analyze(sec, prog, n_terms=2)
+    assert {"course": "GHOST 9", "offered": 0, "of": 2} in out["rotation_gaps"]
+    for axis in ("single_section", "modality_mismatch", "under_supply"):
+        assert all(x["course"] != "GHOST 9" for x in out[axis]), axis
+
+
 def test_under_supply_silent_without_waitlist_or_counts():
     """No waitlist status and no IR counts -> no false under_supply flag."""
     sec = pd.DataFrame([
@@ -450,6 +466,101 @@ def test_solver_separates_hard_time_conflict(tmp_path):
     assert term_of["A 1"] != term_of["B 1"]
 
 
+def test_solver_separates_conflict_on_secondary_meeting_block(tmp_path):
+    """A hard time conflict that exists ONLY on a section's SECONDARY meeting block
+    (carried in the optional ``Meetings`` column, not the first-block Days/Times)
+    still separates the two required courses.
+
+    A 1's first block (MW 9-10) does NOT overlap B 1 (F 9-10); the overlap lives
+    only on A 1's SECOND block (F 9-10), encoded in Meetings. Separation therefore
+    proves the engine reads the full meeting footprint, not just block[0]."""
+    a_blocks = json.dumps([{"days": "MW", "times": "9:00 AM - 10:00 AM"},
+                           {"days": "F", "times": "9:00 AM - 10:00 AM"}])
+    rows = []
+    for term in (2248, 2252):                       # both offered Fall+Spring
+        rows.append({"Term": term, "CLASS": "A 1", "Class Status": "Active",
+                     "Cap Enrl": 0, "Tot Enrl": 0, "Wait Tot": 0,
+                     "Days": "MW", "Times": "9:00 AM - 10:00 AM",
+                     "Meetings": a_blocks})
+        rows.append({"Term": term, "CLASS": "B 1", "Class Status": "Active",
+                     "Cap Enrl": 0, "Tot Enrl": 0, "Wait Tot": 0,
+                     "Days": "F", "Times": "9:00 AM - 10:00 AM",
+                     "Meetings": ""})                # single block -> Days/Times fallback
+    wb = tmp_path / "secondary.xlsx"
+    _write_wb(str(wb), rows)
+    plan = engine.run(str(wb))["programs"]["P"]["cohorts"]["full_time"]["plan"]
+    term_of = {c: t for t, cs in plan.items() for c in cs}
+    assert term_of["A 1"] != term_of["B 1"]
+
+
+def test_hard_conflict_pairs_scoping_preserves_applied_pairs():
+    """M6: scoping the O(N^2) conflict scan to program-relevant courses never
+    drops a pair both of whose endpoints a program can schedule, and never
+    invents one. Pairs touching an irrelevant course (no program can schedule it)
+    are computed by the full scan but DISCARDED by solve_cohort anyway, so
+    skipping them is byte-identical for every applied constraint."""
+    # A1<->B1 conflict (both relevant); A1<->Z9 and B1<->Z9 conflict (Z9 irrelevant).
+    rows = [{"Term": 2248, "CLASS": cls, "Class Status": "Active",
+             "Cap Enrl": 0, "Tot Enrl": 0, "Wait Tot": 0,
+             "Days": "MW", "Times": "9:00 AM - 10:00 AM"}
+            for cls in ("A 1", "B 1", "Z 9")]
+    sec = pd.DataFrame(rows)
+    full = engine._hard_conflict_pairs(sec)                      # legacy: all courses
+    scoped = engine._hard_conflict_pairs(sec, {"A 1", "B 1"})    # program-relevant only
+    assert frozenset(("A 1", "B 1")) in full and frozenset(("A 1", "B 1")) in scoped
+    assert scoped <= full                                        # invents nothing
+    assert frozenset(("A 1", "Z 9")) in full                    # irrelevant pair seen by full
+    assert frozenset(("A 1", "Z 9")) not in scoped              # ...and dropped by scoping
+    # The scoped set is EXACTLY the pairs among relevant courses the full scan found.
+    relevant_only = {p for p in full if p <= {"A 1", "B 1"}}
+    assert scoped == relevant_only
+
+
+def test_run_scopes_conflicts_but_still_separates_program_courses(tmp_path):
+    """End-to-end: an irrelevant course sharing a hard time-conflict with the
+    program courses does not change the plan — the relevant A1<->B1 pair still
+    forces different terms after scoping."""
+    rows = []
+    for cls in ("A 1", "B 1"):                       # both required by program P
+        for term in (2248, 2252):
+            rows.append({"Term": term, "CLASS": cls, "Class Status": "Active",
+                         "Cap Enrl": 0, "Tot Enrl": 0, "Wait Tot": 0,
+                         "Days": "MW", "Times": "9:00 AM - 10:00 AM"})
+    rows.append({"Term": 2248, "CLASS": "Z 9", "Class Status": "Active",  # not in program P
+                 "Cap Enrl": 0, "Tot Enrl": 0, "Wait Tot": 0,
+                 "Days": "MW", "Times": "9:00 AM - 10:00 AM"})
+    wb = tmp_path / "scoped_conflict.xlsx"
+    _write_wb(str(wb), rows)
+    plan = engine.run(str(wb))["programs"]["P"]["cohorts"]["full_time"]["plan"]
+    term_of = {c: t for t, cs in plan.items() for c in cs}
+    assert term_of["A 1"] != term_of["B 1"]
+    assert "Z 9" not in term_of                       # irrelevant course never scheduled
+
+
+def test_engine_tolerates_malformed_meetings_cell(tmp_path):
+    """A corrupt / hand-edited ``Meetings`` cell must NOT crash engine.run. The
+    engine degrades to the visible first-block Days/Times for that row (fail open,
+    mirroring the other optional meeting columns), never raising JSONDecodeError or
+    TypeError. ``engine.run`` accepts any user-openable workbook, so a tampered cell
+    cannot be allowed to take down the whole solve."""
+    rows = []
+    for term in (2248, 2252):
+        rows.append({"Term": term, "CLASS": "A 1", "Class Status": "Active",
+                     "Cap Enrl": 0, "Tot Enrl": 0, "Wait Tot": 0,
+                     "Days": "MW", "Times": "9:00 AM - 10:00 AM",
+                     "Meetings": "{bad json"})              # malformed -> JSONDecodeError
+        rows.append({"Term": term, "CLASS": "B 1", "Class Status": "Active",
+                     "Cap Enrl": 0, "Tot Enrl": 0, "Wait Tot": 0,
+                     "Days": "F", "Times": "9:00 AM - 10:00 AM",
+                     "Meetings": "Infinity"})               # valid JSON, non-list float
+    wb = tmp_path / "bad_meetings.xlsx"
+    _write_wb(str(wb), rows)
+    # must not raise; falls back to block[0] Days/Times (MW vs F -> no overlap)
+    plan = engine.run(str(wb))["programs"]["P"]["cohorts"]["full_time"]["plan"]
+    term_of = {c: t for t, cs in plan.items() for c in cs}
+    assert term_of["A 1"] == term_of["B 1"]
+
+
 def test_solver_byte_identical_without_meeting_data(tmp_path):
     """Non-conflicting Days/Times produce the SAME plan as omitting the columns
     entirely — the additive no-op contract that protects determinism."""
@@ -501,3 +612,25 @@ def test_solver_schedules_summer_only_course(tmp_path):
     cadence = engine._cadence({"Fall", "Summer"})
     assert engine.term_season(term_of["B 1"], cadence) == "Summer"
     assert engine.term_season(term_of["A 1"], cadence) == "Fall"
+
+
+def test_solve_cohort_surfaces_terms_per_year(tmp_path):
+    """Every cohort result carries ``terms_per_year`` = len(cadence) — the exact
+    cadence length the solver used to scale the horizon — so the report/UI can turn
+    abstract ``terms_used`` into calendar years for ANY cadence, not a hardcoded 2.
+
+    A Fall+Spring+Summer dataset is a 3-season cadence; a Fall+Spring one is the
+    legacy 2-season cadence."""
+    def tpy(terms):
+        rows = [{"Term": t, "CLASS": cls, "Class Status": "Active",
+                 "Cap Enrl": 0, "Tot Enrl": 0, "Wait Tot": 0}
+                for t in terms for cls in ("A 1", "B 1")]
+        wb = tmp_path / f"cad_{'_'.join(map(str, terms))}.xlsx"
+        _write_wb(str(wb), rows)
+        return engine.run(str(wb))["programs"]["P"]["cohorts"]
+
+    three = tpy((2248, 2252, 2256))            # Fall, Spring, Summer
+    assert three["full_time"]["terms_per_year"] == 3
+    assert three["part_time"]["terms_per_year"] == 3
+    two = tpy((2248, 2252))                     # Fall, Spring (legacy)
+    assert two["full_time"]["terms_per_year"] == 2

@@ -24,6 +24,7 @@ test locks what that gate must keep covering.
 """
 import os
 import pathlib
+import re
 import subprocess
 import sys
 
@@ -82,7 +83,9 @@ AI_FALLBACK_NODE = "tests/test_llm_assist.py::test_explain_falls_back_when_unava
 # Known live nodes that the gate must keep DESELECTING (the live set). The
 # eLumen-client live test (test_live_lamc_endpoint_schema) was added with the
 # real eLumen prereq client; it hits the public endpoint and is deselected by
-# default. EXPECTED_DESELECTED in scripts/run_qa.sh is kept in lock-step.
+# default. This set is the SINGLE SOURCE OF TRUTH for the live count:
+# scripts/run_qa.sh derives EXPECTED_DESELECTED from len(KNOWN_LIVE_NODES), so
+# the shell gate cannot drift out of lock-step with it.
 KNOWN_LIVE_NODES = {
     "tests/test_live_roundtrip.py::test_live_lamc_end_to_end",
     "tests/test_llm_assist.py::test_live_explain_against_real_ollama",
@@ -90,6 +93,8 @@ KNOWN_LIVE_NODES = {
     "tests/test_elumen_client.py::test_live_lamc_endpoint_schema",
     # Spec 2: real OpenDataLoader PDF extraction (needs Java 11+ + the package).
     "tests/test_pdf_loader.py::test_extract_real_pdf_roundtrip",
+    # E6: schedule wire-contract canary (hits the real LACCD schedule endpoint).
+    "tests/test_source_contracts.py::test_schedule_live_wire_still_matches_the_contract",
 }
 
 
@@ -123,11 +128,13 @@ def test_axis_node_is_collected_and_offline(axis, nodeid, collected, live_nodes)
     )
 
 
-def test_live_set_is_exactly_the_three_known_nodes(live_nodes):
-    """The live set the gate deselects is precisely the documented three.
+def test_live_set_is_exactly_the_known_nodes(live_nodes):
+    """The live set the gate deselects is precisely KNOWN_LIVE_NODES.
 
-    If this changes, scripts/run_qa.sh's EXPECTED_DESELECTED must change too;
-    this test makes that coupling explicit rather than silent.
+    This is the single source of truth for the live count: scripts/run_qa.sh
+    derives EXPECTED_DESELECTED from len(KNOWN_LIVE_NODES), so pinning the set
+    here transitively keeps the shell gate in lock-step. Add/remove a live test
+    and you edit ONLY KNOWN_LIVE_NODES — both this assertion and the gate follow.
     """
     assert live_nodes == KNOWN_LIVE_NODES, (
         f"live test set drifted.\n  expected: {sorted(KNOWN_LIVE_NODES)}\n"
@@ -159,6 +166,28 @@ def test_run_qa_script_exists_and_is_executable():
     assert "not live" in text, "run_qa.sh must pass -m 'not live' explicitly"
     assert "python3" in text, "run_qa.sh must invoke python3 (no bare `python`)"
     assert "set -euo pipefail" in text, "run_qa.sh must use strict bash mode"
+
+
+def test_run_qa_derives_deselected_count_from_known_live_nodes():
+    """EXPECTED_DESELECTED is DERIVED from KNOWN_LIVE_NODES, never a second
+    hard-coded magic literal that can silently drift out of lock-step with the
+    documented live set (review M8).
+
+    The meta-test above pins KNOWN_LIVE_NODES == the real live collection, so
+    deriving the shell's deselected count from len(KNOWN_LIVE_NODES) transitively
+    couples the gate to reality through ONE source of truth.
+    """
+    text = SCRIPT.read_text()
+    assert "from tests.test_qa_gate import KNOWN_LIVE_NODES" in text, (
+        "run_qa.sh must derive the live count from KNOWN_LIVE_NODES, not hard-code it."
+    )
+    assert re.search(r"len\(\s*KNOWN_LIVE_NODES\s*\)", text), (
+        "run_qa.sh must compute len(KNOWN_LIVE_NODES) for EXPECTED_DESELECTED."
+    )
+    assert not re.search(r"EXPECTED_DESELECTED\s*=\s*[0-9]", text), (
+        "EXPECTED_DESELECTED must not be a hard-coded number; derive it so the "
+        "two counts cannot drift apart."
+    )
 
 
 def test_ge_caveat_is_honest():

@@ -190,6 +190,14 @@ _DET_LABELS = {
     "prerequisite_ordering": "Prerequisite ordering",
     "time_block_conflict": "Time-block conflicts",
     "equity_exposure": "Equity / archetype exposure",
+    "gateway_momentum": "First-year gateway momentum",
+    "corequisite_availability": "Corequisite co-availability",
+    "infeasibility": "Infeasibility explainer",
+    "demand_success": "Course success signal",
+    "equity_success_gap": "Equity course-success gap",
+    "minimal_perturbation": "Fewest offering changes to buildable",
+    "contact_hours": "Contact-hour conformance",
+    "schedule_fetch": "Schedule fetch coverage",
 }
 _PLAN_LABELS = {"shared": "met by major", "concrete": "concrete", "reserve": "reserve"}
 _GE_PATTERN_NAMES = {"igetc": "IGETC", "cal-getc": "Cal-GETC", "csu-ge": "CSU GE"}
@@ -221,7 +229,11 @@ def _cohort(label: str, c) -> str:
     if not c:
         return (f'<div class="cohort"><div class="lab">{_esc(label)}</div>'
                 '<div class="big">—</div></div>')
-    yrs = math.ceil(c.get("terms_used", 0) / 2) if c.get("terms_used") else 0
+    # Calendar years = terms / terms-per-year (the cadence length the solver used).
+    # Default 2 (Fall/Spring) for cohort dicts predating the field; engine.run now
+    # always supplies it, so a 3-season (Summer) plan no longer mislabels as +1 year.
+    tpy = c.get("terms_per_year") or 2
+    yrs = math.ceil(c.get("terms_used", 0) / tpy) if c.get("terms_used") else 0
     terms = "".join(
         f'<div class="term"><b>T{_esc(t)}</b> {_esc(", ".join(cs))}</div>'
         for t, cs in sorted(c.get("plan", {}).items(), key=lambda kv: int(kv[0])))
@@ -231,6 +243,11 @@ def _cohort(label: str, c) -> str:
         parts = ", ".join(f'+ {_esc(f.get("course"))} in {_esc(f.get("season"))}' for f in fixes)
         fix = f'<div class="fix">fix: {parts}</div>'
     tag = ' <span class="withfix">(with fix)</span>' if c.get("needs_fix") else ""
+    # E2: the deterministic-budget caveat travels WITH the plan it qualifies — only
+    # when the solver did not prove this the minimum-term plan (absent/True -> none).
+    if c.get("proven_optimal") is False:
+        tag += (' <span class="withfix" title="feasible but not proven the minimum">'
+                '(not proven optimal)</span>')
     return (f'<div class="cohort"><div class="lab">{_esc(label)}</div>'
             f'<div class="big">{_esc(c.get("terms_used"))} terms{tag}</div>'
             f'<div class="yr">~{yrs} year{"s" if yrs != 1 else ""}</div>{terms}{fix}</div>')
@@ -285,7 +302,15 @@ def _diagnostics(results: dict) -> str:
         + block("Time conflicts", a.get("time_block_collisions", []),
                 lambda x: _esc(x.get("summary")))
         + block("Off-grid sections", a.get("off_grid_sections", []),
-                lambda x: _esc(x.get("summary"))))
+                lambda x: _esc(x.get("summary")))
+        # Room double-bookings + over-capacity are injected by analyze_live (outside
+        # engine.run) from the raw section room/days/times the workbook schema drops.
+        # Gated on key presence: the workbook/demo path never computes them, so we
+        # render no block there rather than claiming "none found" for an un-run check.
+        + (block("Room double-bookings", a.get("room_conflicts", []),
+                 lambda x: _esc(x.get("summary"))) if "room_conflicts" in a else "")
+        + (block("Room over capacity", a.get("room_capacity", []),
+                 lambda x: _esc(x.get("summary"))) if "room_capacity" in a else ""))
     n = _esc(results.get("terms_in_data"))
     return (f'<section class="card" aria-labelledby="diag"><h2 id="diag">Supply diagnostics '
             f'({n} terms)</h2><div class="analysis">{body}</div></section>')
@@ -615,6 +640,333 @@ def _equity_exposure(results: dict) -> str:
             f'{"".join(sub)}{footnote}</section>')
 
 
+def _gateway_not_assessed(block: dict) -> str:
+    """Render the F8/F9 ``not_assessed`` LIST (each ``{check, status, reason}``) so
+    the limitations travel with the rendered finding. Empty string when none."""
+    items = "".join(
+        f'<li>{_esc(str(n.get("check", "")).replace("_", " "))}: '
+        f'{_esc(n.get("reason"))}</li>'
+        for n in (block.get("not_assessed") or []))
+    return f'<p class="note">Not assessed:</p><ul>{items}</ul>' if items else ""
+
+
+def _gateway_momentum(results: dict) -> str:
+    """First-year gateway momentum (F8): whether each program's transfer-level
+    English (GE Area 1A) and Math (Area 2) gateway course can be SCHEDULED in the
+    first year — an OFFERING proxy, NOT a measured completion rate. Empty when
+    absent; honest inert note otherwise. All data HTML-escaped."""
+    block = (results.get("analysis") or {}).get("gateway_momentum")
+    if not block:
+        return ""
+    label = _esc(block.get("label", ""))
+    if block.get("status") != "active":
+        return ('<section class="card" aria-labelledby="gateway"><h2 id="gateway">'
+                'First-year gateway momentum</h2>'
+                f'<p>Not computed: '
+                f'{_esc(block.get("reason", "no gateway identifiable"))}</p>'
+                f'<p class="note">{label}</p></section>')
+    rows = []
+    for disc in ("english", "math"):
+        g = block.get(disc) or {}
+        title = disc.capitalize()
+        if not g.get("identified"):
+            rows.append(f'<li>{title}: '
+                        f'{_esc(g.get("reason", "no gateway identified"))}</li>')
+            continue
+        sched = ("schedulable in year 1" if g.get("schedulable_year1")
+                 else "NOT schedulable in year 1")
+        obstr = "; ".join(_esc(o) for o in g.get("obstructions", []))
+        obstr_txt = f' — {obstr}' if obstr else ""
+        rows.append(
+            f'<li><b>{title}:</b> {_esc(g.get("course"))} '
+            f'(via {_esc(g.get("via"))}, transfer-level: '
+            f'{_esc(g.get("transfer_level", ""))}) — {sched}{obstr_txt}</li>')
+    both = "yes" if block.get("both_gateways_year1") else "no"
+    win = block.get("window_note")
+    win_html = f'<p class="note">{_esc(win)}</p>' if win else ""
+    return ('<section class="card" aria-labelledby="gateway"><h2 id="gateway">'
+            'First-year gateway momentum</h2>'
+            f'<p class="note">{label}</p>'
+            f'<ul>{"".join(rows)}</ul>'
+            f'<p>Both gateways schedulable in year 1: {both} · first-year terms: '
+            f'{_esc(", ".join(block.get("first_year_terms", [])))}</p>'
+            f'{win_html}{_gateway_not_assessed(block)}</section>')
+
+
+def _corequisite_availability(results: dict) -> str:
+    """AB1705 corequisite co-availability (F9): whether a transfer-level gateway's
+    catalog corequisite is co-offered in the SAME first-year term — a co-OFFERING
+    STRUCTURE proxy, NOT a measured or causal outcome (per AB1705, direct placement
+    was the dominant lever). Empty when absent; honest inert note otherwise. All
+    data HTML-escaped."""
+    block = (results.get("analysis") or {}).get("corequisite_availability")
+    if not block:
+        return ""
+    label = _esc(block.get("label", ""))
+    if block.get("status") != "active":
+        return ('<section class="card" aria-labelledby="coreq"><h2 id="coreq">'
+                'Corequisite co-availability (AB1705)</h2>'
+                f'<p>Not computed: '
+                f'{_esc(block.get("reason", "no corequisite linkage"))}</p>'
+                f'<p class="note">{label}</p></section>')
+    rows = []
+    for disc in ("english", "math"):
+        g = block.get(disc) or {}
+        title = disc.capitalize()
+        if not g.get("identified"):
+            rows.append(f'<li>{title}: '
+                        f'{_esc(g.get("reason", "no gateway identified"))}</li>')
+            continue
+        if not g.get("has_corequisite"):
+            rows.append(
+                f'<li><b>{title}:</b> {_esc(g.get("course"))} — '
+                f'{_esc(g.get("reason", "no corequisite in the catalog data"))}</li>')
+            continue
+        coreqs = ", ".join(_esc(c) for c in g.get("corequisites", []))
+        co = ("co-offered in year 1" if g.get("co_offered_year1")
+              else "NOT co-offered in year 1")
+        obstr = "; ".join(_esc(o) for o in g.get("obstructions", []))
+        obstr_txt = f' — {obstr}' if obstr else ""
+        rows.append(
+            f'<li><b>{title}:</b> {_esc(g.get("course"))} '
+            f'(corequisite: {coreqs}) — {co}{obstr_txt}</li>')
+    both = "yes" if block.get("both_gateways_coreq_co_offered_year1") else "no"
+    win = block.get("window_note")
+    win_html = f'<p class="note">{_esc(win)}</p>' if win else ""
+    return ('<section class="card" aria-labelledby="coreq"><h2 id="coreq">'
+            'Corequisite co-availability (AB1705)</h2>'
+            f'<p class="note">{label}</p>'
+            f'<ul>{"".join(rows)}</ul>'
+            f'<p>Both gateway corequisites co-offered in year 1: {both} · '
+            f'first-year terms: '
+            f'{_esc(", ".join(block.get("first_year_terms", [])))}</p>'
+            f'{win_html}{_gateway_not_assessed(block)}</section>')
+
+
+def _infeasibility(results: dict) -> str:
+    """Infeasibility explainer (E11): when the planner finds no feasible plan for a
+    program cohort, the minimal set of required courses behind it — a deterministic
+    STRUCTURAL diagnostic, NOT a student outcome. Empty when absent; honest inert
+    note otherwise. All data HTML-escaped."""
+    block = (results.get("analysis") or {}).get("infeasibility")
+    if not block:
+        return ""
+    label = _esc(block.get("label", ""))
+    if block.get("status") != "active":
+        return ('<section class="card" aria-labelledby="infeas"><h2 id="infeas">'
+                'Why a plan is infeasible</h2>'
+                f'<p>Not computed: '
+                f'{_esc(block.get("reason", "no unbuildable cohort"))}</p>'
+                f'<p class="note">{label}</p></section>')
+    rows = []
+    for e in block.get("explained", []):
+        head = (f'{_esc(e.get("program"))} — {_esc(e.get("cohort"))} '
+                f'({_esc(e.get("horizon_terms"))} terms)')
+        if not e.get("reproduced"):
+            rows.append(f'<li><b>{head}:</b> {_esc(e.get("note"))}</li>')
+            continue
+        mcs = ", ".join(_esc(c) for c in e.get("minimal_conflict_set", [])) or "—"
+        rows.append(f'<li><b>{head}:</b> {_esc(e.get("summary"))} '
+                    f'<span class="codes">{mcs}</span></li>')
+    tr = block.get("truncated") or {}
+    foot = (f'<p class="note">{_esc(tr["unbuildable_cohorts"])} more unbuildable '
+            'cohort(s) beyond those explained.</p>'
+            if tr.get("unbuildable_cohorts") else "")
+    return ('<section class="card" aria-labelledby="infeas"><h2 id="infeas">'
+            'Why a plan is infeasible</h2>'
+            f'<p class="note">{label}</p>'
+            f'<ul>{"".join(rows)}</ul>'
+            f'{foot}{_gateway_not_assessed(block)}</section>')
+
+
+def _fmt_rate(r) -> str:
+    """A success/retention fraction as a percent, or an em dash when absent.
+    Excludes bool (an int subclass) so a stray True never renders as '100%'."""
+    return f"{r:.0%}" if isinstance(r, (int, float)) and not isinstance(r, bool) else "—"
+
+
+def _demand_success(results: dict) -> str:
+    """Demand-vs-success escalation (E9): MEASURED aggregate course retention/success
+    (offline CCCCO Data Mart) crossed with the supply signals — NOT a completion or
+    student-level claim. Empty when absent; honest inert note otherwise. All data
+    HTML-escaped."""
+    block = (results.get("analysis") or {}).get("demand_success")
+    if not block:
+        return ""
+    label = _esc(block.get("label", ""))
+    if block.get("status") != "active":
+        return ('<section class="card" aria-labelledby="success"><h2 id="success">'
+                'Course success signal</h2>'
+                f'<p>Not computed: '
+                f'{_esc(block.get("reason", "no course-success export"))}</p>'
+                f'<p class="note">{label}</p></section>')
+
+    def _row(r):
+        flag = " · supply-constrained" if r.get("supply_constrained") else ""
+        ret = (f', retention {_fmt_rate(r.get("retention_rate"))}'
+               if r.get("retention_rate") is not None else "")
+        return (f'<li>{_esc(r.get("course"))}: success '
+                f'{_fmt_rate(r.get("success_rate"))}{ret}{flag}</li>')
+
+    esc_rows = "".join(_row(r) for r in block.get("escalated", []))
+    esc_html = ('<p class="note">Escalated — both supply-constrained and historically '
+                f'lower-success:</p><ul>{esc_rows}</ul>') if esc_rows else ""
+    all_rows = "".join(_row(r) for r in block.get("with_outcome", []))
+    return ('<section class="card" aria-labelledby="success"><h2 id="success">'
+            'Course success signal</h2>'
+            f'<p class="note">{label}</p>'
+            f'<p>Join granularity: {_esc(block.get("granularity"))} · matched '
+            f'{_esc(block.get("matched"))} offered course(s); '
+            f'{_esc(block.get("offered_without_outcome"))} offered without data.</p>'
+            f'{esc_html}'
+            f'<p class="note">All offered courses with measured data:</p>'
+            f'<ul>{all_rows}</ul>'
+            f'{_gateway_not_assessed(block)}</section>')
+
+
+def _equity_success_gap(results: dict) -> str:
+    """Equity course-success gap (E13): a MEASURED aggregate gap between demographic
+    subgroups (small cells <10 suppressed) — NOT a completion gap, NOT student-level,
+    NOT causal. Empty when absent; honest inert note otherwise. All data
+    HTML-escaped."""
+    block = (results.get("analysis") or {}).get("equity_success_gap")
+    if not block:
+        return ""
+    label = _esc(block.get("label", ""))
+    if block.get("status") != "active":
+        return ('<section class="card" aria-labelledby="eqgap"><h2 id="eqgap">'
+                'Equity course-success gap</h2>'
+                f'<p>Not computed: '
+                f'{_esc(block.get("reason", "no disaggregated export"))}</p>'
+                f'<p class="note">{label}</p></section>')
+    rows = []
+    for c in block.get("courses", []):
+        parts = []
+        for g in c.get("below_reference", []):
+            gap = g.get("gap")
+            gap_pp = f"{gap * 100:+.0f} pp" if isinstance(gap, (int, float)) else "—"
+            parts.append(f'{_esc(g.get("subgroup"))} '
+                         f'({_fmt_rate(g.get("success_rate"))}, {gap_pp})')
+        below = ", ".join(parts) or "—"
+        supp = c.get("suppressed_subgroups") or 0
+        supp_txt = (f' · {_esc(supp)} subgroup(s) suppressed (small cell)'
+                    if supp else "")
+        basis = ("highest subgroup — no overall row"
+                 if c.get("reference_basis") == "highest_subgroup" else "overall row")
+        rows.append(
+            f'<li><b>{_esc(c.get("course"))}</b> (ref '
+            f'{_esc(c.get("reference_subgroup"))} '
+            f'{_fmt_rate(c.get("reference_rate"))}, {basis}): below-reference '
+            f'{below}{supp_txt}</li>')
+    return ('<section class="card" aria-labelledby="eqgap"><h2 id="eqgap">'
+            'Equity course-success gap</h2>'
+            f'<p class="note">{label}</p>'
+            f'<p>Join granularity: {_esc(block.get("granularity"))} · small cells '
+            f'(&lt;{_esc(block.get("suppression_min"))}) suppressed.</p>'
+            f'<ul>{"".join(rows)}</ul>'
+            f'{_gateway_not_assessed(block)}</section>')
+
+
+def _minimal_perturbation(results: dict) -> str:
+    """Minimal-perturbation recommender (E14): the fewest OFFERING changes that flip
+    a program's required path from structurally not-buildable to buildable — a
+    structural OFFERING recommendation, NOT a student outcome. Empty when absent;
+    honest inert note otherwise. All data HTML-escaped."""
+    block = (results.get("analysis") or {}).get("minimal_perturbation")
+    if not block:
+        return ""
+    label = _esc(block.get("label", ""))
+    if block.get("status") != "active":
+        return ('<section class="card" aria-labelledby="perturb"><h2 id="perturb">'
+                'Fewest offering changes to buildable</h2>'
+                f'<p>Not computed: '
+                f'{_esc(block.get("reason", "every program already buildable"))}</p>'
+                f'<p class="note">{label}</p></section>')
+
+    def _action(a):
+        kind = a.get("action")
+        if kind == "add_section":
+            return f'<li>Add a section of <b>{_esc(a.get("course"))}</b> — {_esc(a.get("reason"))}</li>'
+        if kind == "add_alt_time_section":
+            return (f'<li>Add an alternate-time section of <b>{_esc(a.get("course"))}</b> '
+                    f'— {_esc(a.get("reason"))}</li>')
+        if kind == "add_choice_option":
+            cand = ", ".join(_esc(o) for o in a.get("offer_candidates", [])) or "—"
+            return (f'<li>Offer {_esc(a.get("shortfall"))} more of '
+                    f'{{{_esc(", ".join(a.get("options", [])))}}} '
+                    f'(candidates: {cand}) — {_esc(a.get("reason"))}</li>')
+        return f'<li>{_esc(kind)}</li>'
+
+    progs = []
+    for p in block.get("programs", []):
+        after = ("buildable after the changes" if p.get("buildable_after")
+                 else "NOT fully buildable by offerings alone")
+        notes = "".join(f'<li class="note">{_esc(n)}</li>' for n in p.get("notes", []))
+        notes_html = f'<ul>{notes}</ul>' if notes else ""
+        acts = "".join(_action(a) for a in p.get("actions", []))
+        progs.append(
+            f'<li><b>{_esc(p.get("title") or p.get("code"))}</b>: '
+            f'{_esc(p.get("total_changes"))} change(s) — {after} '
+            f'(score {_esc(p.get("score_before"))} &rarr; {_esc(p.get("score_after"))})'
+            f'<ul>{acts}</ul>{notes_html}</li>')
+    return ('<section class="card" aria-labelledby="perturb"><h2 id="perturb">'
+            'Fewest offering changes to buildable</h2>'
+            f'<p class="note">{label}</p>'
+            f'<ul>{"".join(progs)}</ul>'
+            f'{_gateway_not_assessed(block)}</section>')
+
+
+def _contact_hours(results: dict) -> str:
+    """Contact-hour conformance (F10/E15): observed scheduled in-class time vs a wide
+    Title 5 §55002.5 per-unit band — a CONFORMANCE proxy, NOT a compliance ruling.
+    Empty when absent; honest inert note otherwise. All data HTML-escaped."""
+    block = (results.get("analysis") or {}).get("contact_hours")
+    if not block:
+        return ""
+    label = _esc(block.get("label", ""))
+    if block.get("status") != "active":
+        # Echo the not-assessed breakdown the inert block computes (the common live
+        # case: sections existed but none carried units + woi + a meeting), so the
+        # reader sees WHY nothing was assessable — not just the aggregate reason.
+        na = block.get("not_assessed") or {}
+        na_items = "".join(
+            f'<li>{_esc(str(k).replace("_", " "))}: {_esc(v)}</li>'
+            for k, v in sorted(na.items()) if v)
+        na_html = (f'<p class="note">Not assessed:</p><ul>{na_items}</ul>'
+                   if na_items else "")
+        return ('<section class="card" aria-labelledby="contact"><h2 id="contact">'
+                'Contact-hour conformance</h2>'
+                f'<p>Not computed: '
+                f'{_esc(block.get("reason", "no normalizable section"))}</p>'
+                f'{na_html}<p class="note">{label}</p></section>')
+
+    def _flag(f):
+        band = f.get("expected_band") or []
+        band_txt = f'{_esc(band[0])}–{_esc(band[1])}' if len(band) == 2 else "—"
+        return (f'<li><b>{_esc(f.get("course"))}</b>: '
+                f'{_esc(f.get("per_unit_term_hours"))} contact hrs/unit is implausibly '
+                f'{_esc(f.get("direction"))} for the {_esc(f.get("contact_category"))} '
+                f'band {band_txt} ({_esc(f.get("weekly_minutes"))} min/wk × '
+                f'{_esc(f.get("woi"))} wks, {_esc(f.get("units"))} units)</li>')
+
+    flagged = "".join(_flag(f) for f in block.get("flagged", []))
+    flagged_html = (f'<p class="note">Implausible outliers:</p><ul>{flagged}</ul>'
+                    if flagged else '<p>No section falls outside the band.</p>')
+    na = block.get("not_assessed") or {}
+    na_items = "".join(
+        f'<li>{_esc(str(k).replace("_", " "))}: {_esc(v)}</li>'
+        for k, v in sorted(na.items()))
+    na_html = (f'<p class="note">Not assessed:</p><ul>{na_items}</ul>'
+               if na_items else "")
+    return ('<section class="card" aria-labelledby="contact"><h2 id="contact">'
+            'Contact-hour conformance</h2>'
+            f'<p class="note">{label}</p>'
+            f'<p>{_esc(block.get("assessed"))} section(s) assessed · '
+            f'{_esc(block.get("consistent"))} within band · '
+            f'{_esc(len(block.get("flagged", [])))} flagged.</p>'
+            f'{flagged_html}{na_html}</section>')
+
+
 def _reconciliation(results: dict) -> str:
     rec = results.get("reconciliation")
     if not rec:
@@ -651,6 +1003,7 @@ def _detectors(results: dict) -> str:
     rows = []
     for d in inert:
         active = d.get("status") == "active"
+        warning = d.get("status") == "warning"
         label = _DET_LABELS.get(d.get("detector"), d.get("detector"))
         why = d.get("reason") or d.get("label") or ""
         rem = d.get("remedy") or d.get("metric") or ""
@@ -666,11 +1019,14 @@ def _detectors(results: dict) -> str:
                        if ps.get("fallback_count") else "")
             join += (f'<div class="join">{_esc(n)} prerequisite{"" if n == 1 else "s"} '
                      f'applied{relaxed}</div>')
-        mark = "✓ " if active else "⊘ "
-        state = " — on" if active else " — needs more data"
+        # Three visual states: active (on), WARNING (a partial/degraded result that
+        # IS firing — e.g. E7 partial schedule coverage), and inert (not measurable).
+        mark = "✓ " if active else ("⚠ " if warning else "⊘ ")
+        state = " — on" if active else (" — PARTIAL coverage" if warning
+                                        else " — needs more data")
         why_html = f'<div class="why">{_esc(why)}</div>' if why else ""
-        rem_html = (f'<div class="rem">{"how: " if active else "to enable: "}{_esc(rem)}</div>'
-                    if rem else "")
+        rem_prefix = "how: " if active else ("to fix: " if warning else "to enable: ")
+        rem_html = (f'<div class="rem">{rem_prefix}{_esc(rem)}</div>' if rem else "")
         rows.append(
             f'<div class="det"><div class="name{" on" if active else ""}">'
             f'<span aria-hidden="true">{mark}</span>{_esc(label)}{state}</div>'
@@ -770,6 +1126,13 @@ SECTION_RENDERERS = [
     _grid_pressure,
     _demand_supply,
     _equity_exposure,
+    _infeasibility,
+    _gateway_momentum,
+    _corequisite_availability,
+    _demand_success,
+    _equity_success_gap,
+    _minimal_perturbation,
+    _contact_hours,
     _reconciliation,
     _detectors,
     _ge,

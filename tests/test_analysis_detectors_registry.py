@@ -28,17 +28,22 @@ EXPECTED = [
     ("demand_supply", "demand_supply"),
     ("grid_pressure", "grid_pressure"),
     ("equity_exposure", "equity_exposure"),
+    ("gateway_momentum", "gateway_momentum"),
+    ("corequisite_availability", "corequisite_availability"),
+    ("contact_hours", "contact_hours"),
 ]
 
 
-def test_registry_has_exactly_five_entries_in_order():
-    # Pins the slot order the inert_detectors [5..9] sequence + the determinism
-    # gate depend on. Reordering or appending in the wrong slot fails here. F6
-    # (equity_exposure) is APPENDED LAST — never reordering F1-F5.
+def test_registry_has_exactly_eight_entries_in_order():
+    # Pins the slot order the inert_detectors [5..] sequence + the determinism
+    # gate depend on. Reordering or appending in the wrong slot fails here. F8
+    # (gateway_momentum), F9 (corequisite_availability), then F10 (contact_hours)
+    # are APPENDED LAST — never reordering F1-F6.
     assert [d.analysis_key for d in ANALYSIS_DETECTORS] == [
         "buildability", "bottlenecks", "demand_supply", "grid_pressure",
-        "equity_exposure"]
-    assert len(ANALYSIS_DETECTORS) == 5
+        "equity_exposure", "gateway_momentum", "corequisite_availability",
+        "contact_hours"]
+    assert len(ANALYSIS_DETECTORS) == 8
 
 
 def test_each_entry_compute_and_entry_are_callable():
@@ -125,3 +130,56 @@ def test_equity_exposure_compute_wraps_program_and_threads_by_design(monkeypatch
     assert captured["programs"] == [program]
     assert captured["sections"] is sections
     assert captured["by_design"] is by_design
+
+
+def test_gateway_momentum_compute_threads_sections_and_program(monkeypatch):
+    # Pins the F8 (6th) compute: passes c.sections positionally + program=c.program
+    # (no list-wrap, unlike F1/F6). Drop/rename either and this bites.
+    captured = {}
+
+    def _fake_report(sections, *, program=None, horizon_terms=None):
+        captured["sections"] = sections
+        captured["program"] = program
+        return {"status": "inert"}
+
+    monkeypatch.setattr(build_live_workbook.gateway_momentum,
+                        "gateway_momentum_report", _fake_report)
+
+    program, sections = object(), object()
+    ctx = SimpleNamespace(
+        program=program, sections=sections, ge_coverage=None,
+        active_courses=None, program_demand=None, facility=None, by_design=None)
+
+    block = ANALYSIS_DETECTORS[5].compute(ctx)
+
+    assert block == {"status": "inert"}
+    assert captured["sections"] is sections      # bare, NOT list-wrapped
+    assert captured["program"] is program
+
+
+def test_corequisite_availability_compute_threads_sections_program_coreq(monkeypatch):
+    # Pins the F9 (7th) compute: passes c.sections positionally + program=c.program
+    # + coreq_map=c.coreq_map (no list-wrap). Drop/rename any and this bites.
+    captured = {}
+
+    def _fake_report(sections, *, program=None, coreq_map=None, horizon_terms=None):
+        captured["sections"] = sections
+        captured["program"] = program
+        captured["coreq_map"] = coreq_map
+        return {"status": "inert"}
+
+    monkeypatch.setattr(build_live_workbook.corequisite_availability,
+                        "corequisite_availability_report", _fake_report)
+
+    program, sections, coreq_map = object(), object(), object()
+    ctx = SimpleNamespace(
+        program=program, sections=sections, ge_coverage=None,
+        active_courses=None, program_demand=None, facility=None, by_design=None,
+        coreq_map=coreq_map)
+
+    block = ANALYSIS_DETECTORS[6].compute(ctx)
+
+    assert block == {"status": "inert"}
+    assert captured["sections"] is sections      # bare, NOT list-wrapped
+    assert captured["program"] is program
+    assert captured["coreq_map"] is coreq_map

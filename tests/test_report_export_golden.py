@@ -203,6 +203,174 @@ def _maximal_results() -> dict:
                                    "still_available": 3, "required_total": 3}]},
                 ],
             },
+            "gateway_momentum": {
+                "status": "active",
+                "label": "First-Year Gateway-Momentum: an OFFERING PROXY ... NOT a "
+                         "measured completion rate.",
+                "first_year_terms": ["2268", "2272"],
+                "english": {"identified": True, "course": "ENGL <101>",
+                            "via": "ge_area_1A", "transfer_level": "area-defined",
+                            "recommended_semester": 1, "schedulable_year1": True,
+                            "sections_in_window": 2, "obstructions": []},
+                "math": {"identified": True, "course": "MATH 227",
+                         "via": "major_subject", "transfer_level": "unverified",
+                         "recommended_semester": 1, "schedulable_year1": False,
+                         "sections_in_window": 0,
+                         "obstructions": ["not offered in the analyzed schedule"]},
+                "both_gateways_year1": False,
+                "not_assessed": [
+                    {"check": "placement_prerequisite_blocking", "status": "inert",
+                     "reason": "no placement or prerequisite-completion data exists"},
+                    {"check": "student_completion", "status": "inert",
+                     "reason": "no student-level outcome exists"}],
+            },
+            "corequisite_availability": {
+                "status": "active",
+                "label": "Corequisite Co-Availability (AB1705): a co-OFFERING "
+                         "STRUCTURE proxy ... DIRECT PLACEMENT was the dominant lever "
+                         "... NOT a measured completion rate.",
+                "first_year_terms": ["2268", "2272"],
+                "english": {"identified": True, "course": "ENGL <101>",
+                            "via": "ge_area_1A", "transfer_level": "area-defined",
+                            "has_corequisite": True, "corequisites": ["ENGL <101L>"],
+                            "corequisite_detail": [{"course": "ENGL <101L>",
+                                                    "offered": True,
+                                                    "co_offered_terms": ["2268"],
+                                                    "co_offered_year1": True}],
+                            "co_offered_year1": True,
+                            "all_corequisites_co_offered_year1": True,
+                            "co_offered_terms": ["2268"], "obstructions": []},
+                "math": {"identified": True, "course": "MATH 150",
+                         "via": "major_subject", "transfer_level": "unverified",
+                         "has_corequisite": True, "corequisites": ["MATH 150L"],
+                         "corequisite_detail": [{"course": "MATH 150L",
+                                                 "offered": False,
+                                                 "co_offered_terms": [],
+                                                 "co_offered_year1": False}],
+                         "co_offered_year1": False,
+                         "all_corequisites_co_offered_year1": False,
+                         "co_offered_terms": [],
+                         "obstructions": ["corequisite MATH 150L is not offered in "
+                                          "the analyzed schedule"]},
+                "both_gateways_coreq_co_offered_year1": False,
+                "not_assessed": [
+                    {"check": "placement_prerequisite_blocking", "status": "inert",
+                     "reason": "no placement data exists"},
+                    {"check": "corequisite_enrollment_linkage", "status": "inert",
+                     "reason": "catalog co-offering is not registration linkage"},
+                    {"check": "student_completion_or_corequisite_effectiveness",
+                     "status": "inert", "reason": "no student-level outcome exists"}],
+            },
+            "infeasibility": {
+                "status": "active",
+                "label": "Infeasibility Explainer: a deterministic STRUCTURAL re-solve "
+                         "... NOT a student outcome or a prediction.",
+                "explained": [
+                    {"program": "Bio <AS>", "cohort": "Full-time", "horizon_terms": 4,
+                     "reproduced": True,
+                     "minimal_conflict_set": ["MATH <261>", "CHEM 101"],
+                     "background_only": False,
+                     "summary": "these 2 required course(s) cannot all be scheduled "
+                                "within the 4-term full-time plan; relaxing any one "
+                                "restores feasibility"},
+                    {"program": "Bio <AS>", "cohort": "Part-time", "horizon_terms": 8,
+                     "reproduced": False,
+                     "note": "the planner found no feasible plan, but the structural "
+                             "explainer could not reproduce it, so a minimal "
+                             "conflicting set is unavailable"},
+                ],
+                "not_assessed": [
+                    {"check": "season_mismatch_as_cause", "status": "inert",
+                     "reason": "season mismatches are treated as fixable"},
+                    {"check": "student_completion", "status": "inert",
+                     "reason": "no student-level outcome exists"}],
+            },
+            "demand_success": {
+                "status": "active",
+                "label": "Course Success Signal: a MEASURED, AGGREGATE retention/success "
+                         "outcome from a CCCCO Data Mart export ... NOT a "
+                         "program-completion label ...",
+                "granularity": "Course",
+                "with_outcome": [
+                    {"course": "CHEM <101>", "success_rate": 0.40, "retention_rate": 0.70,
+                     "enrollment": 300, "supply_constrained": True},
+                    {"course": "MATH 261", "success_rate": 0.55, "retention_rate": None,
+                     "enrollment": None, "supply_constrained": False}],
+                "escalated": [
+                    {"course": "CHEM <101>", "success_rate": 0.40, "retention_rate": 0.70,
+                     "enrollment": 300, "supply_constrained": True}],
+                "matched": 2, "offered_without_outcome": 1,
+                "not_assessed": [
+                    {"check": "student_completion", "status": "inert",
+                     "reason": "an aggregate course rate is not a completion rate"},
+                    {"check": "causation", "status": "inert",
+                     "reason": "a low rate next to a constraint is a co-occurrence"}],
+            },
+            "equity_success_gap": {
+                "status": "active",
+                "label": "Equity Course-Success Gap: a MEASURED, AGGREGATE gap between "
+                         "demographic subgroups ... NOT a completion gap ...",
+                "granularity": "Course", "suppression_min": 10,
+                "courses": [{
+                    "course": "CHEM <101>", "reference_subgroup": "All",
+                    "reference_rate": 0.62, "reference_basis": "all_row",
+                    "below_reference": [{"subgroup": "Group B", "success_rate": 0.45,
+                                         "gap": -0.17}],
+                    "suppressed_subgroups": 2}],
+                "courses_with_gap": 1,
+                "not_assessed": [
+                    {"check": "causation", "status": "inert",
+                     "reason": "a gap is a difference, not a cause"},
+                    {"check": "suppressed_subgroups", "status": "inert",
+                     "reason": "small cells below 10 were suppressed"}],
+            },
+            "minimal_perturbation": {
+                "status": "active",
+                "label": "Minimal-perturbation recommender: the fewest OFFERING changes "
+                         "... NOT a student outcome and NOT a completion claim ...",
+                "horizon_terms": [2268, 2272],
+                "programs": [{
+                    "code": "BIO-AS", "title": "Biology <AS>",
+                    "total_changes": 3, "score_before": 60, "score_after": 90,
+                    "buildable_after": True,
+                    "actions": [
+                        {"action": "add_section", "course": "ENGL <101>",
+                         "reason": "no section offered in the audited terms"},
+                        {"action": "add_alt_time_section", "course": "MATH <1>",
+                         "resolves": ["PHYS <1>"],
+                         "reason": "every offered section conflicts with PHYS <1>"},
+                        {"action": "add_choice_option",
+                         "options": ["HIST <1>", "HIST <2>", "HIST <3>"],
+                         "need": 2, "offered": 1, "shortfall": 1,
+                         "offer_candidates": ["HIST <2>", "HIST <3>"],
+                         "reason": "the disjunctive requirement is short"}],
+                    "notes": ["GONE <9>: required but absent from the active catalog — excluded"],
+                }],
+                "not_assessed": [
+                    {"check": "seat_instructor_room_feasibility", "status": "inert",
+                     "reason": "an offering proxy cannot see capacity, faculty, or rooms"},
+                    {"check": "student_completion", "status": "inert",
+                     "reason": "no student-level outcome exists in any LACCD source"}],
+            },
+            "contact_hours": {
+                "status": "active",
+                "label": "Contact-hour conformance: a Title 5 §55002.5 CONFORMANCE PROXY "
+                         "... NOT a compliance ruling and NOT the official record ...",
+                "assessed": 3, "consistent": 2,
+                "flagged": [{
+                    "course": "PE <1>", "term": 2268, "units": 1.0,
+                    "weekly_minutes": 1200, "woi": 18.0, "contact_category": "lecture",
+                    "term_contact_hours": 360.0, "per_unit_term_hours": 360.0,
+                    "expected_band": [9.0, 27.0], "within_band": False,
+                    "direction": "high",
+                    "summary": "PE <1>: 360.0 contact hours/unit is implausibly high"}],
+                "used_all_blocks": False,
+                "not_assessed": {
+                    "no_meeting_time": 1, "missing_units": 0, "missing_weeks": 2,
+                    "category_unknown": 1,
+                    "meeting_block_coverage": "only the first meeting block was visible "
+                    "for some sections — a multi-block section may be UNDERCOUNTED"},
+            },
         },
         "reconciliation": {
             "matched_count": 6, "unmatched_count": 2,
@@ -220,6 +388,27 @@ def _maximal_results() -> dict:
             {"detector": "time_block_conflict", "status": "inert",
              "reason": "some sections have no posted meeting time",
              "remedy": "supply day/time on every section"},
+            {"detector": "gateway_momentum", "status": "active", "found": 1,
+             "reason": "checks whether each program's English/Math gateway can be "
+                       "SCHEDULED in the first year — an OFFERING proxy"},
+            {"detector": "corequisite_availability", "status": "active", "found": 1,
+             "reason": "checks whether a gateway's catalog corequisite is scheduled "
+                       "in the SAME first-year term — a co-OFFERING STRUCTURE proxy"},
+            {"detector": "infeasibility", "status": "active", "found": 1,
+             "reason": "isolates the minimal set of required courses behind an "
+                       "unbuildable cohort — a deterministic structural diagnostic"},
+            {"detector": "demand_success", "status": "active", "found": 1,
+             "reason": "crosses measured aggregate course success with the supply "
+                       "signals — a measured course outcome, not completion"},
+            {"detector": "equity_success_gap", "status": "active", "found": 1,
+             "reason": "measures the aggregate course-success gap between subgroups "
+                       "(small cells <10 suppressed) — a measured difference, not causal"},
+            {"detector": "minimal_perturbation", "status": "active", "found": 1,
+             "reason": "recommends the fewest OFFERING changes that flip a program's "
+                       "required path to buildable — a structural offering recommendation"},
+            {"detector": "contact_hours", "status": "active", "found": 1,
+             "reason": "compares observed scheduled in-class time to a wide Title 5 band "
+                       "and flags implausible outliers — a conformance proxy, not a ruling"},
         ],
         "ge_coverage": {
             "requested": True, "pattern": "igetc", "assist_status": "ok",
@@ -337,6 +526,28 @@ def _inert_each_section_results() -> dict:
                               "reason": "no timed sections"},
             "demand_supply": {"status": "inert", "label": "... demand PROXY ...",
                               "reason": "no seat counts available"},
+            "gateway_momentum": {"status": "inert", "label": "... gateway PROXY ...",
+                                 "reason": "neither English nor Math gateway identifiable"},
+            "corequisite_availability": {"status": "inert",
+                                         "label": "... coreq STRUCTURE proxy ...",
+                                         "reason": "no corequisite linkage available"},
+            "infeasibility": {"status": "inert",
+                              "label": "... infeasibility STRUCTURAL diagnostic ...",
+                              "reason": "every program cohort has a feasible plan to explain"},
+            "demand_success": {"status": "inert",
+                               "label": "... course success MEASURED aggregate ...",
+                               "reason": "no course-success export supplied"},
+            "equity_success_gap": {"status": "inert",
+                                   "label": "... equity gap MEASURED ...",
+                                   "reason": "no disaggregated course-success export supplied"},
+            "minimal_perturbation": {"status": "inert",
+                                     "label": "... minimal-perturbation OFFERING ...",
+                                     "reason": "every audited program's required path is "
+                                               "already structurally buildable"},
+            "contact_hours": {"status": "inert",
+                              "label": "... contact-hour CONFORMANCE proxy ...",
+                              "reason": "no section carries units + weeks-of-instruction "
+                                        "+ a meeting time"},
         },
     }
 

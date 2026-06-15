@@ -127,6 +127,10 @@ DEFAULT_FETCH_DEADLINE_SECONDS = 90.0
 # constraint (after collapsing case + hyphens/spaces). Co-Requisite ("corequisite")
 # and Advisory ("advisory") are deliberately ABSENT, so they are excluded.
 _PREREQ_ITEM_TYPES = frozenset({"prerequisite"})
+# The leaf itemType that marks a CO-REQUISITE support course (F9). Read by the
+# SEPARATE coreq walk (``corequisites_of``) only — the prereq path above never
+# sees it, so capturing coreqs leaves the prereq dnf byte-identical.
+_COREQ_ITEM_TYPES = frozenset({"corequisite"})
 
 
 def tenant_for(campus):
@@ -323,6 +327,65 @@ def _node_dnf(node):
     return _merge_and(child_dnfs)
 
 
+# ---- corequisite extraction (PURE; F9) ------------------------------------
+# AB1705 corequisite SUPPORT (itemType=Co-Requisite) is the inverse of the
+# prereq filter. It is captured by a SEPARATE walk so the prereq dnf path
+# (``requisites_to_dnf`` / ``_leaf_dnf``) stays byte-identical. Corequisites are
+# co-enrollment supports (a SAME-TERM conjunction), NOT an ordering DNF, so this
+# returns a FLAT, deduped list of course ids — deliberately simpler than the
+# OR/AND prereq structure, and consumed only as co-OFFERING structure (never an
+# ordering constraint, never fed to the engine).
+def _walk_coreqs(node, out):
+    if not isinstance(node, dict):
+        return
+    if _is_leaf(node):
+        item = node["item"]
+        if (item.get("isCourse")
+                and _itemtype_key(item.get("itemType")) in _COREQ_ITEM_TYPES):
+            code = item.get("code")
+            if code and str(code).strip():
+                out.append(normalize_course_code(code))
+        return
+    for child in node.get("blockList") or []:
+        _walk_coreqs(child, out)
+
+
+def corequisites_of(node):
+    """All Co-Requisite course ids in a requisites tree (PURE; F9).
+
+    Walks the SAME recursive ``requisites`` tree ``requisites_to_dnf`` walks, but
+    keeps the leaves whose ``itemType`` collapses to "corequisite" (and drops
+    Prerequisite/Advisory — the inverse of ``_leaf_dnf``). Each kept code is
+    normalized via ``normalize_course_code`` (the same identity the prereq path
+    uses, idempotent under ``mapping._norm``) so a downstream join against catalog
+    Course IDs is consistent. Returns a flat ``list[str]`` deduped first-seen
+    (the tree-walk order is deterministic); ``[]`` when there are no coreq leaves.
+    """
+    out = []
+    _walk_coreqs(node, out)
+    seen = set()
+    deduped = []
+    for cid in out:
+        if cid not in seen:
+            seen.add(cid)
+            deduped.append(cid)
+    return deduped
+
+
+def corequisite_map(records):
+    """``course_id -> list of corequisite course ids`` for records WITH coreqs (F9).
+
+    Keys/values share the ``normalize_course_code`` identity the prereq path uses.
+    Records lacking a ``coreqs`` key (e.g. the FIXTURE-ONLY
+    ``elumen.load_elumen_fixture`` shape, which is pre-DNF'd and carries no
+    requisites tree) contribute nothing — an honest empty entry, never a KeyError.
+    Pure + deterministic (preserves record order). Courses with no coreq are
+    OMITTED, so a downstream caller distinguishes "has support" from "none".
+    """
+    return {r["course_id"]: list(r["coreqs"])
+            for r in records if r.get("coreqs")}
+
+
 # ---- raw-text provenance (PURE) -------------------------------------------
 def _requisites_to_text(node, depth=0):
     """Short human-readable prereq text for provenance (the record ``raw``).
@@ -366,11 +429,16 @@ def _course_identity(wrapper):
 def course_record(wrapper):
     """One course wrapper -> a record for ``sources.elumen.build_prereq_map``.
 
-    Returns ``{"course_id", "raw", "dnf"}`` or ``None`` when the wrapper has no
-    usable identity. ``fullCourseInfo`` is a JSON STRING (``json.loads``); a
+    Returns ``{"course_id", "raw", "dnf", "coreqs"}`` or ``None`` when the wrapper
+    has no usable identity. ``fullCourseInfo`` is a JSON STRING (``json.loads``); a
     malformed string raises ``SourceDataError`` naming the source + course (drift
     is loud, never silently dropped). A wrapper missing ``fullCourseInfo`` /
-    ``requisites`` is a valid "no prerequisite" record (dnf == []).
+    ``requisites`` is a valid "no prerequisite" record (dnf == [], coreqs == []).
+
+    ``dnf`` is the prereq-only DNF (Co-Requisite/Advisory excluded) consumed by
+    ``build_prereq_map`` UNCHANGED. ``coreqs`` is the SEPARATE F9 list of
+    Co-Requisite support course ids (``corequisites_of``); build_prereq_map and
+    compute_coverage ignore it, so the prereq path stays byte-identical.
     """
     if not isinstance(wrapper, dict):
         raise SourceDataError(
@@ -383,8 +451,8 @@ def course_record(wrapper):
 
     info_raw = wrapper.get("fullCourseInfo")
     if info_raw is None or (isinstance(info_raw, str) and not info_raw.strip()):
-        # No course info at all -> treat as no prerequisite (valid, not an error).
-        return {"course_id": course_id, "raw": "", "dnf": []}
+        # No course info at all -> no prerequisite AND no corequisite (valid).
+        return {"course_id": course_id, "raw": "", "dnf": [], "coreqs": []}
 
     if isinstance(info_raw, str):
         try:
@@ -406,7 +474,8 @@ def course_record(wrapper):
     requisites = info.get("requisites") if isinstance(info, dict) else None
     dnf = requisites_to_dnf(requisites) if requisites else []
     raw = _requisites_to_text(requisites) if requisites else ""
-    return {"course_id": course_id, "raw": raw, "dnf": dnf}
+    coreqs = corequisites_of(requisites) if requisites else []
+    return {"course_id": course_id, "raw": raw, "dnf": dnf, "coreqs": coreqs}
 
 
 # ---- production-use guardrails: throttle + bounded backoff retry ----------
