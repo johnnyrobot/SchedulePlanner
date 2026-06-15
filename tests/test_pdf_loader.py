@@ -54,14 +54,14 @@ def test_bundled_java_detected_via_meipass(monkeypatch, tmp_path):
     base = _fake_jre(tmp_path)
     monkeypatch.setattr(pdf_loader.sys, "_MEIPASS", base, raising=False)
     monkeypatch.setattr(pdf_loader.shutil, "which", lambda _name: None)  # no system java
-    monkeypatch.delenv("EDGESCHED_JRE", raising=False)
+    monkeypatch.delenv("SCHEDULEPLANNER_JRE", raising=False)
     assert pdf_loader._bundled_java() == os.path.join(base, "jre", "bin", "java")
     assert pdf_loader.java_present() is True
 
 
 def test_bundled_java_env_override(monkeypatch, tmp_path):
     base = _fake_jre(tmp_path)
-    monkeypatch.setenv("EDGESCHED_JRE", os.path.join(base, "jre"))
+    monkeypatch.setenv("SCHEDULEPLANNER_JRE", os.path.join(base, "jre"))
     assert pdf_loader._bundled_java() == os.path.join(base, "jre", "bin", "java")
 
 

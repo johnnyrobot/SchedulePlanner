@@ -1,8 +1,8 @@
-# EdgeSched — Live LACCD Data Test Report
+# SchedulePlanner — Live LACCD Data Test Report
 
 **Date:** 2026-06-01  ·  **Campus:** Los Angeles Mission College (LAMC)  ·  **Term tested:** 2268 (Fall)  ·  **Source site:** https://la-mission.programmapper.ws/academics
 
-This report records an end-to-end test of EdgeSched's **“Build from live LACCD data”** path across **all 6 Learning & Career Pathways** published on the LA Mission College Program Mapper. Every degree below was built from **live, public APIs** — nothing was mocked or replayed from a fixture.
+This report records an end-to-end test of SchedulePlanner's **“Build from live LACCD data”** path across **all 6 Learning & Career Pathways** published on the LA Mission College Program Mapper. Every degree below was built from **live, public APIs** — nothing was mocked or replayed from a fixture.
 
 ## Executive summary
 
@@ -166,7 +166,7 @@ python3 build_live_workbook.py --campus LAMC --terms 2268 \
     --out data/live_LAMC.xlsx
 ```
 
-The full 33-degree matrix was run via the `edgesched-live-pathways-test` workflow (Haiku agents, 6-wide). Machine-readable results for every degree are saved alongside this file as `LIVE_DATA_PATHWAYS_TEST_RESULTS.json`.
+The full 33-degree matrix was run via the `SchedulePlanner-live-pathways-test` workflow (Haiku agents, 6-wide). Machine-readable results for every degree are saved alongside this file as `LIVE_DATA_PATHWAYS_TEST_RESULTS.json`.
 
 ---
 *Generated 2026-06-01 from a live run against the public LACCD APIs (LAMC, term 2268). 33/33 builds succeeded.*

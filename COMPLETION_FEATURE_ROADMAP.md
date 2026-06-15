@@ -1,4 +1,4 @@
-# edgesched — Completion-Feature Roadmap
+# SchedulePlanner — Completion-Feature Roadmap
 
 *Synthesis of two research efforts into a buildable feature plan. Prepared 2026-06-04.*
 
@@ -7,15 +7,15 @@
 > rendered reports + claim→source maps at
 > `~/code/DeepResearch/inference/output/tongyi-dr_sglang/reports/`). (2) The **"All Courses Data"
 > analysis** — the study of 14 real LAMC files (timeblocks, the 2-Year Completion scaffold,
-> enrollment/facility/course masters) that mapped what edgesched can actually compute (the
+> enrollment/facility/course masters) that mapped what SchedulePlanner can actually compute (the
 > *data-readiness* lens; full report `~/Desktop/all-courses-schedule-analysis-2026-06-03.md`).
 
 ## The convergent insight
 
-edgesched today is mostly a *single-student term planner* plus a set of *whole-schedule detectors*.
+SchedulePlanner today is mostly a *single-student term planner* plus a set of *whole-schedule detectors*.
 But the strongest completion evidence points at **program- and institution-level** levers —
 guided-pathway course-map fidelity, bottleneck relief, standardized time-block conformance,
-demand-driven scheduling, and equity segmentation. This roadmap pivots edgesched toward an
+demand-driven scheduling, and equity segmentation. This roadmap pivots SchedulePlanner toward an
 **institutional schedule-quality / completion-feasibility analyzer** — which is exactly the
 *"structural-feasibility + seat-supply score"* the data report named (§4.3) as the **only honest
 completion target** (no student-level outcome exists in any LACCD source, so every signal here is a
@@ -37,7 +37,7 @@ completion target** (no student-level outcome exists in any LACCD source, so eve
 
 ## Research-lever → feature → status map
 
-| Research lever (source) | edgesched feature | Status |
+| Research lever (source) | SchedulePlanner feature | Status |
 |---|---|---|
 | Guided-pathway course maps ✅; "57% can't get required courses" ✅ + shutout ✅; "enroll in all required courses in one term" | **F1 Program-Map Buildability Audit** | ✅ **SHIPPED** (branch `feat/program-buildability-audit`) |
 | Bottleneck / single-section courses ✅ | **F2 Cross-Program Bottleneck Leaderboard** | ✅ **SHIPPED** (branch `feat/cross-program-bottleneck`) |
@@ -232,7 +232,7 @@ window, re-score).
 
 A curated, source-mapped evidence appendix in the exported report + chat grounding that explains *why*
 a flagged conflict matters, citing **only the ✅ vetted claims** (Odessa/Kilgore/BCTC; 57% / shutout
-/ +5.41pp persistence). Makes edgesched persuasive to administrators while staying honest. Fit: a
+/ +5.41pp persistence). Makes SchedulePlanner persuasive to administrators while staying honest. Fit: a
 `report_export` section + a `chat_assist._context` injection; reuses the claim→source-map methodology.
 
 ## Fast-follow precision items (cheap; sharpen F1/F2)

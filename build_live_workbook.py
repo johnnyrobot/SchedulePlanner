@@ -1874,7 +1874,7 @@ def _print_banner(report):
 
 def main():
     ap = argparse.ArgumentParser(
-        description="Build an EdgeSched workbook from live LACCD sources.")
+        description="Build a SchedulePlanner workbook from live LACCD sources.")
     ap.add_argument("--campus", default="LAMC")
     ap.add_argument("--terms", default="2264,2266,2268")
     ap.add_argument("--program", default="Biology")
