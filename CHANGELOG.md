@@ -1,0 +1,62 @@
+# Changelog
+
+All notable changes to SchedulePlanner (edgesched) are documented here.
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [0.2.1] — 2026-06-15
+
+Ship-review hardening (PR #85). No behavior change on the happy path; closes the
+actionable Security and Tests findings from the 4-pillar ship-readiness review.
+
+### Security
+- **program_mapper:** an unknown/typo'd campus now raises a named `SourceDataError`
+  listing the valid campuses (via `_config_for`) instead of a raw `KeyError`, before
+  any network call — mirroring the `assist` / `elumen` clients.
+- **SBOM license gate:** the no-copyleft gate now **fails on any unverifiable
+  (`UNKNOWN`) license** instead of silently passing it — a package whose license
+  metadata is unreadable on the gate runner could otherwise have hidden a copyleft
+  dependency. Adds a vetted-license fallback map (`VETTED_LICENSE_FALLBACKS`) for
+  platform-conditional / metadata-less packages (clr-loader, colorama, pythonnet,
+  qtpy, tzdata, cffi, pycparser).
+
+### Tests
+- ~40 new offline regression tests: SSRF input-sanitization clamp, a cross-version
+  determinism plan-hash golden, full `analyze_live` raw-socket network isolation,
+  render-registry order + cross-surface no-silent-drop, malformed-input hardening,
+  ui.html output-escaping guard, an adversarial prompt-injection corpus, and
+  supply-chain (JRE checksum) pinning. Offline suite: 1006 → 1046 passing.
+
+## [0.2.0] — 2026-06-15
+
+Enhancement release: the F8/F9 + E2–E19 detector / infrastructure / chat-hardening
+stack (PRs #65–#84) plus 8 adversarial-review bug fixes (#57–#64). Tagged but not
+published as a release artifact; superseded by 0.2.1.
+
+### Added
+- First-year gateway-momentum (F8) and AB1705 corequisite co-availability (F9)
+  detectors; E11 infeasibility explainer (CP-SAT MUS); E9 course-success adapter;
+  E13 equity course-success gap; E14 minimal-perturbation recommender; E15 Title 5
+  §55002.5 contact-hour conformance.
+- Supply chain: E4 pip-audit CVE gate, E16 CycloneDX SBOM + no-copyleft license
+  gate, E5 SLSA build-provenance attestation.
+- Chat hardening: E17 schema-constrained JSON routing, E18 indirect-prompt-injection
+  content fence, E19 RAGAS-style groundedness guard.
+
+### Fixed
+- Full multi-block meeting footprint (H1+M1); cadence-derived "~N years" (M2);
+  windowed GE schedulability (M3); per-group + element-level schema-drift guards
+  (M4/M5); engine hot-path conflict-scan scoping (M6/M7); derived QA-gate live
+  count (M8); source-agnostic 403 hint (L1). Determinism preserved (engine plans
+  byte-identical to 0.1.x on the bundled data).
+
+## [0.1.0] — 2026-06-03
+
+First signed, notarized, and stapled macOS release (Developer ID; arm64 `.dmg`).
+Deterministic LACCD schedule + completion-feasibility analyzer: pywebview desktop
+app, OR-Tools CP-SAT engine, optional local Gemma via Ollama, bundled Temurin JRE
+for the catalog PDF feature.
+
+[0.2.1]: https://github.com/johnnyrobot/edgesched/releases/tag/v0.2.1
+[0.2.0]: https://github.com/johnnyrobot/edgesched/releases/tag/v0.2.0
+[0.1.0]: https://github.com/johnnyrobot/edgesched/releases/tag/v0.1.0
