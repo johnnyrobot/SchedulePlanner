@@ -450,6 +450,57 @@ def test_solver_separates_hard_time_conflict(tmp_path):
     assert term_of["A 1"] != term_of["B 1"]
 
 
+def test_solver_separates_conflict_on_secondary_meeting_block(tmp_path):
+    """A hard time conflict that exists ONLY on a section's SECONDARY meeting block
+    (carried in the optional ``Meetings`` column, not the first-block Days/Times)
+    still separates the two required courses.
+
+    A 1's first block (MW 9-10) does NOT overlap B 1 (F 9-10); the overlap lives
+    only on A 1's SECOND block (F 9-10), encoded in Meetings. Separation therefore
+    proves the engine reads the full meeting footprint, not just block[0]."""
+    a_blocks = json.dumps([{"days": "MW", "times": "9:00 AM - 10:00 AM"},
+                           {"days": "F", "times": "9:00 AM - 10:00 AM"}])
+    rows = []
+    for term in (2248, 2252):                       # both offered Fall+Spring
+        rows.append({"Term": term, "CLASS": "A 1", "Class Status": "Active",
+                     "Cap Enrl": 0, "Tot Enrl": 0, "Wait Tot": 0,
+                     "Days": "MW", "Times": "9:00 AM - 10:00 AM",
+                     "Meetings": a_blocks})
+        rows.append({"Term": term, "CLASS": "B 1", "Class Status": "Active",
+                     "Cap Enrl": 0, "Tot Enrl": 0, "Wait Tot": 0,
+                     "Days": "F", "Times": "9:00 AM - 10:00 AM",
+                     "Meetings": ""})                # single block -> Days/Times fallback
+    wb = tmp_path / "secondary.xlsx"
+    _write_wb(str(wb), rows)
+    plan = engine.run(str(wb))["programs"]["P"]["cohorts"]["full_time"]["plan"]
+    term_of = {c: t for t, cs in plan.items() for c in cs}
+    assert term_of["A 1"] != term_of["B 1"]
+
+
+def test_engine_tolerates_malformed_meetings_cell(tmp_path):
+    """A corrupt / hand-edited ``Meetings`` cell must NOT crash engine.run. The
+    engine degrades to the visible first-block Days/Times for that row (fail open,
+    mirroring the other optional meeting columns), never raising JSONDecodeError or
+    TypeError. ``engine.run`` accepts any user-openable workbook, so a tampered cell
+    cannot be allowed to take down the whole solve."""
+    rows = []
+    for term in (2248, 2252):
+        rows.append({"Term": term, "CLASS": "A 1", "Class Status": "Active",
+                     "Cap Enrl": 0, "Tot Enrl": 0, "Wait Tot": 0,
+                     "Days": "MW", "Times": "9:00 AM - 10:00 AM",
+                     "Meetings": "{bad json"})              # malformed -> JSONDecodeError
+        rows.append({"Term": term, "CLASS": "B 1", "Class Status": "Active",
+                     "Cap Enrl": 0, "Tot Enrl": 0, "Wait Tot": 0,
+                     "Days": "F", "Times": "9:00 AM - 10:00 AM",
+                     "Meetings": "Infinity"})               # valid JSON, non-list float
+    wb = tmp_path / "bad_meetings.xlsx"
+    _write_wb(str(wb), rows)
+    # must not raise; falls back to block[0] Days/Times (MW vs F -> no overlap)
+    plan = engine.run(str(wb))["programs"]["P"]["cohorts"]["full_time"]["plan"]
+    term_of = {c: t for t, cs in plan.items() for c in cs}
+    assert term_of["A 1"] == term_of["B 1"]
+
+
 def test_solver_byte_identical_without_meeting_data(tmp_path):
     """Non-conflicting Days/Times produce the SAME plan as omitting the columns
     entirely — the additive no-op contract that protects determinism."""

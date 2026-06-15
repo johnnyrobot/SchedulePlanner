@@ -71,8 +71,20 @@ def _parse_term_listing(listing, campus, term):
             catalog = (course.get("catalogNbr") or "").strip()
             course_id = f"{subj} {catalog}"
             for section in _iter_sections(course):
-                meetings = section.get("meetings") or []
-                meeting = meetings[0] if meetings else {}
+                raw_meetings = section.get("meetings") or []
+                meeting = raw_meetings[0] if raw_meetings else {}
+                # Capture EVERY meeting block (M1): a section can meet on more than
+                # one day/time/room pattern, and meetings[1:] used to be dropped
+                # silently, blinding the room/time-block conflict detectors. The
+                # flat days/times/room/facil_id below stay the FIRST block, so
+                # mapping.write_workbook — and therefore engine.run — is unchanged.
+                meeting_blocks = [{
+                    "days": m.get("days", ""),
+                    "times": m.get("times", ""),
+                    "room": m.get("room", ""),
+                    "facil_id": m.get("facilityId", "") or m.get("facilId", ""),
+                    "instr": m.get("instr", ""),
+                } for m in raw_meetings if isinstance(m, dict)]
                 records.append({
                     "term": int(term),
                     "subject": subj,
@@ -99,6 +111,9 @@ def _parse_term_listing(listing, campus, term):
                     # from the export's "Facil ID" column.
                     "facil_id": meeting.get("facilityId", "") or meeting.get("facilId", ""),
                     "instructor": meeting.get("instr", ""),
+                    # All meeting blocks (>=1) for the outside-engine detectors;
+                    # the flat fields above are block[0]. See timeblocks.section_meeting.
+                    "meetings": meeting_blocks,
                 })
     return records
 

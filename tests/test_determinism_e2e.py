@@ -147,6 +147,49 @@ def test_llm_parser_does_not_change_the_plan():
         assert mirror_parser(text) == engine.parse_prereq(text, llm=None)
 
 
+def test_multiblock_conflict_is_deterministic_and_moves_the_plan(tmp_path):
+    """The gated multi-block wiring — the engine reads the optional ``Meetings``
+    column so a hard conflict on a SECONDARY meeting block separates two required
+    courses — is (a) deterministic (byte-identical across two runs on the new path)
+    and (b) non-vacuous: stripping the Meetings column changes the plan, proving the
+    secondary block actually moves the solve (this is the gated, disclosed output
+    change vs the pre-feature engine that only read block[0] via Days/Times)."""
+    import pandas as pd
+    a_blocks = json.dumps([{"days": "MW", "times": "9:00 AM - 10:00 AM"},
+                           {"days": "F", "times": "9:00 AM - 10:00 AM"}])
+
+    def write(path, with_meetings):
+        rows = []
+        for term in (2248, 2252):
+            a = {"Term": term, "CLASS": "A 1", "Class Status": "Active",
+                 "Cap Enrl": 0, "Tot Enrl": 0, "Wait Tot": 0,
+                 "Days": "MW", "Times": "9:00 AM - 10:00 AM"}
+            b = {"Term": term, "CLASS": "B 1", "Class Status": "Active",
+                 "Cap Enrl": 0, "Tot Enrl": 0, "Wait Tot": 0,
+                 "Days": "F", "Times": "9:00 AM - 10:00 AM"}
+            if with_meetings:
+                a["Meetings"], b["Meetings"] = a_blocks, ""
+            rows += [a, b]
+        cat = pd.DataFrame([{"Course ID": c, "Units": 3,
+                             "Prerequisites (structured)": ""} for c in ("A 1", "B 1")])
+        progs = pd.DataFrame([{"Program Code": "P", "Program Title": "P",
+                               "Course ID": c, "Recommended Semester": ""}
+                              for c in ("A 1", "B 1")])
+        with pd.ExcelWriter(path) as xl:
+            pd.DataFrame(rows).to_excel(xl, sheet_name="sections", index=False)
+            cat.to_excel(xl, sheet_name="catalog", index=False)
+            progs.to_excel(xl, sheet_name="programs", index=False)
+
+    with_m = tmp_path / "with.xlsx"
+    without_m = tmp_path / "without.xlsx"
+    write(with_m, True)
+    write(without_m, False)
+    # (a) deterministic on the new multi-block path
+    assert _canon(engine.run(str(with_m))) == _canon(engine.run(str(with_m)))
+    # (b) non-vacuous: the secondary block moves the plan vs the same data without it
+    assert _canon(engine.run(str(with_m))) != _canon(engine.run(str(without_m)))
+
+
 def test_ge_plan_is_deterministic(tmp_path):
     import pandas as pd
     out = tmp_path / "ge_det.xlsx"

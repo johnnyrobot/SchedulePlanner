@@ -10,14 +10,23 @@ all-zero / all-blank behavior byte-identically):
     when present (records enriched from the IR export);
   - build_catalog_df / write_workbook accept a ``prereqs`` course-id -> CNF
     string map for the structured-prereq column.
-The section sheet additionally carries one OPTIONAL column beyond
-engine.REQUIRED_COLUMNS["sections"] — ``Avail Status`` — holding the schedule
-API's per-section availability (Open/Waitlist/Closed). engine.analyze reads it
-optionally (absent in demo/IR workbooks), so it is additive: it turns the live
-waitlist STATUS into an under_supply signal without needing the IR counts.
+The section sheet additionally carries OPTIONAL columns beyond
+engine.REQUIRED_COLUMNS["sections"], each additive (demo/IR workbooks omit them
+and stay valid):
+  - ``Avail Status`` — the schedule API's per-section availability
+    (Open/Waitlist/Closed); engine.analyze turns the live waitlist STATUS into an
+    under_supply signal without needing the IR counts.
+  - ``Days`` / ``Times`` — the FIRST meeting block's day pattern and clock times,
+    read by engine._hard_conflict_pairs for time-block conflict avoidance.
+  - ``Meetings`` — the FULL multi-block meeting footprint (a canonical JSON list of
+    ``{days, times}`` blocks; empty for single-block sections), so the engine can
+    separate two courses that clash only on a SECONDARY block. Days/times ONLY —
+    instructor/room are NOT reintroduced into the workbook (privacy). See
+    ``_encode_meetings`` and engine._hard_conflict_pairs.
 """
 from __future__ import annotations
 
+import json
 import math
 import re
 
@@ -30,7 +39,7 @@ from .http import SourceDataError
 SOURCE = "live-source mapping"
 
 SECTION_COLUMNS = ["Term", "CLASS", "Class Status", "Cap Enrl", "Tot Enrl",
-                   "Wait Tot", "Avail Status", "Days", "Times"]
+                   "Wait Tot", "Avail Status", "Days", "Times", "Meetings"]
 CATALOG_COLUMNS = ["Course ID", "Units", "Prerequisites (structured)"]
 PROGRAM_COLUMNS = ["Program Code", "Program Title", "Course ID", "Recommended Semester"]
 GE_REQUIREMENT_COLUMNS = ["Program Code", "Pattern", "Area", "Area Title",
@@ -126,6 +135,33 @@ def _to_units(value, default=3.0):
     return default if math.isnan(result) else result
 
 
+def _encode_meetings(record):
+    """JSON-encode a section's FULL meeting-block list so the engine can see the
+    SECONDARY blocks the flat Days/Times (block[0]) hide.
+
+    Returns the empty string when the section has at most one block — the engine
+    then falls back to Days/Times and the solve stays byte-identical for that
+    section, so the ONLY behavioral change is for genuinely multi-pattern sections.
+
+    PRIVACY DOCTRINE: only ``days`` and ``times`` are encoded. The raw block dicts
+    also carry ``room``/``facil_id``/``instr``; those are deliberately NOT written
+    into the workbook — re-introducing instructor data here would violate the same
+    no-instructor invariant the rest of this mapper upholds. Keys are sorted so the
+    encoding is canonical (stable bytes -> determinism)."""
+    blocks = record.get("meetings") or []
+    if len(blocks) < 2:
+        return ""
+    slim = [{"days": str(b.get("days", "") or ""),
+             "times": str(b.get("times", "") or "")} for b in blocks]
+    # CANONICAL encoding (determinism): block ORDER is semantically irrelevant
+    # (a section meeting "MW + F" is the same as "F + MW"), so sort the blocks and
+    # the keys. Two runs that receive the same blocks in a different source order
+    # then still produce byte-identical cells — the live API does not promise a
+    # stable meeting order across calls.
+    slim.sort(key=lambda b: (b["days"], b["times"]))
+    return json.dumps(slim, sort_keys=True, separators=(",", ":"))
+
+
 def build_sections_df(section_records):
     rows = []
     for i, r in enumerate(section_records):
@@ -163,8 +199,13 @@ def build_sections_df(section_records):
             # Per-section meeting pattern (days + clock times). Additive optional
             # columns (default ""): engine reads them for time-block conflict
             # avoidance when present; absent them the engine is byte-identical.
+            # ``Days``/``Times`` are the FIRST block (display + single-pattern
+            # sections); ``Meetings`` carries the full multi-block footprint (empty
+            # for single-block sections) so the engine separates courses that clash
+            # only on a SECONDARY block — days/times only, never instructor/room.
             "Days": str(r.get("days", "") or ""),
             "Times": str(r.get("times", "") or ""),
+            "Meetings": _encode_meetings(r),
         })
     return pd.DataFrame(rows, columns=SECTION_COLUMNS)
 

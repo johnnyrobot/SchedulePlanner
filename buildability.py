@@ -112,7 +112,9 @@ def offered_by_course(sections):
         out.setdefault(cid, []).append({
             "term": term,
             "class_nbr": cls,
-            "meeting": timeblocks.parse_meeting(r.get("days", ""), r.get("times", "")),
+            # Full block union (M1): a required-course time conflict on a section's
+            # secondary meeting block is now seen, not just the first pattern.
+            "meeting": timeblocks.section_meeting(r),
             "status": str(r.get("status", "") or r.get("Avail Status", "") or "").strip(),
             "cap": _int(r.get("Cap Enrl")),
             "tot": _int(r.get("Tot Enrl")),

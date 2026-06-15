@@ -117,3 +117,43 @@ def test_fetch_sections_no_skips_leaves_status_skipped_empty(make_client):
     schedule.fetch_sections("LAMC", [2268], client=make_client({"/listing/LAMC/2268": LISTING_2268}),
                             status=status)
     assert status.get("skipped") == []
+
+
+LISTING_MULTI = {
+    "subjects": [{"code": "BIOL", "name": "Biology", "courses": [{
+        "subject": "BIOLOGY", "catalogNbr": "3", "descr": "General Biology",
+        "units": "4.00", "sections": [{
+            "classNbr": "20001 (LEC)", "seats": "30", "status": "Open",
+            "meetings": [
+                {"days": "MW", "times": "10:00 AM - 11:25 AM", "room": "INST 2007",
+                 "facilityId": "MINST2007", "instr": "STAFF"},
+                {"days": "F", "times": "2:00 PM - 4:50 PM", "room": "AMP 101",
+                 "facilityId": "MAMP101", "instr": "STAFF"}],
+            "relsections": [], "classType": ["INP"]}]}]}],
+}
+
+
+def test_fetch_sections_captures_all_meeting_blocks(make_client):
+    """A section meeting on TWO day/time patterns keeps BOTH (M1): meetings[1:] used
+    to be silently dropped. The flat days/times/room stay the FIRST block so the
+    workbook the engine reads is byte-identical."""
+    client = make_client({"/listing/LAMC/2268": LISTING_MULTI})
+    r = schedule.fetch_sections("LAMC", [2268], client=client)[0]
+    # flat fields = first block (engine/workbook unchanged)
+    assert r["days"] == "MW" and r["times"] == "10:00 AM - 11:25 AM"
+    assert r["room"] == "INST 2007"
+    # both blocks captured, with their own room/facil id
+    assert len(r["meetings"]) == 2
+    assert r["meetings"][1]["days"] == "F"
+    assert r["meetings"][1]["times"] == "2:00 PM - 4:50 PM"
+    assert r["meetings"][1]["room"] == "AMP 101"
+    assert r["meetings"][1]["facil_id"] == "MAMP101"
+
+
+def test_fetch_sections_single_meeting_still_carries_one_block(make_client):
+    """A normal one-meeting section carries a single-block list, so detectors can
+    iterate uniformly and section_meeting stays byte-identical to the flat parse."""
+    client = make_client({"/listing/LAMC/2268": LISTING_2268})
+    r = schedule.fetch_sections("LAMC", [2268], client=client)[0]
+    assert len(r["meetings"]) == 1
+    assert r["meetings"][0]["days"] == "T"

@@ -131,6 +131,48 @@ def test_report_renders_time_conflicts_block():
     assert "CHEM 101 &amp; MATH 245" in doc   # & is HTML-escaped
 
 
+def test_report_renders_room_conflicts_block():
+    """Room double-bookings + over-capacity in analysis render in the Supply-diagnostics
+    card. Previously these were injected by analyze_live and shown ONLY in the live UI —
+    silently dropped from the exported report (H1, a no-silent-drop doctrine violation)."""
+    results = {
+        "terms_in_data": 3,
+        "analysis": {
+            "rotation_gaps": [], "single_section": [],
+            "modality_mismatch": [], "under_supply": [],
+            "room_conflicts": [
+                {"kind": "double_book", "term": 2268, "room": "INST 2007",
+                 "courses": ["BIO 3", "CHEM 101"], "class_nbrs": ["10001", "10002"],
+                 "summary": "Room INST 2007 (term 2268): BIO 3 & CHEM 101 booked into the "
+                            "same room at overlapping times (classes 10001, 10002)"}],
+            "room_capacity": [
+                {"kind": "over_capacity", "course": "BIO 3", "class_nbr": "10001",
+                 "summary": "BIO 3 (class 10001) has 40 enrolled in room INST 2007 "
+                            "(seats 32) — over capacity by 8"}],
+        },
+        "programs": {},
+    }
+    doc = report_export.render_report(results)
+    assert "Room double-bookings" in doc
+    assert "booked into the same room" in doc
+    assert "BIO 3 &amp; CHEM 101" in doc          # & is HTML-escaped
+    assert "Room over capacity" in doc
+    assert "over capacity by 8" in doc
+
+
+def test_report_omits_room_blocks_when_not_computed():
+    """Workbook/demo path has no room_conflicts key (room analysis runs only in
+    analyze_live). The report must NOT show a room block then — never claim 'none found'
+    for a check that did not run."""
+    results = {"terms_in_data": 4,
+               "analysis": {"rotation_gaps": [], "single_section": [],
+                            "modality_mismatch": [], "under_supply": []},
+               "programs": {}}
+    doc = report_export.render_report(results)
+    assert "Room double-bookings" not in doc
+    assert "Room over capacity" not in doc
+
+
 def test_report_renders_buildability_section():
     """An active buildability block renders a Program-buildability card with the
     score, summary, blocking reasons, and the honest PROXY label; data escaped."""
