@@ -2,7 +2,7 @@ r"""Tolerant LACCD program-course-lists reader (multi-program requirements map).
 
 The institutional **Program Course Lists** export lists, for every degree/cert
 plan, the courses on its required path and its choice/elective lists — one row
-per ``(plan, course, bucket)``. edgesched's live path fetches ONE program per run
+per ``(plan, course, bucket)``. SchedulePlanner's live path fetches ONE program per run
 (``program_mapper`` resolves a single program), so the **cross-program demand**
 signal — *how many programs require a given course* — lives only in this file.
 That is the headline dimension of the F2 bottleneck leaderboard.

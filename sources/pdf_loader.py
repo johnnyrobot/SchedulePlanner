@@ -34,13 +34,13 @@ class PdfLoadError(RuntimeError):
 def _bundled_java():
     """Path to a bundled ``jre/bin/java`` if one ships with this build, else None.
 
-    Candidates, first existing wins: an ``EDGESCHED_JRE`` override (tests / manual),
+    Candidates, first existing wins: an ``SCHEDULEPLANNER_JRE`` override (tests / manual),
     the PyInstaller unpack dir (``sys._MEIPASS/jre``), the macOS app bundle
     (``…/Contents/Resources/jre`` derived from ``sys.executable``), and a dev
     ``build/jre`` in the repo.
     """
     candidates = []
-    env = os.environ.get("EDGESCHED_JRE")
+    env = os.environ.get("SCHEDULEPLANNER_JRE")
     if env:
         candidates.append(os.path.join(env, "bin", "java"))
     meipass = getattr(sys, "_MEIPASS", None)

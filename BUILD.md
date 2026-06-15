@@ -102,7 +102,7 @@ committed `.spec`.
 | `--add-data 'files/lamc_data.xlsx:files'` | Ships the demo workbook under `files/` so `resource_path("files", "lamc_data.xlsx")` resolves. **Without this "Load demo data" fails with "File not found."** |
 | `--collect-all ortools` | Pulls in OR-Tools' native libraries (`libortools.9.dylib` + the bundled `absl` `.dylib`s under `ortools/.libs/`) plus all submodules and data. **This is the documented high-risk item** — without it the frozen app raises an import/dyld error the moment the solver is touched. |
 | `--collect-data opendataloader_pdf` | Ships the bundled **Java CLI jar** (`opendataloader-pdf-cli.jar`) used by the Local AA/AS GE catalog parser. It is `--collect-**data**`, not `--collect-all`, on purpose: the feature runs the jar in a JVM subprocess, so PyInstaller only needs the package's pure-Python entrypoints (auto-discovered from `sources/pdf_loader.py`). `--collect-all` would also force-collect the optional `hybrid_server` submodule, whose lazy `docling`/`torch` imports drag **~300+ MB** of unused ML deps into the bundle (torch alone ≈284 MB). |
-| `--exclude-module …` (`opendataloader_pdf.hybrid_server`, `torch`, `docling`, `fastapi`, `uvicorn`, `yt_dlp`) | Hard guard so the hybrid-mode ML deps can never be bundled even when the build host happens to have them installed. edgesched imports none of these (it uses `httpx` + the solver); the catalog feature reaches the extractor only through the JVM jar above. `verify_macos_build.sh` asserts they stay out. |
+| `--exclude-module …` (`opendataloader_pdf.hybrid_server`, `torch`, `docling`, `fastapi`, `uvicorn`, `yt_dlp`) | Hard guard so the hybrid-mode ML deps can never be bundled even when the build host happens to have them installed. SchedulePlanner imports none of these (it uses `httpx` + the solver); the catalog feature reaches the extractor only through the JVM jar above. `verify_macos_build.sh` asserts they stay out. |
 
 > `--add-data` separator is **`:`** on macOS/Linux and **`;`** on Windows.
 
@@ -153,7 +153,7 @@ nothing.
   `Contents/Resources/jre`** (ditto preserves exec bits + symlinks; PyInstaller
   `--add-data` does not, hence ditto).
 - At runtime, **`sources/pdf_loader.py`** prefers `…/Contents/Resources/jre/bin/java`
-  (also `$EDGESCHED_JRE`, `sys._MEIPASS/jre`, and a dev `build/jre`), falling back
+  (also `$SCHEDULEPLANNER_JRE`, `sys._MEIPASS/jre`, and a dev `build/jre`), falling back
   to a system `java` only when unbundled.
 - **Signing:** the JRE's Mach-O (`bin/java`, `lib/server/libjvm.dylib`,
   `jspawnhelper`, …) are signed by the existing "sign every Mach-O by content"

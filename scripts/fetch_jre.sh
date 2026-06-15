@@ -16,7 +16,7 @@ SHA256_x64="91bbd07b9c65d9ecbe1fa0081b3c1ad549ed34ed21085a72fdb76598a740b54c"
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DEST="${REPO_ROOT}/build/jre"
-MARKER="${DEST}/.edgesched-jre-sha256"
+MARKER="${DEST}/.scheduleplanner-jre-sha256"
 
 if [ "$(uname -s)" != "Darwin" ]; then
   echo "error: fetch_jre.sh stages a macOS JRE; run it on macOS." >&2

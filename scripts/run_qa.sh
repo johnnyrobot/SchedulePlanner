@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# run_qa.sh — single green-suite QA gate for edgesched.
+# run_qa.sh — single green-suite QA gate for SchedulePlanner.
 #
 # Runs the full OFFLINE test suite (the `live` mark is deselected explicitly,
 # NOT via ambient pytest.ini addopts) and reports a count-agnostic PASS line.

@@ -1,4 +1,4 @@
-# EdgeSched — All-Degrees Live Sweep Report
+# SchedulePlanner — All-Degrees Live Sweep Report
 
 **Date:** 2026-06-02 · **Campus:** Los Angeles Mission College (LAMC) · **Term:** 2268 (Fall) · **Source:** https://la-mission.programmapper.ws/academics
 
