@@ -1,1 +1,1 @@
-"""Live LACCD data-source clients for EdgeSched (schedule, Program Mapper)."""
+"""Live LACCD data-source clients for SchedulePlanner (schedule, Program Mapper)."""
