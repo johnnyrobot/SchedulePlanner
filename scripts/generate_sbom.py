@@ -63,19 +63,23 @@ BUNDLED_EXTERNALS = [
     },
 ]
 
-# Vetted SPDX licenses for PLATFORM-CONDITIONAL lock packages that do NOT install
-# on the gate runner (pywebview's Windows/.NET/Qt backends are absent on macOS CI),
-# so importlib.metadata cannot read their license. Without this the gate saw
-# "UNKNOWN" and silently passed them — a GPL win32-only dep would slip through.
-# Each license was vetted from the package's PyPI metadata; keys are normalized
-# (lower, '_'->'-'). Adding a NEW platform-conditional dep FAILS the gate until it
-# is vetted in here (see unverified_components).
-PLATFORM_CONDITIONAL_LICENSES = {
-    "clr-loader": "MIT",          # pythonnet loader (Windows/.NET)
-    "colorama": "BSD-3-Clause",   # Windows ANSI shim
-    "pythonnet": "MIT",           # .NET interop backend
-    "qtpy": "MIT",                # Qt abstraction backend
-    "tzdata": "Apache-2.0",       # IANA tz database
+# Vetted SPDX licenses for lock packages whose license is NOT machine-readable on a
+# gate runner — EITHER the package is platform-conditional and not installed there
+# (pywebview's Windows/.NET/Qt backends are absent on macOS CI), OR its installed
+# metadata exposes no license string (e.g. a PEP 639 package that ships only a
+# License-File, so importlib.metadata returns ""). Without this the gate saw
+# "UNKNOWN" and silently passed them — a copyleft dep could slip through. Each
+# license was vetted from the package's PyPI page; keys are normalized
+# (lower, '_'->'-'). A NEW package the gate cannot read FAILS the gate until it is
+# vetted in here (see unverified_components).
+VETTED_LICENSE_FALLBACKS = {
+    "clr-loader": "MIT",          # pythonnet loader (Windows/.NET), platform-conditional
+    "colorama": "BSD-3-Clause",   # Windows ANSI shim, platform-conditional
+    "pythonnet": "MIT",           # .NET interop backend, platform-conditional
+    "qtpy": "MIT",                # Qt abstraction backend, platform-conditional
+    "tzdata": "Apache-2.0",       # IANA tz database, platform-conditional
+    "cffi": "MIT",                # metadata-less on some runners (PEP 639 license-file)
+    "pycparser": "BSD-3-Clause",  # metadata-less on some runners
 }
 
 
@@ -146,7 +150,7 @@ def build_components(lock_path):
         if not lic:
             # Not installed on this runner (platform-conditional): resolve from the
             # human-vetted map rather than letting it ride as UNKNOWN.
-            vetted = PLATFORM_CONDITIONAL_LICENSES.get(key)
+            vetted = VETTED_LICENSE_FALLBACKS.get(key)
             if vetted:
                 lic, source = vetted, "vetted-platform-conditional"
         comps.append({
@@ -210,7 +214,7 @@ def unverified_components(components):
     An unverifiable license is a gate FAILURE, not a pass: it could be copyleft.
     This closes the bypass where a platform-conditional package absent from the
     gate runner showed UNKNOWN and slipped the copyleft check. Fix by vetting the
-    package's real license into PLATFORM_CONDITIONAL_LICENSES."""
+    package's real license into VETTED_LICENSE_FALLBACKS."""
     return [c for c in components
             if not c.get("gate_exempt")
             and (c.get("license", "") or "UNKNOWN").upper() == "UNKNOWN"]
@@ -241,7 +245,7 @@ def main(argv=None):
                       file=sys.stderr)
         if unverified:
             print("LICENSE GATE FAILED — component(s) with an UNVERIFIABLE license (not "
-                  "installed on this runner and not vetted in PLATFORM_CONDITIONAL_LICENSES); "
+                  "installed on this runner and not vetted in VETTED_LICENSE_FALLBACKS); "
                   "an unknown license could be copyleft. Vet each from PyPI and add its SPDX "
                   "license to that map:", file=sys.stderr)
             for c in unverified:
