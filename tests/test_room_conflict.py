@@ -20,7 +20,8 @@ import pathlib
 import pytest
 
 from build_live_workbook import (_lab_pool_stats, _room_capacity_findings,
-                                 _room_collisions, _room_detector_entry)
+                                 _room_collisions, _room_detector_entry,
+                                 _section_meetings_by_course)
 from sources.facility import is_lab, load_facility
 from sources.http import SourceDataError
 
@@ -162,3 +163,42 @@ def test_detector_entry_capacity_inert_without_facility():
     entry = _room_detector_entry(secs, _room_collisions(secs), facility_used=False)
     assert entry["status"] == "active"            # rooms present
     assert entry["capacity"]["status"] == "inert"  # but no facility table
+
+
+# --- M1: secondary meeting blocks are evaluated, not dropped ------------------
+
+def test_room_conflict_detected_via_secondary_meeting_block():
+    """Two sections whose FIRST blocks don't clash but whose SECOND blocks share a
+    room at overlapping times ARE a real double-booking — previously missed because
+    meetings[1:] were dropped at ingest (M1)."""
+    a = {"term": 2248, "course": "BIO 3", "class_nbr": "100",
+         "days": "M", "times": "8:00 AM - 9:00 AM", "room": "INST 1",
+         "meetings": [{"days": "M", "times": "8:00 AM - 9:00 AM", "room": "INST 1"},
+                      {"days": "W", "times": "2:00 PM - 3:00 PM", "room": "LAB 7"}]}
+    b = {"term": 2248, "course": "CHEM 5", "class_nbr": "200",
+         "days": "T", "times": "8:00 AM - 9:00 AM", "room": "INST 9",
+         "meetings": [{"days": "T", "times": "8:00 AM - 9:00 AM", "room": "INST 9"},
+                      {"days": "W", "times": "2:30 PM - 3:30 PM", "room": "LAB 7"}]}
+    findings = _room_collisions([a, b])
+    assert len(findings) == 1
+    assert findings[0]["room"] == "LAB 7"
+    assert set(findings[0]["courses"]) == {"BIO 3", "CHEM 5"}
+
+
+def test_room_collisions_single_block_records_unchanged():
+    """A flat single-meeting record (no 'meetings' key) still works via the fallback,
+    so synthetic/import records with one block behave exactly as before."""
+    a = _sec("BIO 3", "100", room="INST 1", days="MW", times="9:00 AM - 10:00 AM")
+    b = _sec("CHEM 5", "200", room="INST 1", days="MW", times="9:30 AM - 10:30 AM")
+    findings = _room_collisions([a, b])
+    assert len(findings) == 1 and findings[0]["room"] == "INST 1"
+
+
+def test_section_meetings_by_course_unions_all_blocks():
+    """The time-block collision detector's per-course meeting map now includes EVERY
+    block of a section, so a clash on a secondary block is seen (M1)."""
+    recs = [{"course": "BIO 3", "days": "M", "times": "8:00 AM - 9:00 AM",
+             "meetings": [{"days": "M", "times": "8:00 AM - 9:00 AM"},
+                          {"days": "F", "times": "1:00 PM - 2:00 PM"}]}]
+    by_course = _section_meetings_by_course(recs)
+    assert {b[0] for b in by_course["BIO 3"][0]} == {"M", "F"}

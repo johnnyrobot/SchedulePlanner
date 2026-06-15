@@ -88,6 +88,44 @@ def test_solver_pins_deterministic_parameters():
         "solve_cohort must pin solver.parameters.num_search_workers = 1"
 
 
+def test_solver_uses_deterministic_time_budget_not_wallclock():
+    """E2: the solve budget must be WORK-based (max_deterministic_time), not the
+    wall-clock max_time_in_seconds — otherwise a slow machine could return a
+    different FEASIBLE-not-OPTIMAL plan, silently breaking cross-machine
+    reproducibility the determinism doctrine rests on."""
+    src = inspect.getsource(engine.solve_cohort)
+    assert re.search(r"max_deterministic_time\s*=", src), \
+        "solve_cohort must use a deterministic (work-based) solve budget"
+    assert "max_time_in_seconds" not in src, \
+        "solve_cohort must NOT use the wall-clock max_time_in_seconds budget"
+
+
+def test_proven_optimal_is_computed_from_solver_status_not_a_constant():
+    """SOURCE-GUARD: the bundled data always solves OPTIMAL, so the data-level test
+    below cannot tell ``proven_optimal: True`` (the honest expression) from a
+    hardcoded ``True``. Pin that the flag is the real ``st == cp_model.OPTIMAL``
+    comparison (mirrors test_solver_pins_deterministic_parameters), so a regression
+    that would silently label a FEASIBLE-not-OPTIMAL plan 'proven optimal' — the
+    exact thing the E2 honesty advisory exists to prevent — is caught."""
+    src = inspect.getsource(engine.solve_cohort)
+    assert re.search(r'"proven_optimal"\s*:\s*st\s*==\s*cp_model\.OPTIMAL', src), \
+        "proven_optimal must be computed as (st == cp_model.OPTIMAL), not a constant"
+
+
+def test_cohort_results_are_proven_optimal_on_the_default_data():
+    """E2: every solved cohort on the bundled data reaches OPTIMAL (the models are
+    tiny), so proven_optimal is True — the plan shown is the true minimum-term plan.
+    The advisory only fires if a plan is FEASIBLE-not-proven-optimal."""
+    results = engine.run(engine._default_data_path())
+    saw = 0
+    for prog in results["programs"].values():
+        for c in prog["cohorts"].values():
+            if isinstance(c, dict):
+                assert c.get("proven_optimal") is True, c
+                saw += 1
+    assert saw > 0, "expected at least one solved cohort to check"
+
+
 # ----------------------------------------------------- LLM non-interference
 def test_llm_parser_does_not_change_the_plan():
     """With an LLM prereq parser that returns exactly what the regex fallback
@@ -107,6 +145,49 @@ def test_llm_parser_does_not_change_the_plan():
     # so the equality above is non-vacuous rather than the parser being skipped.
     for text in ("(MATH 245)", "(CHEM 101 OR CHEM 102) AND MATH 245", "ENGL 101"):
         assert mirror_parser(text) == engine.parse_prereq(text, llm=None)
+
+
+def test_multiblock_conflict_is_deterministic_and_moves_the_plan(tmp_path):
+    """The gated multi-block wiring — the engine reads the optional ``Meetings``
+    column so a hard conflict on a SECONDARY meeting block separates two required
+    courses — is (a) deterministic (byte-identical across two runs on the new path)
+    and (b) non-vacuous: stripping the Meetings column changes the plan, proving the
+    secondary block actually moves the solve (this is the gated, disclosed output
+    change vs the pre-feature engine that only read block[0] via Days/Times)."""
+    import pandas as pd
+    a_blocks = json.dumps([{"days": "MW", "times": "9:00 AM - 10:00 AM"},
+                           {"days": "F", "times": "9:00 AM - 10:00 AM"}])
+
+    def write(path, with_meetings):
+        rows = []
+        for term in (2248, 2252):
+            a = {"Term": term, "CLASS": "A 1", "Class Status": "Active",
+                 "Cap Enrl": 0, "Tot Enrl": 0, "Wait Tot": 0,
+                 "Days": "MW", "Times": "9:00 AM - 10:00 AM"}
+            b = {"Term": term, "CLASS": "B 1", "Class Status": "Active",
+                 "Cap Enrl": 0, "Tot Enrl": 0, "Wait Tot": 0,
+                 "Days": "F", "Times": "9:00 AM - 10:00 AM"}
+            if with_meetings:
+                a["Meetings"], b["Meetings"] = a_blocks, ""
+            rows += [a, b]
+        cat = pd.DataFrame([{"Course ID": c, "Units": 3,
+                             "Prerequisites (structured)": ""} for c in ("A 1", "B 1")])
+        progs = pd.DataFrame([{"Program Code": "P", "Program Title": "P",
+                               "Course ID": c, "Recommended Semester": ""}
+                              for c in ("A 1", "B 1")])
+        with pd.ExcelWriter(path) as xl:
+            pd.DataFrame(rows).to_excel(xl, sheet_name="sections", index=False)
+            cat.to_excel(xl, sheet_name="catalog", index=False)
+            progs.to_excel(xl, sheet_name="programs", index=False)
+
+    with_m = tmp_path / "with.xlsx"
+    without_m = tmp_path / "without.xlsx"
+    write(with_m, True)
+    write(without_m, False)
+    # (a) deterministic on the new multi-block path
+    assert _canon(engine.run(str(with_m))) == _canon(engine.run(str(with_m)))
+    # (b) non-vacuous: the secondary block moves the plan vs the same data without it
+    assert _canon(engine.run(str(with_m))) != _canon(engine.run(str(without_m)))
 
 
 def test_ge_plan_is_deterministic(tmp_path):

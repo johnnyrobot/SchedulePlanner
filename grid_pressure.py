@@ -47,16 +47,21 @@ def _bucket(start_min):
 
 
 def _timed(sections):
-    """Deduped rows that have a real meeting, sorted for determinism. Async/TBA/
-    unparseable rows (empty meeting) are EXCLUDED (fail open)."""
+    """Deduped sections that have a real meeting, sorted for determinism. Async/TBA/
+    unparseable rows (empty meeting) are EXCLUDED (fail open).
+
+    The meeting is the section's FULL block union (M1 — every meeting pattern, not
+    just the first), and ``start`` is the EARLIEST block start. Dedup is over the
+    full meeting signature so two sections that differ only on a secondary block are
+    both kept; ``days``/``times`` (the first pattern) are retained for display/sort."""
     seen, out = set(), []
     for r in sections or []:
-        days, times = r.get("days", ""), r.get("times", "")
-        meeting = timeblocks.parse_meeting(days, times)
+        meeting = timeblocks.section_meeting(r)
         if not meeting:
             continue
         cid = mapping._norm(r.get("course", ""))
-        key = (cid, days, times, r.get("term"))
+        days, times = r.get("days", ""), r.get("times", "")
+        key = (cid, tuple(sorted(meeting)), r.get("term"))
         if key in seen:
             continue
         seen.add(key)
@@ -78,7 +83,9 @@ def _async_courses(sections):
     """Courses with at least one async/TBA section (a non-morning escape valve)."""
     out = set()
     for r in sections or []:
-        if not timeblocks.parse_meeting(r.get("days", ""), r.get("times", "")):
+        # A section is async only when NONE of its blocks has a meeting (M1):
+        # a timed secondary block means it is not an async escape valve.
+        if not timeblocks.section_meeting(r):
             cid = mapping._norm(r.get("course", ""))
             if cid:
                 out.add(cid)

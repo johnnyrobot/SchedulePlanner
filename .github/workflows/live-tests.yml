@@ -35,3 +35,25 @@ jobs:
           pip install --require-hashes -r requirements.lock
       - name: Run live-marked tests (network required; -rs shows skips)
         run: python -m pytest -m live -rs
+
+  schedule-contract-canary:
+    name: schedule wire-contract canary (advisory)
+    # E6: re-parses the REAL LACCD schedule wire against the tolerant-reader
+    # contract so a live schema drift surfaces early. continue-on-error so wire
+    # drift is an ADVISORY signal, never a hard failure (this whole workflow is
+    # schedule/dispatch-only and never gates PRs).
+    runs-on: macos-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: requirements.lock
+      - name: Install pinned, hash-checked dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install --require-hashes -r requirements.lock
+      - name: Schedule wire-contract canary
+        run: python -m pytest tests/test_source_contracts.py -m live -rs

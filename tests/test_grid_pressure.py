@@ -130,3 +130,23 @@ def test_report_is_deterministic():
     secs = [sec("B", days="MW", times="9:30 AM - 10:45 AM"),
             sec("A", days="MW", times="9:00 AM - 10:15 AM")]
     assert G.grid_pressure_report(secs) == G.grid_pressure_report(secs)
+
+
+def test_timed_unions_secondary_meeting_blocks():
+    """A section meeting on two patterns contributes ALL its blocks to its meeting
+    (M1), so conformance / hard-conflict see the secondary block, not just block[0]."""
+    r = {"course": "BIO 3", "term": 2268, "days": "M", "times": "8:50 AM - 10:00 AM",
+         "meetings": [{"days": "M", "times": "8:50 AM - 10:00 AM"},
+                      {"days": "W", "times": "8:50 AM - 10:00 AM"}]}
+    timed = G._timed([r])
+    assert len(timed) == 1
+    assert {b[0] for b in timed[0]["meeting"]} == {"M", "W"}
+
+
+def test_async_courses_excludes_section_with_timed_secondary_block():
+    """A section async on its first block but TIMED on a secondary block is not async
+    (it has a real meeting) — the old meetings[0]-only logic mislabeled it."""
+    r = {"course": "BIO 3", "days": "", "times": "",
+         "meetings": [{"days": "", "times": ""},
+                      {"days": "W", "times": "8:50 AM - 10:00 AM"}]}
+    assert "BIO 3" not in G._async_courses([r])

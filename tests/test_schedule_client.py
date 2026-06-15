@@ -81,3 +81,170 @@ def test_fetch_sections_raises_endpoint_named_on_missing_subjects_key(make_clien
     msg = str(ei.value)
     assert "listing endpoint" in msg
     assert "LAMC 2268" in msg
+
+
+# ---- E7: per-term fail-open + shared retry/backoff -------------------------
+def test_fetch_sections_fail_open_skips_failing_term_and_surfaces_it(make_client, error_resp):
+    # term 2266 errors (503) but 2268 succeeds: the good term's records still come
+    # back AND the failed term is surfaced in status["skipped"] — never silently
+    # dropped. max_retries=0 makes the failing term fail fast (no real sleep).
+    client = make_client({
+        "/listing/LAMC/2268": LISTING_2268,
+        "/listing/LAMC/2266": error_resp(503),
+    })
+    status = {}
+    records = schedule.fetch_sections("LAMC", [2266, 2268], client=client,
+                                      status=status, max_retries=0)
+    assert records, "the surviving term's sections must still be returned"
+    assert {r["term"] for r in records} == {2268}
+    assert status["skipped"] and status["skipped"][0]["term"] == 2266
+    assert "error" in status["skipped"][0]
+
+
+def test_fetch_sections_raises_when_every_term_fails(make_client, error_resp):
+    # total failure stays LOUD — an all-terms-down fetch must raise, not return an
+    # empty list that masquerades as "no classes offered".
+    client = make_client({
+        "/listing/LAMC/2266": error_resp(503),
+        "/listing/LAMC/2268": error_resp(503),
+    })
+    with pytest.raises(Exception):
+        schedule.fetch_sections("LAMC", [2266, 2268], client=client, max_retries=0)
+
+
+def test_fetch_sections_no_skips_leaves_status_skipped_empty(make_client):
+    status = {}
+    schedule.fetch_sections("LAMC", [2268], client=make_client({"/listing/LAMC/2268": LISTING_2268}),
+                            status=status)
+    assert status.get("skipped") == []
+
+
+LISTING_MULTI = {
+    "subjects": [{"code": "BIOL", "name": "Biology", "courses": [{
+        "subject": "BIOLOGY", "catalogNbr": "3", "descr": "General Biology",
+        "units": "4.00", "sections": [{
+            "classNbr": "20001 (LEC)", "seats": "30", "status": "Open",
+            "meetings": [
+                {"days": "MW", "times": "10:00 AM - 11:25 AM", "room": "INST 2007",
+                 "facilityId": "MINST2007", "instr": "STAFF"},
+                {"days": "F", "times": "2:00 PM - 4:50 PM", "room": "AMP 101",
+                 "facilityId": "MAMP101", "instr": "STAFF"}],
+            "relsections": [], "classType": ["INP"]}]}]}],
+}
+
+
+def test_fetch_sections_captures_all_meeting_blocks(make_client):
+    """A section meeting on TWO day/time patterns keeps BOTH (M1): meetings[1:] used
+    to be silently dropped. The flat days/times/room stay the FIRST block so the
+    workbook the engine reads is byte-identical."""
+    client = make_client({"/listing/LAMC/2268": LISTING_MULTI})
+    r = schedule.fetch_sections("LAMC", [2268], client=client)[0]
+    # flat fields = first block (engine/workbook unchanged)
+    assert r["days"] == "MW" and r["times"] == "10:00 AM - 11:25 AM"
+    assert r["room"] == "INST 2007"
+    # both blocks captured, with their own room/facil id
+    assert len(r["meetings"]) == 2
+    assert r["meetings"][1]["days"] == "F"
+    assert r["meetings"][1]["times"] == "2:00 PM - 4:50 PM"
+    assert r["meetings"][1]["room"] == "AMP 101"
+    assert r["meetings"][1]["facil_id"] == "MAMP101"
+
+
+def test_fetch_sections_single_meeting_still_carries_one_block(make_client):
+    """A normal one-meeting section carries a single-block list, so detectors can
+    iterate uniformly and section_meeting stays byte-identical to the flat parse."""
+    client = make_client({"/listing/LAMC/2268": LISTING_2268})
+    r = schedule.fetch_sections("LAMC", [2268], client=client)[0]
+    assert len(r["meetings"]) == 1
+    assert r["meetings"][0]["days"] == "T"
+
+
+# --- element-level schema-drift guards (review M5) ------------------------
+# The list-type guard above only ensures 'subjects' is a list; it does NOT
+# ensure each element is a JSON object. A string/null/number element makes
+# subject.get(...) / course.get(...) raise a bare AttributeError one level
+# deeper — the exact opaque failure the list guard exists to prevent. Each
+# nesting level (subject -> course -> section/relsection -> meeting) must fail
+# loud by endpoint + path instead.
+
+def test_fetch_sections_raises_on_non_dict_subject_element(make_client):
+    # 'subjects' is a list (passes the list guard) but an element is a bare
+    # string. Must name the endpoint + path, not raise a bare AttributeError.
+    client = make_client({"/listing/LAMC/2268": {"subjects": ["MATH"]}})
+    with pytest.raises(SourceDataError) as ei:
+        schedule.fetch_sections("LAMC", [2268], client=client)
+    msg = str(ei.value)
+    assert "LAMC 2268" in msg
+    assert "subjects[0]" in msg
+    assert "str" in msg            # names the offending type
+
+
+def test_fetch_sections_raises_on_non_dict_course_element(make_client):
+    client = make_client({"/listing/LAMC/2268": {
+        "subjects": [{"code": "MATH", "courses": ["MATH 215"]}]}})
+    with pytest.raises(SourceDataError) as ei:
+        schedule.fetch_sections("LAMC", [2268], client=client)
+    msg = str(ei.value)
+    assert "subjects[0].courses[0]" in msg
+    assert "str" in msg
+
+
+def test_fetch_sections_raises_on_non_dict_section_element(make_client):
+    client = make_client({"/listing/LAMC/2268": {"subjects": [{"code": "MATH", "courses": [
+        {"subject": "MATH", "catalogNbr": "215", "sections": ["13955"]}]}]}})
+    with pytest.raises(SourceDataError) as ei:
+        schedule.fetch_sections("LAMC", [2268], client=client)
+    msg = str(ei.value)
+    assert "sections[0]" in msg
+    assert "str" in msg
+
+
+def test_fetch_sections_raises_on_non_dict_relsection_element(make_client):
+    client = make_client({"/listing/LAMC/2268": {"subjects": [{"code": "MATH", "courses": [
+        {"subject": "MATH", "catalogNbr": "215", "sections": [
+            {"classNbr": "13955 (LEC)", "meetings": [], "relsections": ["13956"]}]}]}]}})
+    with pytest.raises(SourceDataError) as ei:
+        schedule.fetch_sections("LAMC", [2268], client=client)
+    msg = str(ei.value)
+    assert "relsections[0]" in msg
+    assert "str" in msg
+
+
+def test_fetch_sections_raises_on_non_dict_meeting_element(make_client):
+    client = make_client({"/listing/LAMC/2268": {"subjects": [{"code": "MATH", "courses": [
+        {"subject": "MATH", "catalogNbr": "215", "sections": [
+            {"classNbr": "13955 (LEC)", "meetings": ["T 8:50 AM"], "relsections": []}]}]}]}})
+    with pytest.raises(SourceDataError) as ei:
+        schedule.fetch_sections("LAMC", [2268], client=client)
+    msg = str(ei.value)
+    assert "meetings[0]" in msg
+    assert "str" in msg
+
+
+def test_fetch_sections_raises_on_null_meeting_element(make_client):
+    # A FALSY non-dict meeting element (null/0/"") must ALSO fail loud by path,
+    # not slip a truthiness gate and bare-crash on meeting.get(...). M5 names
+    # 'null' element drift explicitly, and a null meeting is the most realistic
+    # drift value; sibling levels already catch None, so this must too.
+    client = make_client({"/listing/LAMC/2268": {"subjects": [{"code": "MATH", "courses": [
+        {"subject": "MATH", "catalogNbr": "215", "sections": [
+            {"classNbr": "13955 (LEC)", "meetings": [None], "relsections": []}]}]}]}})
+    with pytest.raises(SourceDataError) as ei:
+        schedule.fetch_sections("LAMC", [2268], client=client)
+    msg = str(ei.value)
+    assert "meetings[0]" in msg
+    assert "NoneType" in msg            # names the offending type, no bare crash
+
+
+def test_fetch_sections_tolerates_section_without_meetings(make_client):
+    # Non-overfire: an empty meetings list is legitimate (async/online) and must
+    # yield a record with empty day/time, NOT trip the new meeting-element guard.
+    client = make_client({"/listing/LAMC/2268": {"subjects": [{"code": "MATH", "courses": [
+        {"subject": "MATH", "catalogNbr": "215", "descr": "Async",
+         "sections": [{"classNbr": "99999 (LEC)", "meetings": [], "relsections": [],
+                       "classType": ["ONLINE"]}]}]}]}})
+    records = schedule.fetch_sections("LAMC", [2268], client=client)
+    assert len(records) == 1
+    assert records[0]["course"] == "MATH 215"
+    assert records[0]["days"] == ""
+    assert records[0]["times"] == ""

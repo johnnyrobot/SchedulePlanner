@@ -316,3 +316,74 @@ def test_filtered_envelope_inert_still_yields_honest_collapse():
     assert p["score_delta"] == p["score"] - p["baseline_score"]
     assert sorted(p["newly_unavailable"]) == ["A 1", "B 1"]
     assert p["collapsed"] is True
+
+
+def test_fits_two_day_counts_days_across_all_blocks():
+    """'Two days a week' must count distinct days across EVERY meeting block (M1):
+    M (block0) + W,F (block1) = 3 days, so the section does NOT fit a 2-day window."""
+    r = {"days": "M", "times": "8:00 AM - 9:00 AM",
+         "meetings": [{"days": "M", "times": "8:00 AM - 9:00 AM"},
+                      {"days": "WF", "times": "1:00 PM - 2:00 PM"}]}
+    assert E._fits_two_day(r) is False
+
+
+def test_fits_evening_uses_earliest_block_start():
+    """A morning block disqualifies a section from an evening-only window even if a
+    later block is in the evening — the student is still forced into the morning."""
+    r = {"days": "F", "times": "6:00 PM - 8:00 PM",
+         "meetings": [{"days": "M", "times": "9:00 AM - 10:00 AM"},
+                      {"days": "F", "times": "6:00 PM - 8:00 PM"}]}
+    assert E._fits_evening(r) is False
+
+
+# --------------------------------------------------------------- M3: windowed GE
+def test_window_ge_coverage_recounts_offered_eligible_against_kept():
+    """_window_ge_coverage re-counts each area's offered_eligible from its
+    offered_eligible_ids against ONLY the courses present in the kept (windowed)
+    sections (M3): a GE area whose eligible course is excluded by the window drops
+    to a gap instead of staying fully schedulable. Areas without an id list (older
+    coverage shape) pass through unchanged (fail open)."""
+    cov = {"areas": [
+        {"area": "3A", "required": 1, "eligible_count": 2, "flags": [],
+         "offered_eligible": 2, "offered_eligible_ids": ["ART 101", "ART 105"]}]}
+    kept = [{"course": "ART 101", "term": 2268}]          # ART 105 dropped by window
+    out = E._window_ge_coverage(cov, kept)
+    a = out["areas"][0]
+    assert a["offered_eligible"] == 1
+    assert a["offered_eligible_ids"] == ["ART 101"]
+    # an empty window zeroes the GE area
+    assert E._window_ge_coverage(cov, [])["areas"][0]["offered_eligible"] == 0
+    # the original coverage is not mutated
+    assert cov["areas"][0]["offered_eligible"] == 2
+    # legacy coverage (no ids) passes through unchanged
+    legacy = {"areas": [{"area": "X", "required": 1, "offered_eligible": 5,
+                         "eligible_count": 2, "flags": []}]}
+    assert E._window_ge_coverage(legacy, kept) == legacy
+
+
+def test_constrained_run_windows_ge_coverage():
+    """M3: the constrained re-audit re-counts GE-area schedulability against ONLY
+    the windowed sections, so a GE area whose only eligible course is excluded by
+    the window collapses the GE contribution — the constrained score is NOT propped
+    up by GE availability the window removed. Before the fix the unfiltered
+    ge_coverage rode through and the evening score equalled the baseline."""
+    prog = {"code": "G", "title": "G", "courses": [{"course_id": "BIO 3"}]}
+    secs = [
+        # major BIO 3: evening -> kept by the evening window
+        {"course": "BIO 3", "term": 2268, "class_nbr": "1", "days": "MW",
+         "times": "6:00 PM - 7:15 PM", "modality": ["IN-PERSON"]},
+        # GE area 3A's only eligible course ART 101: morning -> dropped by evening
+        {"course": "ART 101", "term": 2268, "class_nbr": "2", "days": "MW",
+         "times": "9:00 AM - 10:15 AM", "modality": ["IN-PERSON"]},
+    ]
+    ge_coverage = {"reviewed": True, "areas": [
+        {"area": "3A", "title": "Arts", "required": 1, "resolution": "concrete",
+         "eligible_count": 1, "offered_count": 1, "offered_eligible": 1,
+         "offered_eligible_ids": ["ART 101"], "flags": []}]}
+    rep = E.equity_exposure_report([prog], secs, ge_coverage=ge_coverage)
+    p = _prog(_arch(rep, "evening"), "G")
+    # BIO 3 survives the evening window, but GE 3A collapses (ART 101 is morning
+    # only) -> constrained score strictly below the GE-inclusive baseline.
+    assert p["baseline_score"] is not None
+    assert p["score"] < p["baseline_score"]
+    assert p["score_delta"] < 0

@@ -180,22 +180,77 @@ def build_model(sec, cat, prog, llm=None):
     return active, course_seasons, units, prereqs
 
 
-def _hard_conflict_pairs(sec):
+def _row_meeting(cell, days, times, timeblocks, json):
+    """A section's FULL meeting footprint for conflict detection.
+
+    Prefers the JSON ``Meetings`` cell (every block) when it holds a non-empty
+    LIST OF DICTS; otherwise — empty/NaN cell (single-block sections; xlsx writes
+    "" which reads back as NaN), or ANY malformed / non-list / garbage value —
+    falls back to the visible first-block ``days``/``times``. This fails OPEN,
+    mirroring the other optional meeting columns (``parse_times`` / ``on_grid``
+    tolerate junk): ``engine.run`` accepts any user-openable workbook, so a corrupt
+    or hand-edited cell degrades to block[0] rather than crashing the whole solve.
+    It is never silently-wrong data — block[0] is exactly what the Days/Times
+    columns already show."""
+    if isinstance(cell, str) and cell.strip():
+        try:
+            blocks = json.loads(cell)
+        except (ValueError, TypeError):
+            blocks = None
+        if isinstance(blocks, list) and blocks and all(isinstance(b, dict) for b in blocks):
+            return timeblocks.section_meeting({"meetings": blocks})
+    return timeblocks.parse_meeting(days, times)
+
+
+def _hard_conflict_pairs(sec, relevant=None):
     """Course pairs that can NEVER be co-scheduled — every section of one overlaps
-    every section of the other — derived from the OPTIONAL Days/Times columns.
+    every section of the other — derived from the OPTIONAL meeting columns.
 
     Returns a set of ``frozenset({course_a, course_b})``. Empty when the workbook
     carries no meeting data (no Days/Times columns), so the solver stays
     byte-identical to the pre-feature behavior.
+
+    A section's meeting footprint is its FULL block list: the optional ``Meetings``
+    column (a JSON list of ``{days, times}`` blocks the live/import mapper now
+    writes for multi-pattern sections) is read when present and non-empty, so a
+    course pair that clashes ONLY on a secondary block is correctly separated.
+    Sections without that column — or with an empty cell (single-block sections,
+    and every demo / IR / CSV workbook, which never carry it) — fall back to the
+    first-block ``Days``/``Times``, keeping those solves byte-identical. Widening
+    the engine to secondary blocks is the gated, disclosed change recorded in
+    test_determinism_e2e.test_multiblock_conflict_is_deterministic_and_moves_the_plan.
+
+    ``relevant`` optionally restricts the scan to a set of course ids — the union
+    of every program's schedulable items. ``solve_cohort`` already discards any
+    pair whose endpoints are not BOTH schedulable items of the program it is
+    solving, so a pair touching a course no program can schedule is never
+    applied: skipping it here is byte-identical, while avoiding an O(N^2) sweep
+    over the thousands of courses an institutional ("ALL") workbook carries.
+    ``None`` scans every active course (legacy behavior). Meeting-list order does
+    not matter — ``pairwise_hard_conflict`` is a symmetric AND over all section
+    pairs — so the column-wise build below is equivalent to the old per-row one.
     """
     if "Days" not in sec.columns or "Times" not in sec.columns:
         return set()
+    import json
+
     from sources import timeblocks
+    has_meetings = "Meetings" in sec.columns
     active = sec[sec["Class Status"] == "Active"]
+    cls_str = active["CLASS"].astype(str)
+    if relevant is not None:
+        keep = cls_str.isin(relevant)
+        active, cls_str = active[keep], cls_str[keep]
     by_course = {}
-    for _, r in active.iterrows():
-        by_course.setdefault(str(r["CLASS"]), []).append(
-            timeblocks.parse_meeting(r.get("Days", ""), r.get("Times", "")))
+    # Columnar (no iterrows) for the institutional hot path, but still reading the
+    # FULL meeting footprint: zip the optional Meetings JSON cell alongside the
+    # first-block Days/Times so multi-pattern sections are honored while single-
+    # block / column-absent workbooks stay byte-identical.
+    meetings_col = active["Meetings"] if has_meetings else [""] * len(active)
+    for cls, days, times, cell in zip(cls_str, active["Days"], active["Times"],
+                                      meetings_col):
+        by_course.setdefault(cls, []).append(
+            _row_meeting(cell, days, times, timeblocks, json))
     courses = sorted(by_course)
     pairs = set()
     for i in range(len(courses)):
@@ -227,8 +282,18 @@ def analyze(active, prog, n_terms):
     # live waitlist signal even with no IR enrollment counts; absent (demo / IR
     # workbooks) under_supply falls back to the Wait Tot headcount alone.
     has_avail = "Avail Status" in active.columns
+    # Group ONCE instead of a full-frame boolean scan per required course
+    # (O(courses x sections) -> O(sections)). Filter to the required courses
+    # FIRST so a program needing 40 of thousands of offered courses does not
+    # materialize a sub-frame per OFFERED course; non-required groups are never
+    # read. Each remaining group is exactly the rows ``active[active["CLASS"] ==
+    # cid]`` would select, in the same row order, so every count is
+    # byte-identical. An absent required course falls back to an empty
+    # same-columns frame (read-only below).
+    groups = dict(tuple(active[active["CLASS"].isin(required)].groupby("CLASS")))
+    empty = active.iloc[0:0]
     for cid in sorted(required):
-        d = active[active["CLASS"] == cid]
+        d = groups.get(cid, empty)
         offered = d["Term"].nunique()
         if offered < n_terms:
             out["rotation_gaps"].append({"course": cid, "offered": int(offered),
@@ -370,7 +435,13 @@ def solve_cohort(pcode, prog, course_seasons, units, prereqs, cohort, allow_fixe
     m.Minimize(objective)
 
     solver = cp_model.CpSolver()
-    solver.parameters.max_time_in_seconds = 10
+    # WORK-based budget (E2): max_deterministic_time is machine-independent, unlike
+    # a wall-clock budget, so a slow machine can never return a different
+    # (FEASIBLE-not-OPTIMAL) plan. These models are tiny and solve to OPTIMAL far
+    # inside the budget, so this is a safety net, not a real cap. The deterministic-
+    # time UNIT is OR-Tools-version-defined; ortools is pinned in requirements.lock
+    # and test_cohort_results_are_proven_optimal_on_the_default_data guards any drift.
+    solver.parameters.max_deterministic_time = 30.0
     solver.parameters.random_seed = 42        # arbitrary fixed value; preserves determinism
     solver.parameters.num_search_workers = 1  # PRD N11: single worker required for reproducible CP-SAT output
     st = solver.Solve(m)
@@ -397,9 +468,21 @@ def solve_cohort(pcode, prog, course_seasons, units, prereqs, cohort, allow_fixe
         ge_out[r["area"]] = {"title": r["area_title"], "resolution": r["resolution"],
                              "chosen": sorted(chosen), "units": r["units"]}
 
+    # ``terms_per_year`` = len(cadence): the EXACT divisor the report/UI need to turn
+    # abstract ``terms_used`` into calendar years (2 for Fall/Spring, 3 with Summer,
+    # 4 with Winter). Surfaced here so the surfaces never re-derive (and mis-derive)
+    # it as a hardcoded 2. Deterministic — a pure function of the offered seasons —
+    # so engine.run stays reproducible run-to-run; it changes no plan.
     result = {"terms_used": int(solver.Value(last)),
+              "terms_per_year": len(cadence),
               "plan": {int(t): sorted(v) for t, v in sorted(plan.items())},
-              "fixes": fixes}
+              "fixes": fixes,
+              # E2: True iff the solver PROVED this the minimum-term plan (OPTIMAL),
+              # not merely a FEASIBLE one found before the deterministic budget ran
+              # out. Deterministic (a function of the model), so engine.run stays
+              # byte-identical run-to-run; the render surfaces "(not proven optimal)"
+              # only when this is False.
+              "proven_optimal": st == cp_model.OPTIMAL}
     if ge_rows:
         result["ge"] = ge_out
     return result
@@ -424,8 +507,26 @@ def run(path: str, llm=None) -> dict:
     active, course_seasons, units, prereqs = build_model(sec, cat, prog, llm)
     ge_rows = _load_ge(path)
     n_terms = sec["Term"].nunique()
+    # The conflict scan only needs courses some program can actually schedule:
+    # the union over programs of (prereq closure of the major) + concrete GE
+    # candidates. This mirrors solve_cohort's ``item_ids`` exactly, so every
+    # APPLIED constraint is unchanged while the O(N^2) sweep skips the rest.
+    # INVARIANT: relevant_items holds the SAME raw Course ID values solve_cohort's
+    # item_ids use, and _hard_conflict_pairs compares str(CLASS) against them just
+    # as solve_cohort's ``a in item_ids`` guard does — so the scoping filter can
+    # never drop a pair the solver would apply (true even for non-string ids).
+    # Keep these two membership bases in lock-step if either side's typing changes.
+    relevant_items = set()
+    for pcode in prog["Program Code"].unique():
+        relevant_items |= closure(
+            list(prog[prog["Program Code"] == pcode]["Course ID"]), prereqs)
+        for r in ge_rows:
+            if r["program_code"] == pcode and r["resolution"] == "concrete":
+                relevant_items.update(r["candidates"])
     # Empty unless the workbook carries Days/Times columns -> solver byte-identical.
-    hard_conflicts = _hard_conflict_pairs(sec)
+    # When a multi-block ``Meetings`` column is present, secondary-block clashes are
+    # honored too (gated, disclosed; see _hard_conflict_pairs).
+    hard_conflicts = _hard_conflict_pairs(sec, relevant_items)
 
     results = {"terms_in_data": int(n_terms),
                "analysis": analyze(active, prog, n_terms),
