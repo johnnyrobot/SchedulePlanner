@@ -142,5 +142,22 @@ def test_platform_conditional_license_resolved_from_vetted_map(tmp_path, monkeyp
 
 def test_real_lock_has_no_unverifiable_license():
     # Every shipped component's license is resolved (installed metadata OR the vetted
-    # platform-conditional map OR gate-exempt) — no UNKNOWN ships ungated.
+    # fallback map OR gate-exempt) — no UNKNOWN ships ungated.
     assert sbom.unverified_components(sbom.build_components(str(LOCK))) == []
+
+
+def test_metadata_less_packages_resolve_from_the_vetted_map(monkeypatch):
+    # Regression for the CI failure: cffi/pycparser expose NO readable license
+    # metadata on some runners (their license is resolvable locally, so the bug only
+    # showed on CI). Simulate that — they must resolve from VETTED_LICENSE_FALLBACKS,
+    # not fail the gate as UNKNOWN.
+    real = sbom.license_of
+    monkeypatch.setattr(
+        sbom, "license_of",
+        lambda n: "" if n.lower().replace("_", "-") in ("cffi", "pycparser") else real(n))
+    comps = sbom.build_components(str(LOCK))
+    assert sbom.unverified_components(comps) == []
+    for name in ("cffi", "pycparser"):
+        c = next((x for x in comps if x["name"].lower().replace("_", "-") == name), None)
+        if c is not None:                       # only assert if the lock carries it
+            assert c["license"] != "UNKNOWN" and not sbom.is_copyleft(c["license"])
