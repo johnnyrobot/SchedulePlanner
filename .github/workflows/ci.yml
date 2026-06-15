@@ -101,8 +101,11 @@ jobs:
   sbom:
     name: SBOM + no-copyleft license gate
     # macos-latest so the FULL lock installs (the pyobjc/darwin-only packages too),
-    # giving accurate per-component licenses; a package the gate cannot see installed
-    # would resolve to UNKNOWN and could hide a copyleft dep.
+    # giving accurate per-component licenses. A package the gate canNOT see installed
+    # (platform-conditional win32/.NET/Qt backends) no longer hides a copyleft dep:
+    # generate_sbom.py resolves those from a human-vetted license map and FAILS the
+    # gate (unverified_components) on any license it still cannot verify — so an
+    # UNKNOWN license can never silently pass, on any runner.
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
