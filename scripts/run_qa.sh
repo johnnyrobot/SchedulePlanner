@@ -20,13 +20,6 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." >/dev/null 2>&1 && pwd)"
 cd "${REPO_ROOT}"
 
-# The number of `live`-marked tests deselected by `-m "not live"`. This is the
-# stable invariant the gate locks; bump it only when a live test is added/removed.
-# (Was 3; the real eLumen prereq client added test_live_lamc_endpoint_schema.
-#  Was 4; Spec 2 added test_pdf_loader.py::test_extract_real_pdf_roundtrip.
-#  Was 5; E6 added test_source_contracts.py::test_schedule_live_wire_still_matches_the_contract.)
-EXPECTED_DESELECTED=6
-
 # Only python3 is on PATH in this environment (no bare `python`).
 PYTHON=python3
 
@@ -37,6 +30,18 @@ fi
 
 if ! "${PYTHON}" -c "import pytest" >/dev/null 2>&1; then
     echo "QA gate ERROR: pytest is not installed for ${PYTHON} (try: ${PYTHON} -m pip install pytest)" >&2
+    exit 2
+fi
+
+# The number of `live`-marked tests deselected by `-m "not live"`. DERIVE it from
+# the single source of truth — tests/test_qa_gate.py::KNOWN_LIVE_NODES — rather
+# than hard-coding a second magic literal that can silently drift out of
+# lock-step. The meta-test there pins KNOWN_LIVE_NODES == the real live
+# collection, so this count tracks reality transitively. Adding/removing a live
+# test means editing ONLY that set; this gate follows automatically.
+EXPECTED_DESELECTED="$("${PYTHON}" -c 'from tests.test_qa_gate import KNOWN_LIVE_NODES; print(len(KNOWN_LIVE_NODES))')"
+if ! [[ "${EXPECTED_DESELECTED}" =~ ^[0-9]+$ ]]; then
+    echo "QA gate ERROR: could not derive the live-test count from KNOWN_LIVE_NODES (got '${EXPECTED_DESELECTED}')" >&2
     exit 2
 fi
 
