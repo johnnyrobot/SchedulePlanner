@@ -284,3 +284,56 @@ def test_build_live_workbook_uses_injected_client_no_network(
     # the injected client recorded the calls (network went through the seam)
     assert client.calls, "injected client recorded no calls"
     json.dumps(report)  # JSON-serializable, no PII objects embedded
+
+
+# --------------------------------------------------------------------------- #
+# N3 (ship-review) — the FULL analyze_live sweep does no RAW-SOCKET IO, and the #
+# default sweep never reaches the Java subprocess (the catalog feature).        #
+# The test above blocks httpx.Client + urlopen; these also block the low-level  #
+# socket primitives (proving the whole live sweep — reconciliation + every      #
+# detector — touches the network ONLY through the injected client), confirm the #
+# opt-in Java subprocess is not spawned on a default sweep, and guard that that  #
+# subprocess is shell-free.                                                      #
+# --------------------------------------------------------------------------- #
+def test_analyze_live_sweep_does_no_raw_socket_io(
+        lamc_routes, make_client, tmp_path, monkeypatch):
+    def boom(*a, **k):
+        raise AssertionError(
+            "analyze_live made a direct (non-injected) socket/network call")
+    monkeypatch.setattr(httpx, "Client", boom)
+    monkeypatch.setattr(urllib.request, "urlopen", boom)
+    monkeypatch.setattr(socket, "socket", boom)
+    monkeypatch.setattr(socket, "create_connection", boom, raising=False)
+
+    client = make_client(lamc_routes)
+    report = build_live_workbook.analyze_live(
+        "LAMC", [2268], "Biology", str(tmp_path / "live.xlsx"), client=client)
+    assert report["error"] is None, report["error"]
+    assert client.calls, "every outbound call must go through the injected client"
+
+
+def test_live_sweep_default_does_not_spawn_the_java_subprocess(
+        lamc_routes, make_client, tmp_path, monkeypatch):
+    # The catalog PDF feature (pdf_loader -> bundled-JRE subprocess) is OPT-IN
+    # (catalog_pdf defaults to None), so a default live sweep must never invoke it.
+    from sources import pdf_loader
+
+    def boom(*a, **k):
+        raise AssertionError(
+            "analyze_live spawned the Java subprocess on a default (no-catalog) sweep")
+    monkeypatch.setattr(pdf_loader, "extract", boom)
+
+    client = make_client(lamc_routes)
+    report = build_live_workbook.analyze_live(
+        "LAMC", [2268], "Biology", str(tmp_path / "live.xlsx"), client=client)
+    assert report["error"] is None, report["error"]
+
+
+def test_pdf_loader_invokes_java_without_a_shell():
+    # SAST: the catalog Java extractor is the app's only subprocess; our wrapper
+    # must never run a shell string (which a crafted PDF path could inject into) —
+    # the underlying opendataloader call uses an argv list.
+    from sources import pdf_loader
+    src = inspect.getsource(pdf_loader)
+    assert "shell=True" not in src, "pdf_loader must never spawn a shell (command injection)"
+    assert "os.system" not in src and "os.popen" not in src
