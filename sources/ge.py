@@ -233,6 +233,10 @@ def resolve(pattern, assist_areas, offered, program, *, concrete_threshold=3):
     # course claimed by a sibling area never false-flags a shared area as
     # unschedulable. Per-area / optimistic by design — fail open: can only miss a gap.
     offered_pre = {area: len(cands) for area, cands in offered_eligible.items()}
+    # The pre-sweep eligible-offered course-id LISTS (not just the counts): carried
+    # out on each area so a windowed re-audit (F6 equity, M3) can re-count GE-area
+    # schedulability against a constrained section subset without re-running resolve.
+    offered_pre_ids = {area: list(cands) for area, cands in offered_eligible.items()}
 
     used = set()
     for req in sorted(requirements, key=lambda r: (len(offered_eligible[r["area"]]), r["area"])):
@@ -254,6 +258,7 @@ def resolve(pattern, assist_areas, offered, program, *, concrete_threshold=3):
             area_cov.append({"area": area, "title": req["title"], "required": required,
                              "resolution": "reserve", "eligible_count": None,
                              "offered_count": 0, "offered_eligible": offered_pre.get(area, 0),
+                             "offered_eligible_ids": offered_pre_ids.get(area, []),
                              "flags": []})
             continue
         flags = []
@@ -265,6 +270,7 @@ def resolve(pattern, assist_areas, offered, program, *, concrete_threshold=3):
         if required <= 0:
             area_cov.append({"area": area, "title": req["title"], "required": 0,
                              "resolution": "shared", "offered_eligible": offered_pre.get(area, 0),
+                             "offered_eligible_ids": offered_pre_ids.get(area, []),
                              "flags": flags})
             continue
         rec = recs.get(area, "")
@@ -293,7 +299,9 @@ def resolve(pattern, assist_areas, offered, program, *, concrete_threshold=3):
                          "resolution": resolution,
                          "eligible_count": len(by_area.get(area, [])),
                          "offered_count": len(offered_cands),
-                         "offered_eligible": offered_pre.get(area, 0), "flags": flags})
+                         "offered_eligible": offered_pre.get(area, 0),
+                         "offered_eligible_ids": offered_pre_ids.get(area, []),
+                         "flags": flags})
 
     coverage = {"areas": area_cov, "shared_with_major": shared,
                 "unknown_areas": unknown, "cross_system_areas": cross_system}
