@@ -91,6 +91,21 @@ def test_get_all_programs_tolerates_group_without_programs_key(make_client):
     assert pm.get_all_programs("LAMC", client=client) == []
 
 
+def test_get_all_programs_403_names_program_mapper_origin_remedy(make_client, error_resp):
+    # L1: Program Mapper threads its OWN accurate 403 remedy (browser UA + campus
+    # Origin) through get_json, so a 403 here names the Origin header — unlike the
+    # source-agnostic default the shared transport uses for schedule/eLumen/ASSIST.
+    from sources.http import SourceHTTPError
+    import pytest
+    client = make_client({"/home-page-content": error_resp(403)})
+    with pytest.raises(SourceHTTPError) as ei:
+        pm.get_all_programs("LAMC", client=client)
+    msg = str(ei.value)
+    assert "403" in msg
+    assert "Origin" in msg            # PM-specific remedy threaded through
+    assert "User-Agent" in msg
+
+
 def test_get_program_courses_falls_back_to_first_pathway(make_client):
     routes = {
         "/programs/p2": {"pathways": [{"programMapId": "m2"}]},  # no defaultPathway

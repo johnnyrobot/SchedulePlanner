@@ -10,12 +10,15 @@ sent because the Program Mapper API rejects script UAs with HTTP 403.
 Error handling: the LACCD APIs are the most fragile dependency in the system,
 so get_json never lets a raw httpx traceback or a JSONDecodeError escape.
 Instead it raises a SourceError subclass carrying the source name and URL:
-  - SourceHTTPError on any 4xx/5xx (403 gets an explicit UA/Origin hint, since
-    Program Mapper 403s browsers-only requests);
+  - SourceHTTPError on any 4xx/5xx (403 gets a generic browser-User-Agent hint
+    by default; a caller may pass ``forbidden_hint`` for a source-specific
+    remedy — e.g. Program Mapper, which also needs the campus Origin header);
   - SourceDataError on an empty body or a non-JSON payload (HTML error page,
     truncated response, etc).
 Callers (schedule.py, program_mapper.py) pass a human source label so the
-message names the endpoint that drifted rather than a bare URL.
+message names the endpoint that drifted rather than a bare URL. The default
+403 hint is deliberately source-agnostic because this transport is shared by
+schedule, eLumen and ASSIST too — none of which use the Origin header.
 """
 from __future__ import annotations
 
@@ -50,7 +53,7 @@ class SourceDataError(SourceError):
 
 
 def get_json(url, *, params=None, headers=None, client=None, timeout=DEFAULT_TIMEOUT,
-             source="LACCD API"):
+             source="LACCD API", forbidden_hint=None):
     owns_client = client is None
     client = client or httpx.Client(timeout=timeout)
     try:
@@ -61,10 +64,16 @@ def get_json(url, *, params=None, headers=None, client=None, timeout=DEFAULT_TIM
         except httpx.HTTPStatusError as exc:
             status = exc.response.status_code
             if status == 403:
+                # Default remedy is source-agnostic: this transport is shared by
+                # schedule, eLumen and ASSIST, which send no Origin header, so do
+                # NOT name Program Mapper's campus-Origin remedy here. A caller
+                # that knows its own accurate cause threads ``forbidden_hint``.
+                hint = forbidden_hint or (
+                    "This usually means the request is missing or sending a "
+                    "blocked browser User-Agent header.")
                 raise SourceHTTPError(
-                    f"{source}: HTTP 403 Forbidden from {url} — the API rejected the "
-                    "request (likely a missing/blocked browser User-Agent or Origin "
-                    "header). Program Mapper requires a browser UA and the campus Origin."
+                    f"{source}: HTTP 403 Forbidden from {url} — the API rejected "
+                    f"the request. {hint}"
                 ) from exc
             raise SourceHTTPError(
                 f"{source}: HTTP {status} from {url}."
