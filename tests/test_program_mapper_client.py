@@ -172,3 +172,40 @@ def test_fetch_program_extracts_ge_requirements_and_major_choices(make_client):
     # Major CHOICE captured separately as an explicit option list.
     assert prog["major_choices"] == [{"options": ["MATH 261", "MATH 247"],
                                       "recommended_semester": 2}]
+
+
+# --- campus validation (ship-review fast-follow: SAST KeyError -> named error) -----
+# program_mapper indexed COLLEGE_CONFIGS[campus] in _headers/_site_url with no
+# membership check, so a typo'd/free-text campus raised a bare KeyError that
+# surfaced to the user as a raw "'NOPE'" string. The sibling clients
+# (assist.institution_id_for, elumen_client.tenant_for) already raise a NAMED
+# SourceDataError listing the valid campuses; program_mapper must match.
+def test_unknown_campus_raises_named_source_error_not_keyerror():
+    from sources.http import SourceDataError
+    import pytest
+    for call in (lambda: pm._headers("INVALID"),
+                 lambda: pm._site_url("INVALID", "/home-page-content")):
+        with pytest.raises(SourceDataError) as ei:
+            call()
+        msg = str(ei.value)
+        assert "INVALID" in msg                 # echoes the offending value
+        assert "LAMC" in msg                    # lists the known campuses
+
+
+def test_fetch_program_unknown_campus_fails_named_before_any_network(make_client):
+    # A bogus campus must fail with a NAMED SourceDataError during URL/header
+    # construction, never a raw KeyError, and must NEVER reach the network.
+    from sources.http import SourceDataError
+    import pytest
+    client = make_client({})
+    with pytest.raises(SourceDataError) as ei:
+        pm.fetch_program("NOPE", "biology", client=client)
+    assert "NOPE" in str(ei.value) and "LAMC" in str(ei.value)
+    assert client.calls == []                   # no request was attempted
+
+
+def test_known_campus_resolves_and_is_case_insensitive():
+    # Valid campus still works; a lowercase code normalizes (mirrors the
+    # .strip().upper() of assist.institution_id_for / elumen_client.tenant_for).
+    assert pm._headers("lamc")["Origin"].startswith("http")
+    assert "site-contents/" in pm._site_url("LAMC", "/x")
