@@ -27,15 +27,32 @@ def test_get_json_merges_caller_headers(make_client):
 
 # ----------------------------------------------------------- error paths
 
-def test_get_json_wraps_403_with_ua_origin_hint(make_client, error_resp):
+def test_get_json_403_default_hint_is_source_agnostic(make_client, error_resp):
+    # L1: get_json is the SHARED transport for schedule, eLumen and ASSIST too,
+    # so the default 403 remedy must be source-agnostic — a generic browser-UA
+    # hint — NOT the Program-Mapper-specific 'campus Origin' remedy (wrong for
+    # the other sources, which send no Origin header).
     client = make_client({"http://x/data": error_resp(403)})
     with pytest.raises(SourceHTTPError) as ei:
-        get_json("http://x/data", client=client, source="Program Mapper")
+        get_json("http://x/data", client=client, source="LACCD schedule")
     msg = str(ei.value)
-    assert "403" in msg
-    assert "Program Mapper" in msg
-    # Names the likely cause so a maintainer is not left guessing.
-    assert "User-Agent" in msg or "Origin" in msg
+    assert "403" in msg and "LACCD schedule" in msg
+    assert "User-Agent" in msg            # names the likely generic cause
+    assert "Program Mapper" not in msg    # no foreign-source remedy
+    assert "Origin" not in msg            # schedule sends no Origin header
+
+
+def test_get_json_403_uses_caller_supplied_forbidden_hint(make_client, error_resp):
+    # A client that knows its own accurate 403 remedy threads it via
+    # forbidden_hint; it replaces the generic default verbatim.
+    client = make_client({"http://x/data": error_resp(403)})
+    hint = "Program Mapper requires a browser User-Agent and the campus Origin header."
+    with pytest.raises(SourceHTTPError) as ei:
+        get_json("http://x/data", client=client, source="Program Mapper",
+                 forbidden_hint=hint)
+    msg = str(ei.value)
+    assert "403" in msg and "Program Mapper" in msg
+    assert hint in msg                    # caller remedy used verbatim
 
 
 def test_get_json_wraps_500_with_source_and_url(make_client, error_resp):
