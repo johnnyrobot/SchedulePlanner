@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to SchedulePlanner (edgesched) are documented here.
+All notable changes to SchedulePlanner are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
@@ -57,6 +57,6 @@ Deterministic LACCD schedule + completion-feasibility analyzer: pywebview deskto
 app, OR-Tools CP-SAT engine, optional local Gemma via Ollama, bundled Temurin JRE
 for the catalog PDF feature.
 
-[0.2.1]: https://github.com/johnnyrobot/edgesched/releases/tag/v0.2.1
-[0.2.0]: https://github.com/johnnyrobot/edgesched/releases/tag/v0.2.0
-[0.1.0]: https://github.com/johnnyrobot/edgesched/releases/tag/v0.1.0
+[0.2.1]: https://github.com/johnnyrobot/SchedulePlanner/releases/tag/v0.2.1
+[0.2.0]: https://github.com/johnnyrobot/SchedulePlanner/releases/tag/v0.2.0
+[0.1.0]: https://github.com/johnnyrobot/SchedulePlanner/releases/tag/v0.1.0

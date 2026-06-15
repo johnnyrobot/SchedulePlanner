@@ -179,12 +179,12 @@ def build_sbom(components):
         }
         props = []
         if c.get("note"):
-            props.append({"name": "edgesched:bundled-external", "value": c["note"]})
+            props.append({"name": "scheduleplanner:bundled-external", "value": c["note"]})
         if c.get("gate_exempt"):
-            props.append({"name": "edgesched:license-gate",
+            props.append({"name": "scheduleplanner:license-gate",
                           "value": f"exempt: {c.get('exempt_reason', '')}"})
         if c.get("license_source") == "vetted-platform-conditional":
-            props.append({"name": "edgesched:license-source",
+            props.append({"name": "scheduleplanner:license-source",
                           "value": "manually vetted (platform-conditional dep; not installed "
                                    "on the gate runner)"})
         if props:
@@ -195,7 +195,7 @@ def build_sbom(components):
         "specVersion": SPEC_VERSION,
         "version": 1,
         "metadata": {
-            "tools": [{"name": "edgesched-generate-sbom", "version": "1.0"}],
+            "tools": [{"name": "scheduleplanner-generate-sbom", "version": "1.0"}],
             "component": {"type": "application", "name": "SchedulePlanner"},
         },
         "components": out_components,

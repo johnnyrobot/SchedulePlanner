@@ -1,6 +1,6 @@
 name: CI
 
-# Offline, reproducible CI for EdgeSched.
+# Offline, reproducible CI for SchedulePlanner.
 #
 # The gating `test` job installs the pinned, hash-checked dependency set from
 # requirements.lock, so every run resolves the SAME package versions (and

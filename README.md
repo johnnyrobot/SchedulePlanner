@@ -1,4 +1,4 @@
-# EdgeSched
+# SchedulePlanner
 
 A deterministic scheduling engine that finds why community-college cohorts
 can't finish 2-year programs on time and recommends the minimum schedule
@@ -238,7 +238,7 @@ fixture regenerates deterministically. It remains a **synthetic stand-in, not a
 real PeopleSoft export.** Validating the live-schedule ↔ real-IR `(term, CRN)`
 join needs a real export with overlapping terms/CRNs, which is **unavailable and
 not required for this pilot** (tracked in
-[#17](https://github.com/johnnyrobot/edgesched/issues/17)). Today's committed
+[#17](https://github.com/johnnyrobot/SchedulePlanner/issues/17)). Today's committed
 schedule (term `2268`) and enrollment (terms `{2248, 2252}`) fixtures share no
 `(term, CRN)`, so a real `--enrollment` run matches zero sections and the two
 detectors stay inert — by design, asserted by the zero-match guard in
