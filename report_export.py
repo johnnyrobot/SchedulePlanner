@@ -229,7 +229,11 @@ def _cohort(label: str, c) -> str:
     if not c:
         return (f'<div class="cohort"><div class="lab">{_esc(label)}</div>'
                 '<div class="big">—</div></div>')
-    yrs = math.ceil(c.get("terms_used", 0) / 2) if c.get("terms_used") else 0
+    # Calendar years = terms / terms-per-year (the cadence length the solver used).
+    # Default 2 (Fall/Spring) for cohort dicts predating the field; engine.run now
+    # always supplies it, so a 3-season (Summer) plan no longer mislabels as +1 year.
+    tpy = c.get("terms_per_year") or 2
+    yrs = math.ceil(c.get("terms_used", 0) / tpy) if c.get("terms_used") else 0
     terms = "".join(
         f'<div class="term"><b>T{_esc(t)}</b> {_esc(", ".join(cs))}</div>'
         for t, cs in sorted(c.get("plan", {}).items(), key=lambda kv: int(kv[0])))
