@@ -180,22 +180,59 @@ def build_model(sec, cat, prog, llm=None):
     return active, course_seasons, units, prereqs
 
 
+def _row_meeting(r, has_meetings, timeblocks, json):
+    """A section row's FULL meeting footprint for conflict detection.
+
+    Prefers the JSON ``Meetings`` column (every block) when it holds a non-empty
+    LIST OF DICTS; otherwise — column absent, empty/NaN cell (single-block sections;
+    xlsx writes "" which reads back as NaN), or ANY malformed / non-list / garbage
+    value — falls back to the visible first-block ``Days``/``Times``. This fails
+    OPEN, mirroring the other optional meeting columns (``parse_times`` /
+    ``on_grid`` tolerate junk): ``engine.run`` accepts any user-openable workbook,
+    so a corrupt or hand-edited cell degrades to block[0] rather than crashing the
+    whole solve. It is never silently-wrong data — block[0] is exactly what the
+    Days/Times columns already show."""
+    if has_meetings:
+        cell = r.get("Meetings", "")
+        if isinstance(cell, str) and cell.strip():
+            try:
+                blocks = json.loads(cell)
+            except (ValueError, TypeError):
+                blocks = None
+            if isinstance(blocks, list) and blocks and all(isinstance(b, dict) for b in blocks):
+                return timeblocks.section_meeting({"meetings": blocks})
+    return timeblocks.parse_meeting(r.get("Days", ""), r.get("Times", ""))
+
+
 def _hard_conflict_pairs(sec):
     """Course pairs that can NEVER be co-scheduled — every section of one overlaps
-    every section of the other — derived from the OPTIONAL Days/Times columns.
+    every section of the other — derived from the OPTIONAL meeting columns.
 
     Returns a set of ``frozenset({course_a, course_b})``. Empty when the workbook
     carries no meeting data (no Days/Times columns), so the solver stays
     byte-identical to the pre-feature behavior.
+
+    A section's meeting footprint is its FULL block list: the optional ``Meetings``
+    column (a JSON list of ``{days, times}`` blocks the live/import mapper now
+    writes for multi-pattern sections) is read when present and non-empty, so a
+    course pair that clashes ONLY on a secondary block is correctly separated.
+    Sections without that column — or with an empty cell (single-block sections,
+    and every demo / IR / CSV workbook, which never carry it) — fall back to the
+    first-block ``Days``/``Times``, keeping those solves byte-identical. Widening
+    the engine to secondary blocks is the gated, disclosed change recorded in
+    test_determinism_e2e.test_multiblock_conflict_is_deterministic_and_moves_the_plan.
     """
     if "Days" not in sec.columns or "Times" not in sec.columns:
         return set()
+    import json
+
     from sources import timeblocks
+    has_meetings = "Meetings" in sec.columns
     active = sec[sec["Class Status"] == "Active"]
     by_course = {}
     for _, r in active.iterrows():
-        by_course.setdefault(str(r["CLASS"]), []).append(
-            timeblocks.parse_meeting(r.get("Days", ""), r.get("Times", "")))
+        meeting = _row_meeting(r, has_meetings, timeblocks, json)
+        by_course.setdefault(str(r["CLASS"]), []).append(meeting)
     courses = sorted(by_course)
     pairs = set()
     for i in range(len(courses)):
@@ -437,6 +474,8 @@ def run(path: str, llm=None) -> dict:
     ge_rows = _load_ge(path)
     n_terms = sec["Term"].nunique()
     # Empty unless the workbook carries Days/Times columns -> solver byte-identical.
+    # When a multi-block ``Meetings`` column is present, secondary-block clashes are
+    # honored too (gated, disclosed; see _hard_conflict_pairs).
     hard_conflicts = _hard_conflict_pairs(sec)
 
     results = {"terms_in_data": int(n_terms),

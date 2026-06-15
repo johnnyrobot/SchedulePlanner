@@ -161,3 +161,37 @@ def test_on_grid_unknown_grid_fails_open():
     # A custom grid dict without the term length -> never flag (fail open).
     assert tb.on_grid(2248, tb.parse_meeting("MW", "9:05 AM - 10:00 AM"),
                       grid={"summer": {480}}) is True
+
+
+# --- section_meeting / iter_section_blocks (multi-block, M1) -------------------
+def test_section_meeting_unions_all_blocks():
+    # A section meeting MW 10-11 AND F 14-15 yields blocks for M, W AND F — the
+    # secondary block is no longer dropped (M1).
+    rec = {"days": "MW", "times": "10:00 AM - 11:00 AM",
+           "meetings": [{"days": "MW", "times": "10:00 AM - 11:00 AM"},
+                        {"days": "F", "times": "2:00 PM - 3:00 PM"}]}
+    assert sorted({b[0] for b in tb.section_meeting(rec)}) == ["F", "M", "W"]
+
+
+def test_section_meeting_falls_back_to_flat_fields_when_no_blocks():
+    # A pre-capture / synthetic record (no 'meetings' key) reads the flat days/times.
+    rec = {"days": "T Th", "times": "9:00 AM - 10:00 AM"}
+    assert sorted({b[0] for b in tb.section_meeting(rec)}) == ["T", "Th"]
+
+
+def test_iter_section_blocks_pairs_each_room_with_its_own_meeting():
+    rec = {"meetings": [{"days": "M", "times": "8:00 AM - 9:00 AM", "room": "A"},
+                        {"days": "W", "times": "2:00 PM - 3:00 PM", "room": "B"}]}
+    pairs = [(b.get("room"), m) for b, m in tb.iter_section_blocks(rec)]
+    assert pairs[0] == ("A", [("M", 480, 540)])
+    assert pairs[1] == ("B", [("W", 840, 900)])
+
+
+def test_section_days_unions_block_days():
+    # Distinct meeting days across all blocks, order-preserving (M1).
+    rec = {"meetings": [{"days": "M"}, {"days": "WF"}]}
+    assert tb.section_days(rec) == ["M", "W", "F"]
+
+
+def test_section_days_falls_back_to_flat_field_when_no_blocks():
+    assert tb.section_days({"days": "T Th"}) == ["T", "Th"]

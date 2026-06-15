@@ -291,3 +291,15 @@ def test_offered_by_course_wait_tolerant_when_missing():
              "Cap Enrl": 10, "Tot Enrl": 5}]
     s = B.offered_by_course(secs)[NORM("X 1")][0]
     assert s["wait"] is None                        # tolerant, like cap/tot
+
+
+def test_offered_by_course_meeting_unions_secondary_blocks():
+    """F1 time_conflict reads section['meeting']; it must include EVERY meeting block
+    so a required-course clash on a secondary block is detected (M1), not just the
+    first pattern."""
+    secs = [{"course": "BIO 3", "term": 2268, "class_nbr": "1",
+             "days": "M", "times": "8:00 AM - 9:00 AM",
+             "meetings": [{"days": "M", "times": "8:00 AM - 9:00 AM"},
+                          {"days": "F", "times": "1:00 PM - 2:00 PM"}]}]
+    meeting = B.offered_by_course(secs)[NORM("BIO 3")][0]["meeting"]
+    assert {b[0] for b in meeting} == {"M", "F"}

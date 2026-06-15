@@ -316,3 +316,21 @@ def test_filtered_envelope_inert_still_yields_honest_collapse():
     assert p["score_delta"] == p["score"] - p["baseline_score"]
     assert sorted(p["newly_unavailable"]) == ["A 1", "B 1"]
     assert p["collapsed"] is True
+
+
+def test_fits_two_day_counts_days_across_all_blocks():
+    """'Two days a week' must count distinct days across EVERY meeting block (M1):
+    M (block0) + W,F (block1) = 3 days, so the section does NOT fit a 2-day window."""
+    r = {"days": "M", "times": "8:00 AM - 9:00 AM",
+         "meetings": [{"days": "M", "times": "8:00 AM - 9:00 AM"},
+                      {"days": "WF", "times": "1:00 PM - 2:00 PM"}]}
+    assert E._fits_two_day(r) is False
+
+
+def test_fits_evening_uses_earliest_block_start():
+    """A morning block disqualifies a section from an evening-only window even if a
+    later block is in the evening — the student is still forced into the morning."""
+    r = {"days": "F", "times": "6:00 PM - 8:00 PM",
+         "meetings": [{"days": "M", "times": "9:00 AM - 10:00 AM"},
+                      {"days": "F", "times": "6:00 PM - 8:00 PM"}]}
+    assert E._fits_evening(r) is False

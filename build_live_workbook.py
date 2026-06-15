@@ -515,14 +515,17 @@ def _program_subjects(sections, program):
 
 
 def _section_meetings_by_course(sections):
-    """Map normalized course id -> list of meeting-blocks (one entry per offered section)."""
+    """Map normalized course id -> list of meeting-blocks (one entry per offered section).
+
+    Uses ``timeblocks.section_meeting`` so EVERY meeting block of a section is included
+    (M1): a required-course time conflict that lives on a section's secondary block is
+    now seen instead of silently missed when ``meetings[1:]`` were dropped at ingest."""
     by_course = {}
     for r in sections:
         cid = mapping._norm(r.get("course", ""))
         if not cid:
             continue
-        by_course.setdefault(cid, []).append(
-            timeblocks.parse_meeting(r.get("days", ""), r.get("times", "")))
+        by_course.setdefault(cid, []).append(timeblocks.section_meeting(r))
     return by_course
 
 
@@ -641,22 +644,27 @@ def _room_collisions(sections):
     """
     by_room = {}
     for r in sections:
-        meeting = timeblocks.parse_meeting(r.get("days", ""), r.get("times", ""))
-        if not meeting:
-            continue  # async / TBA: no physical time slot to clash over
-        if facilities.is_physical_room(r.get("facil_id", "")):
-            room_key = facilities.norm_facil(r.get("facil_id", ""))
-        else:
-            label = mapping._norm(str(r.get("room", "") or ""))
-            if not label or "ONLINE" in label or label == "TBA":
-                continue
-            room_key = label
-        by_room.setdefault((r.get("term"), room_key), []).append({
-            "course": mapping._norm(r.get("course", "")),
-            "class_nbr": str(r.get("class_nbr", "") or ""),
-            "comb": str(r.get("Comb Sects ID", "") or "").strip(),
-            "meeting": meeting,
-        })
+        course = mapping._norm(r.get("course", ""))
+        class_nbr = str(r.get("class_nbr", "") or "")
+        comb = str(r.get("Comb Sects ID", "") or "").strip()
+        term = r.get("term")
+        # Evaluate EVERY meeting block of the section (M1): each block can sit in a
+        # different room at a different time, so a double-booking can live on a
+        # secondary block that the old meetings[0]-only logic never saw.
+        for blk, meeting in timeblocks.iter_section_blocks(r):
+            if not meeting:
+                continue  # async / TBA block: no physical time slot to clash over
+            if facilities.is_physical_room(blk.get("facil_id", "")):
+                room_key = facilities.norm_facil(blk.get("facil_id", ""))
+            else:
+                label = mapping._norm(str(blk.get("room", "") or ""))
+                if not label or "ONLINE" in label or label == "TBA":
+                    continue
+                room_key = label
+            by_room.setdefault((term, room_key), []).append({
+                "course": course, "class_nbr": class_nbr, "comb": comb,
+                "meeting": meeting,
+            })
 
     findings, seen = [], set()
     for (term, room_key), secs in sorted(

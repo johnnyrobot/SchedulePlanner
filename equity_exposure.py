@@ -69,9 +69,11 @@ _ARCHETYPE_PREDICATES = {
 
 # ----------------------------------------------------------------- predicates
 def _start_min(r):
-    """Earliest meeting start minute for a section, or None when it has no parsed
-    meeting (async / TBA / unparseable)."""
-    meeting = timeblocks.parse_meeting(r.get("days", ""), r.get("times", ""))
+    """Earliest meeting start minute for a section across ALL its meeting blocks (M1),
+    or None when it has no parsed meeting (async / TBA / unparseable). Using the
+    earliest block means a morning block disqualifies a section from an evening window
+    even if a later block is in the evening."""
+    meeting = timeblocks.section_meeting(r)
     if not meeting:
         return None
     return min(b[1] for b in meeting)
@@ -94,7 +96,9 @@ def _fits_two_day(r):
 
     Note: a time-present-but-blank-days row parses to 0 days here too, so it is
     treated as async/TBA (kept by every window) — intentional, not a parse gap."""
-    return len(set(timeblocks.parse_days(r.get("days", "")))) <= MAX_DAYS_PER_WEEK
+    # Count distinct days across EVERY meeting block (M1): a section meeting on more
+    # than one pattern (e.g. M + W,F) can exceed the 2-day window the first block hid.
+    return len(set(timeblocks.section_days(r))) <= MAX_DAYS_PER_WEEK
 
 
 def _is_online(r):
@@ -113,8 +117,9 @@ def _is_online(r):
         return True
     if mods:
         return False  # explicit non-ONLINE modality (e.g. HYBRID/HYFLEX) -> not online
-    # modality absent/empty: fall back to the online room sentinel on a roomless row.
-    if not timeblocks.parse_meeting(r.get("days", ""), r.get("times", "")):
+    # modality absent/empty: fall back to the online room sentinel on a roomless row
+    # (roomless = none of its blocks has a meeting time, M1).
+    if not timeblocks.section_meeting(r):
         if "ONLINE" in str(r.get("room", "") or "").upper():
             return True
     return False

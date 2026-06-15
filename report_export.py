@@ -298,7 +298,15 @@ def _diagnostics(results: dict) -> str:
         + block("Time conflicts", a.get("time_block_collisions", []),
                 lambda x: _esc(x.get("summary")))
         + block("Off-grid sections", a.get("off_grid_sections", []),
-                lambda x: _esc(x.get("summary"))))
+                lambda x: _esc(x.get("summary")))
+        # Room double-bookings + over-capacity are injected by analyze_live (outside
+        # engine.run) from the raw section room/days/times the workbook schema drops.
+        # Gated on key presence: the workbook/demo path never computes them, so we
+        # render no block there rather than claiming "none found" for an un-run check.
+        + (block("Room double-bookings", a.get("room_conflicts", []),
+                 lambda x: _esc(x.get("summary"))) if "room_conflicts" in a else "")
+        + (block("Room over capacity", a.get("room_capacity", []),
+                 lambda x: _esc(x.get("summary"))) if "room_capacity" in a else ""))
     n = _esc(results.get("terms_in_data"))
     return (f'<section class="card" aria-labelledby="diag"><h2 id="diag">Supply diagnostics '
             f'({n} terms)</h2><div class="analysis">{body}</div></section>')

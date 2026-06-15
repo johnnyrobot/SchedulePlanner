@@ -120,6 +120,33 @@ def test_context_bottleneck_surfaces_truncation():
     assert "+3 more required-but-not-offered course(s) not shown" in ctx  # (9-8)+2
 
 
+def test_context_includes_room_conflicts_block():
+    """_context grounds the model with room double-bookings + over-capacity so the chat
+    assistant can answer about them. Previously dropped from chat grounding (H1)."""
+    results = {"analysis": {
+        "room_conflicts": [
+            {"kind": "double_book", "term": 2268, "room": "INST 2007",
+             "courses": ["BIO 3", "CHEM 101"], "class_nbrs": ["10001", "10002"],
+             "summary": "Room INST 2007 (term 2268): BIO 3 & CHEM 101 booked into the "
+                        "same room at overlapping times (classes 10001, 10002)"}],
+        "room_capacity": [
+            {"kind": "over_capacity", "course": "BIO 3", "class_nbr": "10001",
+             "summary": "BIO 3 (class 10001) has 40 enrolled in room INST 2007 "
+                        "(seats 32) — over capacity by 8"}]}}
+    ctx = chat_assist._context(results)
+    assert "ROOM" in ctx
+    assert "booked into the same room" in ctx
+    assert "over capacity by 8" in ctx
+
+
+def test_context_omits_room_conflicts_when_absent():
+    """No findings (or no room analysis) → no room grounding block, like time conflicts."""
+    assert "booked into the same room" not in chat_assist._context({"analysis": {}})
+    # Computed but empty also stays quiet (nothing to surface, no silent claim).
+    assert "booked into the same room" not in chat_assist._context(
+        {"analysis": {"room_conflicts": [], "room_capacity": []}})
+
+
 def test_context_includes_grid_pressure_block():
     results = {"analysis": {"grid_pressure": {
         "status": "active",
