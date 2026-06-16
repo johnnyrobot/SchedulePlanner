@@ -464,6 +464,39 @@ def test_off_grid_sections_flags_nonstandard_start():
     assert "CHEM 101" not in courses and "ENGL 101" not in courses
 
 
+def test_analyze_live_scopes_off_grid_sections_to_program(tmp_path):
+    """A live fetch is campus-wide, but the Supply diagnostics card is program-scoped.
+
+    The broad campus count still travels in metadata for explanation / grid-pressure
+    context; only the selected program's off-grid section appears in the main
+    Supply list that chairs/deans read first.
+    """
+    records = [
+        {"course": "MATH 245", "term": 2268, "class_nbr": "30001", "days": "MW",
+         "times": "9:05 AM - 10:30 AM", "status": "Open", "units": 5},
+        {"course": "ART 101", "term": 2268, "class_nbr": "30002", "days": "MW",
+         "times": "9:05 AM - 10:30 AM", "status": "Open", "units": 3},
+        {"course": "CHEM 101", "term": 2268, "class_nbr": "30003", "days": "MW",
+         "times": "8:55 AM - 10:20 AM", "status": "Open", "units": 5},
+    ]
+    program = {"code": "TEST", "title": "Test", "award": "AS",
+               "courses": [{"course_id": "MATH 245", "recommended_semester": 1},
+                           {"course_id": "CHEM 101", "recommended_semester": 1}],
+               "major_choices": []}
+    report = build_live_workbook.analyze_live(
+        "LAMC", [2268], "(test)", str(tmp_path / "off_grid_scope.xlsx"),
+        sections_override=records, program_override=program)
+    analysis = report["results"]["analysis"]
+    assert [f["course"] for f in analysis["off_grid_sections"]] == ["MATH 245"]
+    assert analysis["off_grid_sections_meta"] == {
+        "scope": "program",
+        "shown_count": 1,
+        "total_program_count": 1,
+        "total_campus_count": 2,
+        "truncated": False,
+    }
+
+
 # --- F5: demand-vs-supply action list ----------------------------------------
 def test_analyze_live_demand_supply_inert_without_counts(lamc_routes, make_client, tmp_path):
     """A bare live fetch has no Cap/Tot/Wait -> F5 inert with an honest reason."""

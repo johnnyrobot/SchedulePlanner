@@ -607,11 +607,17 @@ def _time_block_detector_entry(sections, collisions):
     }
 
 
-def _off_grid_sections(sections):
-    """Sections whose start time is off the college's standardized time-block grid
-    (deduped by course + days + times + term). Async/TBA sections and term lengths
-    without a known grid are skipped (timeblocks.on_grid fails open)."""
-    findings, seen = [], set()
+def _off_grid_sections(sections, program_courses=None, *, limit=50, include_meta=False):
+    """Sections whose start time is off the college's standardized time-block grid.
+
+    The raw live fetch is campus-wide, so an unscoped off-grid list can be a long
+    campus operations audit rather than a chair-friendly program finding. When
+    ``program_courses`` is supplied, the shown findings are limited to those
+    touching the analyzed program while metadata still records the broader campus
+    count. Async/TBA sections and term lengths without a known grid are skipped
+    (timeblocks.on_grid fails open).
+    """
+    all_findings, seen = [], set()
     for r in sections:
         meeting = timeblocks.parse_meeting(r.get("days", ""), r.get("times", ""))
         if not meeting or timeblocks.on_grid(r.get("term"), meeting):
@@ -621,13 +627,30 @@ def _off_grid_sections(sections):
         if key in seen:
             continue
         seen.add(key)
-        findings.append({
+        all_findings.append({
             "course": cid, "term": r.get("term"),
             "days": r.get("days", ""), "times": r.get("times", ""),
             "summary": (f"{cid} ({r.get('days', '')} {r.get('times', '')}) starts off the "
                         "standard time-block grid"),
         })
-    return findings
+    if program_courses is not None:
+        program_set = {mapping._norm(c) for c in program_courses if mapping._norm(c)}
+        scoped = [f for f in all_findings if f.get("course") in program_set]
+        scope = "program"
+    else:
+        scoped = list(all_findings)
+        scope = "all_sections"
+    shown = scoped[:limit]
+    meta = {
+        "scope": scope,
+        "shown_count": len(shown),
+        "total_program_count": len(scoped),
+        "total_campus_count": len(all_findings),
+        "truncated": len(scoped) > len(shown),
+    }
+    if include_meta:
+        return shown, meta
+    return shown
 
 
 # Instructor tokens that are NOT a real, identifiable person. Two sections that
@@ -1617,7 +1640,10 @@ def analyze_live(campus, terms, program_query, out_path, *, client=None,
     if isinstance(report["results"], dict) and isinstance(report["results"].get("analysis"), dict):
         analysis = report["results"]["analysis"]
         analysis["time_block_collisions"] = collisions
-        analysis["off_grid_sections"] = _off_grid_sections(sections)
+        off_grid, off_grid_meta = _off_grid_sections(
+            sections, program_courses=program_courses, include_meta=True)
+        analysis["off_grid_sections"] = off_grid
+        analysis["off_grid_sections_meta"] = off_grid_meta
         # E7: mirror the per-term skip into results["analysis"] so the CHAT surface
         # (which reads analysis blocks, not inert_detectors) carries the partial-
         # coverage caveat too — report + ui already show it via inert_detectors.
