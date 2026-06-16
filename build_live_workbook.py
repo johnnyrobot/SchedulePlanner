@@ -630,7 +630,31 @@ def _off_grid_sections(sections):
     return findings
 
 
-def _room_collisions(sections):
+# Instructor tokens that are NOT a real, identifiable person. Two sections that
+# merely share one of these (e.g. both "STAFF") are NOT evidence of an
+# intentional co-scheduled meeting, so they must stay eligible to be flagged as a
+# real double-booking. Compared after ``mapping._norm`` (strip + upper-case).
+_PLACEHOLDER_INSTRUCTORS = {"", "STAFF", "TBA", "TBD", "TO BE ANNOUNCED", "ONLINE"}
+
+
+def _stacked_co_schedule(a, b):
+    """True when two section blocks in the same room at overlapping times are an
+    intentional *stacked / co-scheduled* offering (one instructor teaching several
+    course numbers in one room), not a room double-booking.
+
+    The live schedule API exposes NO combined-section id (the import path's
+    ``Comb Sects ID`` is simply absent on a live fetch), so a shared, real
+    instructor is the signal that stands in for it: one person cannot be teaching
+    two genuinely different classes in the same room at the same time, so a shared
+    named instructor means it is one physical meeting. A genuine double-booking —
+    two DIFFERENT instructors / cohorts colliding in a room — never matches, and a
+    shared placeholder ("STAFF"/"TBA") is not a shared person, so it stays
+    flaggable."""
+    return (a["instr"] and a["instr"] == b["instr"]
+            and a["instr"] not in _PLACEHOLDER_INSTRUCTORS)
+
+
+def _room_collisions(sections, program_courses=None):
     """Physical room double-bookings: two DIFFERENT sections placed in the same
     room + term at overlapping meeting times.
 
@@ -640,7 +664,19 @@ def _room_collisions(sections):
     (the live fetch exposes a label, not an id). Async/TBA and online sections (no
     physical slot) never collide; combined cross-lists sharing a ``Comb Sects ID``
     are the SAME physical meeting under multiple course numbers, so they are
-    excluded; two rows of the same section (an undeduped meeting pattern) are too.
+    excluded; two rows of the same section (an undeduped meeting pattern) are too;
+    and stacked / co-scheduled sections (same real instructor, same room, same
+    time — see ``_stacked_co_schedule``) are excluded, because the live API has no
+    ``Comb Sects ID`` to mark them.
+
+    ``program_courses``: when given (a set of normalized course ids), a clash is
+    reported only if AT LEAST ONE of the two sections is a course in the analyzed
+    program. The live path fetches the WHOLE campus schedule but the report is
+    scoped to one program, so an unscoped list reads as the entire campus; scoping
+    keeps only clashes that actually touch the program's own sections. The import
+    WHOLE-schedule audit passes an all-courses set (its pseudo-program), so this is
+    a no-op there. ``None`` (the default) leaves the scan campus-wide for direct
+    callers / tests.
     """
     by_room = {}
     for r in sections:
@@ -664,6 +700,11 @@ def _room_collisions(sections):
             by_room.setdefault((term, room_key), []).append({
                 "course": course, "class_nbr": class_nbr, "comb": comb,
                 "meeting": meeting,
+                # Per-block instructor (live blocks carry ``instr``; the flat /
+                # synthetic fallback record carries ``instructor``) — normalized so
+                # ``_stacked_co_schedule`` can spot a shared real teacher.
+                "instr": mapping._norm(str(blk.get("instr")
+                                            or blk.get("instructor") or "")),
             })
 
     findings, seen = [], set()
@@ -678,6 +719,12 @@ def _room_collisions(sections):
                     continue  # combined cross-list shares one physical room slot
                 if not timeblocks.meetings_overlap(a["meeting"], b["meeting"]):
                     continue
+                if _stacked_co_schedule(a, b):
+                    continue  # one instructor, multiple course numbers, one room
+                if (program_courses is not None
+                        and a["course"] not in program_courses
+                        and b["course"] not in program_courses):
+                    continue  # campus-wide clash that doesn't touch this program
                 cls = tuple(sorted((a["class_nbr"], b["class_nbr"])))
                 key = (str(term), room_key, cls)
                 if key in seen:
@@ -699,17 +746,26 @@ def _room_collisions(sections):
     return findings
 
 
-def _room_capacity_findings(sections, facility):
+def _room_capacity_findings(sections, facility, program_courses=None):
     """Sections enrolled beyond their assigned room's seat capacity.
 
     Meaningful only with BOTH a facility map (Facil ID -> capacity) AND per-section
     ``Tot Enrl`` (an enrollment-bearing export). Returns ``[]`` when either is
     absent — not an error, just nothing to say. Deterministic order.
+
+    ``program_courses`` (a set of normalized course ids) scopes the report to the
+    analyzed program exactly as ``_room_collisions`` does: with a whole-campus
+    section list but a program-scoped report, an unscoped list reads as the entire
+    campus. The import whole-schedule audit passes an all-courses set, so it is a
+    no-op there; ``None`` leaves it unscoped.
     """
     if not facility:
         return []
     findings, seen = [], set()
     for r in sections:
+        if (program_courses is not None
+                and mapping._norm(r.get("course", "")) not in program_courses):
+            continue
         meta = facility.get(facilities.norm_facil(r.get("facil_id", "")))
         if not meta or not meta.get("capacity"):
             continue  # capacity None / 0 = unset seat count, not a real over-enroll
@@ -783,8 +839,10 @@ def _room_detector_entry(sections, collisions, *, facility_used, capacity=None,
     entry = {
         "detector": "room_conflict", "status": "active", "found": len(collisions),
         "reason": ("checks whether two different sections are booked into the same "
-                   "room at overlapping times (combined cross-lists excluded), from "
-                   "the section room + days/times"),
+                   "room at overlapping times, from the section room + days/times — "
+                   "scoped to the analyzed program's sections, with combined "
+                   "cross-lists and intentionally co-scheduled (stacked) sections "
+                   "sharing one instructor excluded"),
     }
     if facility_used:
         entry["capacity"] = {
@@ -1544,8 +1602,18 @@ def analyze_live(campus, terms, program_query, out_path, *, client=None,
     # days/times — which the workbook schema drops — joined with the engine's cohort
     # plans, then injected into results["analysis"] alongside the other diagnostics.
     collisions = _time_block_collisions(sections, program, report["results"])
-    room_conflicts = _room_collisions(sections)
-    room_capacity = _room_capacity_findings(sections, facility) if facility else []
+    # The live fetch pulls the WHOLE campus schedule, but this report is scoped to
+    # one program — so scope the room detectors to the program's own courses (a
+    # clash is reported only when it touches a program section). The import
+    # whole-schedule audit's pseudo-program lists every offered course, so this set
+    # is all-courses there and the scope is a no-op; an empty/absent course list
+    # falls back to ``None`` (unscoped) rather than hiding everything.
+    program_courses = {mapping._norm(c["course_id"])
+                       for c in (program or {}).get("courses", [])} or None
+    room_conflicts = _room_collisions(sections, program_courses=program_courses)
+    room_capacity = (_room_capacity_findings(sections, facility,
+                                             program_courses=program_courses)
+                     if facility else [])
     if isinstance(report["results"], dict) and isinstance(report["results"].get("analysis"), dict):
         analysis = report["results"]["analysis"]
         analysis["time_block_collisions"] = collisions
