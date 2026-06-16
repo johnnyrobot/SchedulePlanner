@@ -278,9 +278,40 @@ def _programs(results: dict) -> str:
 
 def _diagnostics(results: dict) -> str:
     a = results.get("analysis") or {}
-    def block(title, items, fmt):
+    guides = {
+        "rotation_gaps": ("Required courses offered in too few of the terms you checked. "
+                          "A chair can read this as students may have to wait for the next rotation."),
+        "single_section": ("Only one section is available in the analyzed window. One cancellation, "
+                           "room problem, or time conflict can block the path."),
+        "modality_mismatch": ("Capacity / fill-rate needs real Cap/Tot enrollment counts. On live-only "
+                              "builds, an empty result usually means not yet measurable, not all clear."),
+        "under_supply": ("Shows waitlist pressure. With live data it counts waitlisted sections; with an "
+                         "enrollment export it can show exact waitlist headcount. Treat it as a planning "
+                         "signal, not proof of completion impact."),
+        "time_block_collisions": ("Required courses meet at overlapping times, so a student cannot take "
+                                  "the planned combination without delaying something."),
+        "off_grid_sections": ("Sections starting outside the standard time-block grid. Off-grid starts "
+                              "can create avoidable conflicts; the broad campus grid-pressure view stays "
+                              "in the Grid conformance panel."),
+    }
+
+    def off_grid_guide():
+        meta = a.get("off_grid_sections_meta") or {}
+        txt = guides["off_grid_sections"]
+        if meta.get("scope") == "program":
+            txt += (
+                " This Supply list is scoped to the selected program: "
+                f'{_esc(meta.get("shown_count", 0))}/{_esc(meta.get("total_program_count", 0))} '
+                "program off-grid pattern(s) shown"
+                f'{" (truncated)" if meta.get("truncated") else ""}, from '
+                f'{_esc(meta.get("total_campus_count", 0))} campus-wide off-grid pattern(s) found.'
+            )
+        return txt
+
+    def block(title, items, fmt, guide=""):
         lis = "".join(f"<li>{fmt(x)}</li>" for x in items) if items else "<li>none</li>"
-        return f'<div class="a"><h3>{title}</h3><ul>{lis}</ul></div>'
+        note = f'<p class="note">{guide}</p>' if guide else ""
+        return f'<div class="a"><h3>{title}</h3>{note}<ul>{lis}</ul></div>'
 
     def under(x):
         if x.get("waitlisted", 0) > 0:
@@ -293,16 +324,19 @@ def _diagnostics(results: dict) -> str:
 
     body = (
         block("Rotation gaps", a.get("rotation_gaps", []),
-              lambda x: f'{_esc(x.get("course"))} — {_esc(x.get("offered"))}/{_esc(x.get("of"))}')
+              lambda x: f'{_esc(x.get("course"))} — {_esc(x.get("offered"))}/{_esc(x.get("of"))}',
+              guides["rotation_gaps"])
         + block("Single-section risk", a.get("single_section", []),
-                lambda x: _esc(x.get("course")))
-        + block("Modality mismatch", a.get("modality_mismatch", []),
-                lambda x: f'{_esc(x.get("course"))} — {_esc(x.get("fill_pct"))}% fill')
-        + block("Under-supply", a.get("under_supply", []), under)
+                lambda x: _esc(x.get("course")), guides["single_section"])
+        + block("Capacity / fill-rate", a.get("modality_mismatch", []),
+                lambda x: f'{_esc(x.get("course"))} — {_esc(x.get("fill_pct"))}% fill',
+                guides["modality_mismatch"])
+        + block("Under-supply", a.get("under_supply", []), under,
+                guides["under_supply"])
         + block("Time conflicts", a.get("time_block_collisions", []),
-                lambda x: _esc(x.get("summary")))
+                lambda x: _esc(x.get("summary")), guides["time_block_collisions"])
         + block("Off-grid sections", a.get("off_grid_sections", []),
-                lambda x: _esc(x.get("summary")))
+                lambda x: _esc(x.get("summary")), off_grid_guide())
         # Room double-bookings + over-capacity are injected by analyze_live (outside
         # engine.run) from the raw section room/days/times the workbook schema drops.
         # Gated on key presence: the workbook/demo path never computes them, so we

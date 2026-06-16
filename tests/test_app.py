@@ -99,7 +99,8 @@ def test_fetch_live_returns_results_plus_reconciliation_and_inert(
     assert res["terms_in_data"] >= 1
     assert set(res["analysis"]) == {
         "rotation_gaps", "single_section", "modality_mismatch", "under_supply",
-        "time_block_collisions", "off_grid_sections", "room_conflicts",
+        "time_block_collisions", "off_grid_sections", "off_grid_sections_meta",
+        "room_conflicts",
         "buildability", "bottlenecks", "grid_pressure", "demand_supply",
         "equity_exposure", "gateway_momentum", "corequisite_availability",
         "infeasibility", "demand_success", "equity_success_gap",
