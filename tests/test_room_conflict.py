@@ -202,3 +202,68 @@ def test_section_meetings_by_course_unions_all_blocks():
                           {"days": "F", "times": "1:00 PM - 2:00 PM"}]}]
     by_course = _section_meetings_by_course(recs)
     assert {b[0] for b in by_course["BIO 3"][0]} == {"M", "F"}
+
+
+# --- co-scheduled (stacked) suppression: the live API has no Comb Sects ID -----
+
+def _seci(course, class_nbr, *, instr="", **kw):
+    """A flat section record with an instructor (the live fetch's stand-in for a
+    combined-section id, which the live schedule API does not expose)."""
+    r = _sec(course, class_nbr, **kw)
+    r["instructor"] = instr
+    return r
+
+
+def test_stacked_same_instructor_same_room_not_flagged():
+    """One instructor teaching multiple course numbers in the same room at the same
+    time is an intentional STACKED offering, not a double-booking. With no
+    Comb Sects ID on live data, a shared real instructor is the signal."""
+    secs = [_seci("ART 204", "12089", facil="MAMP212", instr="J SMITH"),
+            _seci("ART 205", "16121", facil="MAMP212", instr="J SMITH")]
+    assert _room_collisions(secs) == []
+
+
+def test_shared_staff_placeholder_still_flagged():
+    """Two sections that merely share the 'STAFF' placeholder are NOT a known
+    co-scheduled meeting — a real double-booking must still surface."""
+    secs = [_seci("ACCTG 001", "30001", facil="MINST1006", instr="STAFF"),
+            _seci("ENGL 101", "30002", facil="MINST1006", instr="STAFF")]
+    out = _room_collisions(secs)
+    assert len(out) == 1 and out[0]["kind"] == "double_book"
+
+
+def test_different_instructors_same_room_flagged():
+    """Two DIFFERENT instructors in one room at overlapping times is a genuine
+    double-booking — never suppressed by the co-scheduled rule."""
+    secs = [_seci("BIOTECH 002", "30001", facil="MCMS006", instr="M RAHMAN"),
+            _seci("BIOTECH 003", "30002", facil="MCMS006", instr="C ARORA")]
+    assert len(_room_collisions(secs)) == 1
+
+
+# --- program scope: the live fetch is campus-wide, the report is one program ---
+
+def test_program_scope_keeps_pair_touching_the_program():
+    secs = [_sec("BIOL 003", "1", facil="MINST1006"),
+            _sec("CHEM 101", "2", facil="MINST1006")]
+    # unscoped (default) still flags it
+    assert len(_room_collisions(secs)) == 1
+    # scoped to a set containing ONE of the two -> still reported
+    assert len(_room_collisions(secs, program_courses={"BIOL 003"})) == 1
+
+
+def test_program_scope_drops_pair_outside_the_program():
+    secs = [_sec("BIOL 003", "1", facil="MINST1006"),
+            _sec("CHEM 101", "2", facil="MINST1006")]
+    # neither course is in the program -> campus-wide noise, dropped
+    assert _room_collisions(secs, program_courses={"DANCE 100"}) == []
+
+
+def test_room_capacity_scoped_to_program():
+    facility = load_facility(FAC)
+    secs = [_sec("ACCTG 001", "30001", facil="MINST1006", tot=45),   # over by 15
+            _sec("ENGL 101", "30002", facil="MINST1006", tot=45)]    # over by 15
+    # both over capacity unscoped
+    assert len(_room_capacity_findings(secs, facility)) == 2
+    # scoping to one program course keeps only that one
+    assert len(_room_capacity_findings(secs, facility,
+                                       program_courses={"ACCTG 001"})) == 1
