@@ -321,16 +321,19 @@ def test_no_flags_inert_chat_grounding_is_positive_only():
     assert res["analysis"]["evidence"]["status"] == "inert"
     ctx = chat_assist._context(res)
 
-    # the caveated positive block IS grounded
-    assert "WHY THIS MATTERS" in ctx
-    assert "NOT a measurement or prediction of this campus" in ctx
+    # the caveated positive block IS grounded, under the no-flags GENERAL-CONTEXT
+    # header (NOT the flag-specific "why this matters" framing, which would imply a
+    # finding exists when nothing was flagged this build).
+    assert "GENERAL GUIDED-PATHWAYS CONTEXT" in ctx
+    assert "NO structural flag fired this build" in ctx
+    assert "explaining why a flagged condition matters" not in ctx
     # both positive claims present (by their unambiguous attribution text)
     assert "Central Arizona" in ctx       # guided_pathways
     assert "Odessa" in ctx and "Kilgore" in ctx  # standardized_blocks
 
     # the no-flags surface must NOT contain ANY problem-claim text — a leak here
     # would mean the no-flags default started implying a problem that isn't present.
-    f7_ctx = ctx[ctx.index("WHY THIS MATTERS"):]
+    f7_ctx = ctx[ctx.index("GENERAL GUIDED-PATHWAYS CONTEXT"):]
     for problem in ("57%", "shutout", "5.41", "stop-out", "7.39"):
         assert problem not in f7_ctx, (
             f"problem-claim text {problem!r} leaked into the no-flags chat grounding")

@@ -139,20 +139,30 @@ def _load_ge(path):
     except Exception:
         return []
     rows = []
-    for _, r in df.iterrows():
-        cands = [c.strip() for c in str(r.get("Candidate Course IDs", "") or "").split(";")
-                 if c.strip()]
-        rows.append({
-            "program_code": r["Program Code"],
-            "pattern": r.get("Pattern", ""),
-            "area": str(r["Area"]),
-            "area_title": r.get("Area Title", ""),
-            "required_count": int(r.get("Required Count", 1)),
-            "resolution": str(r.get("Resolution", "reserve")),
-            "candidates": cands,
-            "recommended": str(r.get("Recommended Course", "") or ""),
-            "units": float(r.get("Units", 3.0)),
-        })
+    for i, (_, r) in enumerate(df.iterrows()):
+        # A malformed ge_requirements row (missing Program Code/Area, non-numeric
+        # Required Count/Units) is user input drift: name the row and field instead
+        # of letting a raw KeyError/ValueError surface from deep in the loop.
+        try:
+            cands = [c.strip() for c in str(r.get("Candidate Course IDs", "") or "").split(";")
+                     if c.strip()]
+            rows.append({
+                "program_code": r["Program Code"],
+                "pattern": r.get("Pattern", ""),
+                "area": str(r["Area"]),
+                "area_title": r.get("Area Title", ""),
+                "required_count": int(r.get("Required Count", 1)),
+                "resolution": str(r.get("Resolution", "reserve")),
+                "candidates": cands,
+                "recommended": str(r.get("Recommended Course", "") or ""),
+                "units": float(r.get("Units", 3.0)),
+            })
+        except (KeyError, ValueError) as exc:
+            raise InputDataError(
+                f"ge_requirements row {i}: invalid or missing field ({exc}). "
+                "Required: Program Code and Area columns, with numeric Required "
+                "Count and Units."
+            ) from exc
     return rows
 
 
@@ -488,15 +498,20 @@ def solve_cohort(pcode, prog, course_seasons, units, prereqs, cohort, allow_fixe
     return result
 
 
-def official_map_issues(pcode, prog, course_seasons, prereqs):
+def official_map_issues(pcode, prog, course_seasons, prereqs, cadence=("Fall", "Spring")):
     g = prog[prog["Program Code"] == pcode]
     official = {r["Course ID"]: r["Recommended Semester"]
                 for _, r in g.iterrows() if not pd.isna(r["Recommended Semester"])}
     issues = []
     for c, sem in official.items():
         sem = int(sem)
-        if term_season(sem) not in course_seasons.get(c, set()):
-            issues.append(f"{c} mapped to sem {sem} ({term_season(sem)}) but only "
+        # Map the recommended semester to a season under the SAME data-derived
+        # cadence the solver uses, so a 3+/4-season (Summer/Winter) dataset is not
+        # mis-checked against the static 2-season default. Fall/Spring-only data
+        # yields the default cadence, so this is byte-identical there.
+        season = term_season(sem, cadence)
+        if season not in course_seasons.get(c, set()):
+            issues.append(f"{c} mapped to sem {sem} ({season}) but only "
                           f"offered {sorted(course_seasons.get(c, set())) or 'never'}")
     return issues
 
@@ -527,6 +542,12 @@ def run(path: str, llm=None) -> dict:
     # When a multi-block ``Meetings`` column is present, secondary-block clashes are
     # honored too (gated, disclosed; see _hard_conflict_pairs).
     hard_conflicts = _hard_conflict_pairs(sec, relevant_items)
+    # The planning cadence is global (derived from every offered season), the same
+    # basis solve_cohort uses, so official_map_issues checks recommended semesters
+    # against the seasons the solver actually plans into. Fall/Spring-only data
+    # gives the legacy default -> byte-identical.
+    seasons_present = set().union(*course_seasons.values()) if course_seasons else set()
+    cadence = _cadence(seasons_present)
 
     results = {"terms_in_data": int(n_terms),
                "analysis": analyze(active, prog, n_terms),
@@ -535,7 +556,8 @@ def run(path: str, llm=None) -> dict:
         title = prog[prog["Program Code"] == pcode]["Program Title"].iloc[0]
         entry = {"title": title,
                  "official_map_issues": official_map_issues(pcode, prog,
-                                                            course_seasons, prereqs),
+                                                            course_seasons, prereqs,
+                                                            cadence),
                  "cohorts": {}}
         for ck, cohort in COHORTS.items():
             res = solve_cohort(pcode, prog, course_seasons, units, prereqs,
