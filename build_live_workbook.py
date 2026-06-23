@@ -1408,12 +1408,15 @@ def analyze_live(campus, terms, program_query, out_path, *, client=None,
         # subject ONCE instead of re-crawling per goal — a deliberate kindness to
         # the rate-limit-pending endpoint.
         elumen_cache = elumen_cache if elumen_cache is not None else {}
+        # Keep this DISTINCT from the schedule-fetch ``fetch_status`` (set above and
+        # read for the skipped-terms warnings below): overwriting it here erased the
+        # schedule's partial-coverage info.
         if client is not None:
-            records, _fetched, fetch_status = elumen_client.fetch_prereq_records(
+            records, _fetched, elumen_fetch_status = elumen_client.fetch_prereq_records(
                 campus, subjects, client=client, cache=elumen_cache)
         else:
             with httpx.Client(timeout=30.0) as owned:
-                records, _fetched, fetch_status = elumen_client.fetch_prereq_records(
+                records, _fetched, elumen_fetch_status = elumen_client.fetch_prereq_records(
                     campus, subjects, client=owned, cache=elumen_cache)
 
         kwargs = {}
@@ -1426,8 +1429,8 @@ def analyze_live(campus, terms, program_query, out_path, *, client=None,
             records, known_course_ids, requested_course_ids=requested_course_ids)
         # Surface an aggregate wall-clock-cap truncation honestly: prerequisite
         # coverage may be partial (some subjects skipped). Never silent.
-        if fetch_status.get("exceeded"):
-            elumen_coverage["fetch_truncated"] = fetch_status
+        if elumen_fetch_status.get("exceeded"):
+            elumen_coverage["fetch_truncated"] = elumen_fetch_status
         report["elumen_coverage"] = elumen_coverage
         elumen_source = f"eLumen live: {elumen_client.tenant_for(campus)}"
         elumen_live_active = True
@@ -1752,7 +1755,8 @@ def _by_design_from_workbook(path):
 def analyze_import(schedule_path, out_path, *, program=None, program_path=None,
                    facility_path=None, course_master_path=None,
                    program_lists_path=None, sheet=None, transfer_goal="none",
-                   enrollment_path=None, enrollment_map=None):
+                   enrollment_path=None, enrollment_map=None,
+                   assist_areas=None, assist_year_id=None):
     """Offline historical audit: convert a real LACCD schedule export into engine
     records and run the SAME pipeline ``analyze_live`` runs — with NO network.
 
@@ -1776,6 +1780,18 @@ def analyze_import(schedule_path, out_path, *, program=None, program_path=None,
     ``analyze_live``'s ``enrollment_path`` (real IR adapter) /
     ``enrollment_map`` (hand-keyed offline) seam; both stay OUTSIDE engine.run.
     """
+    # Enforce the NO-network contract this function advertises: a transfer GE goal
+    # (anything but "none"/"local") makes analyze_live fetch the ASSIST area map over
+    # the network. On this offline path that is only allowed when the caller injects
+    # a pre-fetched ``assist_areas`` map — otherwise reject rather than silently
+    # reaching out. ("local" sources GE from the catalog PDF, no network.)
+    goal_l = str(transfer_goal).lower() if transfer_goal else "none"
+    if goal_l not in ("none", "local") and not assist_areas:
+        raise ValueError(
+            f"analyze_import is offline (no network) but transfer_goal={transfer_goal!r} "
+            "needs the ASSIST area map. Pass a pre-fetched assist_areas (with "
+            "assist_year_id), or use transfer_goal='local' (catalog GE) or 'none'.")
+
     records, summary = schedule_import.load_schedule_export(schedule_path, sheet=sheet)
     if not records:
         return {"campus": "LAMC", "terms": [], "section_count": 0, "program": None,
@@ -1822,7 +1838,8 @@ def analyze_import(schedule_path, out_path, *, program=None, program_path=None,
         # sections keep the schedule export's own native counts — F5
         # demand_supply then reads IR-on-matched + native-on-unmatched.
         enrollment_path=enrollment_path, enrollment_map=enrollment_map,
-        elumen_live=False, transfer_goal=transfer_goal)
+        elumen_live=False, transfer_goal=transfer_goal,
+        assist_areas=assist_areas, assist_year_id=assist_year_id)
     report["import_summary"] = summary
     return report
 
