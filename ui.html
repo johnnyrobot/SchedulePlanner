@@ -523,8 +523,12 @@ async function runAnalysis(){
   const btn=document.getElementById('runBtn');
   btn.disabled=true; btn.textContent='Solving…';
   document.getElementById('status').innerHTML='<span class="spinner"></span> running solver';
-  const res = await window.pywebview.api.analyze(dataPath);
-  btn.disabled=false; btn.textContent='Generate schedules';
+  let res;
+  // Always restore the button, even if the JS<->Python bridge rejects, so a failed
+  // call never leaves the UI stuck on the spinner.
+  try{ res = await window.pywebview.api.analyze(dataPath); }
+  catch(e){ res = {error:'Unexpected error talking to the app: '+String(e)}; }
+  finally{ btn.disabled=false; btn.textContent='Generate schedules'; }
   showResult(res);
 }
 
@@ -538,8 +542,10 @@ async function loadDemo(){
   document.getElementById('actions').style.display='flex';
   document.getElementById('picked').textContent='bundled demo data';
   document.getElementById('status').innerHTML='<span class="spinner"></span> running solver on demo data';
-  const res = await window.pywebview.api.load_demo();
-  btn.disabled=false; btn.textContent='Load demo data';
+  let res;
+  try{ res = await window.pywebview.api.load_demo(); }
+  catch(e){ res = {error:'Unexpected error talking to the app: '+String(e)}; }
+  finally{ btn.disabled=false; btn.textContent='Load demo data'; }
   showResult(res);
 }
 
@@ -1390,6 +1396,11 @@ function render(res){
   const a=res.analysis;
   const mk=(t,arr,fn)=>'<div class="a"><h4>'+t+'</h4><ul>'+
     (arr.length?arr.map(fn).join(''):'<li>none</li>')+'</ul></div>';
+  // Render an OPTIONAL detector section only when the analysis actually carries the
+  // key. An absent key means the detector did not run (e.g. room checks with no
+  // room/facility data) — omit it rather than showing "none", which would conflate
+  // "not assessed" with "none found".
+  const mkOpt=(t,arr,fn)=>Array.isArray(arr)?mk(t,arr,fn):'';
   html+='<div class="card"><h3>Supply diagnostics ('+res.terms_in_data+' terms)</h3>'+
     '<div class="analysis mt">'+
     mk('Rotation gaps',a.rotation_gaps,x=>'<li>'+escapeHtml(x.course)+' — '+x.offered+'/'+x.of+'</li>')+
@@ -1398,8 +1409,8 @@ function render(res){
     mk('Under-supply',a.under_supply,x=>'<li>'+escapeHtml(x.course)+' — '+(x.waitlisted>0?x.waitlisted+' waitlisted':(x.sections_waitlisted!=null?x.sections_waitlisted+'/'+x.sections_total+' sections waitlisted':'waitlisted'))+'</li>')+
     mk('Time conflicts',a.time_block_collisions||[],x=>'<li>'+escapeHtml(x.summary)+'</li>')+
     mk('Off-grid sections',a.off_grid_sections||[],x=>'<li>'+escapeHtml(x.summary)+'</li>')+
-    mk('Room double-bookings',a.room_conflicts||[],x=>'<li>'+escapeHtml(x.summary)+'</li>')+
-    mk('Room over capacity',a.room_capacity||[],x=>'<li>'+escapeHtml(x.summary)+'</li>')+
+    mkOpt('Room double-bookings',a.room_conflicts,x=>'<li>'+escapeHtml(x.summary)+'</li>')+
+    mkOpt('Room over capacity',a.room_capacity,x=>'<li>'+escapeHtml(x.summary)+'</li>')+
     '</div></div>';
   document.getElementById('out').innerHTML=html;
 }
@@ -1410,8 +1421,14 @@ async function doExplain(){
   // The briefing renders below the results (below the fold), so scroll to it —
   // otherwise clicking "Explain for admin" looks like it does nothing.
   box.scrollIntoView({behavior:'smooth', block:'start'});
-  const r=await window.pywebview.api.explain();
-  box.innerHTML='<div class="card"><h3>Briefing</h3><div class="explain mt">'+escapeHtml(r.text)+'</div></div>';
+  let r;
+  try{ r=await window.pywebview.api.explain(); }
+  catch(e){ r={error:String(e)}; }
+  if(r.error){
+    box.innerHTML='<div class="card">Briefing failed: '+escapeHtml(r.error)+'</div>';
+  }else{
+    box.innerHTML='<div class="card"><h3>Briefing</h3><div class="explain mt">'+escapeHtml(r.text||'')+'</div></div>';
+  }
 }
 
 // Export the current analysis as a self-contained, accessible HTML file. The

@@ -647,11 +647,20 @@ def _ground_evidence(results: dict) -> list[str]:
     el = [f"- {c.get('metric')}: {c.get('statement')} [Source: {c.get('source')}]"
           for c in claims]
     # The honest envelope rides in the header so the model never reports these as
-    # this campus's measured outcomes — they are sector-wide published findings
-    # from OTHER institutions explaining why a flagged condition matters.
-    return ["", "WHY THIS MATTERS — SECTOR-WIDE RESEARCH EVIDENCE (published findings "
-            "from OTHER institutions explaining why a flagged condition matters; NOT a "
-            "measurement or prediction of this campus)", *el]
+    # this campus's measured outcomes — they are sector-wide published findings from
+    # OTHER institutions. When NO structural flag fired (evidence_appendix is inert)
+    # the claims are GENERAL guided-pathways context, NOT an explanation of a flag,
+    # so the header must not imply a finding exists.
+    if block.get("status") == "inert":
+        header = ("GENERAL GUIDED-PATHWAYS CONTEXT (sector-wide published findings from "
+                  "OTHER institutions; NO structural flag fired this build, so this is "
+                  "background only — NOT a measurement, prediction, or flagged condition "
+                  "for this campus)")
+    else:
+        header = ("WHY THIS MATTERS — SECTOR-WIDE RESEARCH EVIDENCE (published findings "
+                  "from OTHER institutions explaining why a flagged condition matters; NOT "
+                  "a measurement or prediction of this campus)")
+    return ["", header, *el]
 
 
 # Append-only registry: source order is load-bearing (grid_pressure, then
@@ -857,6 +866,9 @@ def chat(question, results, history=None, *, client=None, model=llm_assist.MODEL
     if not q:
         return {"answer": "Ask a question about the analysis above.", "lookup": None}
 
+    # Normalize None to {} so _context/_defaults reach their "no analysis loaded"
+    # fallbacks instead of raising AttributeError on a .get() call.
+    results = results or {}
     context = _context(results)
     intent = route(q, _defaults(results), history, model=model)
     label, facts = (None, "")

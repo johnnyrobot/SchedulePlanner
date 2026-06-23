@@ -133,7 +133,9 @@ def _online_computable(sections):
     key or an online room label, so this is False and the archetype reports
     NOT ASSESSED rather than guessing from days/times."""
     for r in sections or []:
-        if r.get("modality"):
+        # Presence of the key (even an empty list/string) is the live-path signal —
+        # truthiness would miss a row whose modality is an empty collection.
+        if "modality" in r:
             return True
         if "ONLINE" in str(r.get("room", "") or "").upper():
             return True
