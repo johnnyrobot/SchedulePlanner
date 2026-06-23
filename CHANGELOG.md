@@ -4,6 +4,52 @@ All notable changes to SchedulePlanner are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.2] — 2026-06-23
+
+Code-review remediation from a full-codebase CodeRabbit review, plus a
+regenerated demo baseline. Bug fixes and internal hardening — no new features.
+The bundled demo workbook was regenerated, so demo plans differ from 0.2.1.
+
+### Fixed
+- **Conflict detection (M1):** secondary / lab meeting blocks were dropped by
+  several detectors (off-grid, room-capacity, lab-pool, room/time-block status)
+  and by `buildability.offered_by_course`, blinding them to clashes on a
+  section's non-primary block. They now read every meeting block.
+- **Cross-term false conflicts:** two courses offered in *different* terms are no
+  longer flagged as a hard / mutually-exclusive time conflict (new
+  `timeblocks.pairwise_hard_conflict_termed`; applied in
+  `buildability.time_conflict` and `grid_pressure.mutual_exclusions`).
+- **Subject-alias joins:** aliased spellings (e.g. `ENGL` vs `ENGLISH`) are now
+  matched at the cross-program-bottleneck and demand-vs-supply joins instead of
+  being undercounted (`_offered_match` merge; canonical-space demand matching).
+- **Engine:** `official_map_issues` checks recommended semesters against the
+  data-derived planning cadence (Summer/Winter-aware), not the static Fall/Spring
+  default; a malformed `ge_requirements` row now raises a contextual
+  `InputDataError`; `fetch_sections` guards against `raise None`.
+- **Offline contract:** `analyze_import` rejects a transfer GE goal that needs a
+  network ASSIST fetch unless a pre-fetched map is supplied; the eLumen fetch no
+  longer clobbers the schedule fetch's skipped-terms status.
+- **LLM safety:** the admin-briefing summary is fenced as untrusted data
+  (prompt-injection hardening); blank prerequisite tokens are filtered.
+- **UI:** the analyze / demo / explain bridge calls always restore button state
+  on failure (no stuck spinner); room double-booking / over-capacity sections
+  render only when actually assessed, never a misleading "none".
+- **Misc:** `chat` tolerates `None` results; inert evidence is framed as general
+  context, not a flagged finding; online-archetype computability keys off
+  modality *presence*; invalid term tokens are rejected, not silently dropped;
+  the bundled JRE launcher resolves `java.exe` on Windows.
+
+### Changed
+- **Synthetic generator / demo data:** recommended-sequence-only courses
+  (`PSYC 1` / `HIST 11` / `COMM 101`) are now part of the affected programs and
+  scheduled; TBA/async rows no longer set a Sunday flag; each section gets one
+  consistent room across its aliases; `Nbr Mtgs` = (meeting days) × 16. The demo
+  `files/lamc_data.xlsx` and enrollment sample were regenerated and the
+  determinism plan-hash golden re-pinned (all programs verified still feasible).
+- **Refactor:** `_norm` / `_to_units` moved to a shared `sources/textnorm`
+  module (re-exported by `mapping`, so all existing call sites are unchanged),
+  resolving an offline-reader → workbook-assembly layering dependency.
+
 ## [0.2.1] — 2026-06-15
 
 Ship-review hardening (PR #85). No behavior change on the happy path; closes the
