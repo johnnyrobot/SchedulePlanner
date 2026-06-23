@@ -50,6 +50,20 @@ def test_escaping_is_used_pervasively_in_the_render_paths():
         "escapeHtml usage collapsed — the render paths may have lost data escaping"
 
 
+def test_supply_diagnostics_have_chair_friendly_guides():
+    """The terse Supply diagnostic buckets need in-context plain-English help."""
+    for needle in (
+        "Required courses offered in too few of the terms you checked",
+        "Only one section is available in the analyzed window",
+        "Capacity / fill-rate needs real Cap/Tot enrollment counts",
+        "Treat it as a planning signal, not proof of completion impact",
+        "Required courses meet at overlapping times",
+        "This Supply list is scoped to the selected program",
+    ):
+        assert needle in UI
+    assert "mk('Capacity / fill-rate'" in UI
+
+
 def test_no_innerHTML_assigns_a_bare_untrusted_property_unescaped():
     # Targeted antipattern scan: an innerHTML assignment whose RHS is a SINGLE bare
     # untrusted property read (e.g. `el.innerHTML = res.error`) with no escapeHtml

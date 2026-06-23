@@ -38,4 +38,5 @@ graphify-out/
 /PRD.md
 /TECH_SPEC.md
 /LAMC_scheduling_data_spec.md
-/docs/
+/docs/*
+!/docs/e2e_live_computer_use.md

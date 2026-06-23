@@ -66,6 +66,8 @@
            text-transform:none;letter-spacing:0;box-shadow:0 6px 20px #00000026;
            opacity:0;visibility:hidden;transition:opacity .12s}
   .tip:hover .tip-bub,.tip.open .tip-bub{opacity:1;visibility:visible}
+  .tip-bub{display:none}
+  .tip:hover .tip-bub,.tip.open .tip-bub{display:block}
   .tip.tip-left .tip-bub{left:auto;right:0}
   .tip-bub b{color:var(--ink);font-weight:600}
   .bwrap{display:inline-flex;align-items:center;gap:6px}
@@ -199,6 +201,129 @@
        color:var(--ink);border:1px solid var(--line);border-radius:3px;padding:9px 11px;min-width:0}
   .chatform input:focus{outline:none;border-color:var(--amber)}
   .vh{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+
+  /* Paper redesign: dense workspace, explicit task rail, preflight, term audit. */
+  .planner-redesign{max-width:1440px;padding:22px 28px 44px}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:8px}
+  .startup-panel{display:grid;grid-template-columns:minmax(0,1fr) 360px;gap:24px;align-items:center;
+        background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:24px;
+        margin-bottom:16px;box-shadow:0 12px 34px #0000000b}
+  .startup-panel.is-hidden{display:none}
+  .startup-panel h2{font-family:var(--mono);font-size:24px;letter-spacing:.01em;margin:4px 0 8px}
+  .startup-panel p{color:var(--dim);max-width:720px}
+  .startup-checks{display:flex;flex-direction:column;gap:8px}
+  .check-row{display:grid;grid-template-columns:10px minmax(0,1fr);gap:10px;align-items:start;
+        padding:10px 12px;border:1px solid var(--line);border-radius:6px;background:var(--bg)}
+  .check-row .check-dot{width:10px;height:10px;border-radius:50%;margin-top:5px;background:var(--dim)}
+  .check-row.ok .check-dot{background:var(--green)}
+  .check-row.warn .check-dot{background:var(--amber)}
+  .check-row.bad .check-dot{background:var(--red)}
+  .check-row b{display:block;font-family:var(--mono);font-size:12px}
+  .check-row p{font-size:12px;line-height:1.4;margin-top:1px}
+
+  .task-layout{display:grid;grid-template-columns:248px minmax(0,1fr) 312px;gap:16px;align-items:start}
+  .task-rail,.quick-panel{padding:14px}
+  .rail-title{font-family:var(--mono);font-size:11px;color:var(--dim);text-transform:uppercase;
+        letter-spacing:.14em;margin-bottom:10px}
+  .task-card{width:100%;display:block;text-align:left;background:transparent;color:var(--ink);
+        border:1px solid var(--line);border-radius:7px;padding:12px 12px;margin-bottom:8px;
+        font-family:var(--sans);letter-spacing:0}
+  .task-card:hover{border-color:var(--amber)}
+  .task-card.active{background:var(--ok-bg);border-color:var(--pill-on)}
+  .task-card .task-kicker{display:block;font-family:var(--mono);font-size:10px;color:var(--dim);
+        text-transform:uppercase;letter-spacing:.12em;margin-bottom:4px}
+  .task-card strong{display:block;font-size:13px;line-height:1.25}
+  .task-card small{display:block;color:var(--dim);font-size:12px;line-height:1.4;margin-top:4px}
+  .rail-status{border-top:1px solid var(--hair);margin-top:12px;padding-top:12px}
+  .status-line{display:flex;justify-content:space-between;gap:8px;align-items:center;
+        font-family:var(--mono);font-size:11px;color:var(--dim);padding:6px 0;border-bottom:1px solid var(--hair)}
+  .status-line:last-child{border-bottom:none}
+  .state-chip{font-family:var(--mono);font-size:10px;text-transform:uppercase;letter-spacing:.08em;
+        border:1px solid var(--line);border-radius:999px;padding:2px 7px;color:var(--dim);white-space:nowrap}
+  .state-chip.ok{background:var(--ok-bg);color:var(--green);border-color:var(--pill-on)}
+  .state-chip.warn{background:var(--warn-bg);color:var(--amber)}
+  .state-chip.bad{background:var(--bad-bg);color:var(--red)}
+
+  .workspace-stack{min-width:0;display:flex;flex-direction:column;gap:14px}
+  .workspace-hero{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:20px;align-items:center;padding:18px 20px}
+  .screen-label{font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.16em}
+  .workspace-hero h2,.panel-head h2{font-family:var(--mono);font-size:22px;line-height:1.18;letter-spacing:.01em;margin-top:4px}
+  .workspace-hero p,.panel-head p{color:var(--dim);margin-top:6px}
+  .hero-metrics{display:grid;grid-template-columns:repeat(3,92px);gap:8px}
+  .metric{border:1px solid var(--line);border-radius:7px;padding:9px 10px;background:var(--bg)}
+  .metric b{display:block;font-family:var(--mono);font-size:16px}
+  .metric span{display:block;font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.08em}
+
+  .workflow-shell,.preflight-card{padding:16px}
+  .panel-head{display:flex;justify-content:space-between;gap:16px;align-items:flex-start;margin-bottom:14px}
+  .mode-panel[hidden]{display:none}
+  .input-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+  .input-card{border:1px solid var(--line);border-radius:7px;padding:12px;background:var(--bg)}
+  .input-card.wide{grid-column:1/-1}
+  .input-card h4{font-family:var(--mono);font-size:12px;letter-spacing:.02em;margin-bottom:6px}
+  .input-card p{color:var(--dim);font-size:12.5px;line-height:1.45}
+  .compact-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:10px}
+  .drop.compact{padding:18px;border-radius:7px}
+  .flab select{font-family:var(--mono);font-size:13px;background:var(--input-bg);color:var(--ink);
+        border:1px solid var(--line);border-radius:3px;padding:8px 10px;text-transform:none;letter-spacing:0}
+  .live-grid{display:grid;grid-template-columns:140px 180px minmax(220px,1fr);gap:10px}
+  .live-options{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:10px}
+
+  .preflight-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+  .preflight-item{border:1px solid var(--line);border-radius:7px;padding:10px;background:var(--bg);min-height:78px}
+  .preflight-item .label{font-family:var(--mono);font-size:10px;text-transform:uppercase;letter-spacing:.12em;color:var(--dim)}
+  .preflight-item .value{font-family:var(--mono);font-size:13px;margin-top:5px;overflow-wrap:anywhere}
+  .preflight-item .note{font-size:11.5px;color:var(--dim);margin-top:3px;line-height:1.35}
+  .diff-box{border:1px solid var(--line);border-radius:7px;margin-top:10px;overflow:hidden}
+  .diff-row{display:grid;grid-template-columns:86px minmax(0,1fr);border-bottom:1px solid var(--hair)}
+  .diff-row:last-child{border-bottom:none}
+  .diff-row span:first-child{font-family:var(--mono);font-size:10px;text-transform:uppercase;letter-spacing:.1em;
+        color:var(--dim);background:var(--bg);padding:8px 10px;border-right:1px solid var(--hair)}
+  .diff-row span:last-child{font-family:var(--mono);font-size:12px;padding:8px 10px;overflow-wrap:anywhere}
+
+  .quick-panel h3{font-family:var(--mono);font-size:14px;margin-bottom:8px}
+  .term-chips{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0}
+  .term-chip{font-family:var(--mono);font-size:11px;border:1px solid var(--line);border-radius:999px;
+        padding:4px 8px;background:var(--bg);color:var(--ink)}
+  .audit-list{display:flex;flex-direction:column;gap:8px;margin-top:10px}
+  .audit-row{display:flex;gap:8px;align-items:flex-start;color:var(--dim);font-size:12.5px;line-height:1.4}
+  .audit-row .state-chip{margin-top:1px}
+
+  .action-bar{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:12px 14px;margin-top:0}
+  .result-shell{margin-top:16px}
+  .result-shell #out,.result-shell #live{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+  .result-shell #out:empty,.result-shell #live:empty{display:block}
+  .result-shell .card{margin-top:0;border-radius:8px}
+  .result-shell .card:first-child{grid-column:1/-1}
+  .result-shell .analysis{columns:auto;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+  .result-shell .analysis .a{border:1px solid var(--hair);border-radius:7px;padding:10px;background:var(--bg);margin-bottom:0}
+  .result-shell .analysis .a ul{max-height:190px;overflow:auto;padding-right:4px}
+  .result-shell .cohorts{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .result-shell .term b{display:inline-block;min-width:58px}
+  .export-preview{padding:16px;margin-top:12px}
+  .export-preview[hidden]{display:none}
+  .export-layout{display:grid;grid-template-columns:minmax(0,1fr) 260px;gap:14px;align-items:start}
+  .briefing-preview{border:1px solid var(--line);border-radius:7px;background:var(--bg);padding:12px;
+        font-size:13px;line-height:1.55}
+  .export-checks{display:flex;flex-direction:column;gap:7px}
+  .export-check{font-family:var(--mono);font-size:11px;border:1px solid var(--line);border-radius:6px;padding:7px 8px;background:var(--bg)}
+  .chat-panel{border-radius:8px;margin-top:12px}
+
+  @media (max-width:1180px){
+    .task-layout{grid-template-columns:220px minmax(0,1fr)}
+    .quick-panel{grid-column:1/-1}
+    .startup-panel{grid-template-columns:1fr}
+  }
+  @media (max-width:820px){
+    header{align-items:flex-start;gap:12px;flex-direction:column}
+    .planner-redesign{padding:16px}
+    .task-layout,.input-grid,.live-grid,.live-options,.preflight-grid,.workspace-hero,
+    .export-layout,.result-shell #out,.result-shell #live,.result-shell .analysis{grid-template-columns:1fr}
+    .workspace-hero{gap:12px}
+    .hero-metrics{grid-template-columns:repeat(3,minmax(0,1fr));width:100%}
+    .cohorts,.result-shell .cohorts{grid-template-columns:1fr}
+    .tip-bub{left:auto;right:0;max-width:calc(100vw - 32px);overflow-wrap:anywhere}
+  }
 </style>
 </head>
 <body>
@@ -214,130 +339,273 @@
   </div>
 </header>
 
-<main id="planner">
-  <div class="optnum">Option 1</div>
-  <div class="opthead">Use a workbook</div>
-  <p class="hint">When to use: you already have an .xlsx workbook, or just want to try the app with the bundled demo.</p>
-  <div class="drop" id="drop">
-    <div class="row" style="justify-content:center">
-      <button onclick="pick()">Choose data file</button>
-      <button class="ghost" id="demoBtn" onclick="loadDemo()">Load demo data</button>
+<main id="planner" class="planner-redesign">
+  <section id="startupPanel" class="startup-panel" aria-live="polite">
+    <div>
+      <div class="screen-label">First run</div>
+      <h2>SchedulePlanner is getting the workspace ready</h2>
+      <p>The local UI loads first, then the desktop bridge and optional Gemma status settle in behind it. You can start with demo data while the model check finishes.</p>
+      <div class="row mt">
+        <button type="button" onclick="loadDemo();hideStartupPanel();">Load demo data</button>
+        <button class="ghost" type="button" onclick="hideStartupPanel()">Open workspace</button>
+      </div>
     </div>
-    <p>.xlsx workbook with sheets: sections · catalog · programs
-      <span class="tip" tabindex="0" role="button" aria-label="What workbook does this expect?">?<span class="tip-bub" role="tooltip">An Excel <b>.xlsx</b> with three sheets — <b>sections</b> (offered classes), <b>catalog</b> (courses + prerequisites), and <b>programs</b> (the required courses per program). The demo file has the same shape.</span></span></p>
-    <p class="hint">No file? Click <b>Load demo data</b> for the bundled sample.</p>
-    <p id="picked"></p>
-  </div>
+    <div class="startup-checks" aria-label="Startup checks">
+      <div class="check-row ok">
+        <span class="check-dot"></span>
+        <div><b>UI loaded</b><p>Controls, theme, and local assets are available.</p></div>
+      </div>
+      <div class="check-row warn" id="bridgeCheck">
+        <span class="check-dot"></span>
+        <div><b>Python bridge checking</b><p>Waiting for the desktop API to respond.</p></div>
+      </div>
+      <div class="check-row warn" id="gemmaCheck">
+        <span class="check-dot"></span>
+        <div><b>Gemma status optional</b><p>The solver works even when the local model is offline.</p></div>
+      </div>
+    </div>
+  </section>
 
-  <div class="card" id="importCard" style="margin-top:12px">
-    <p class="hint"><b>Or audit a historical schedule export (offline).</b> Analyze a
-      real LACCD schedule export (<b>.xlsx/.csv</b>) — any past or current term — for
-      rotation, fill, time conflicts, and <b>room double-bookings + over-capacity</b>.
-      No network; the whole schedule is audited unless you add a program file.</p>
-    <div class="row mt">
-      <button class="ghost" id="importSchedBtn" type="button" onclick="pickScheduleImport()">Choose schedule export</button>
-      <span id="importSchedName" class="hint"></span>
-      <span class="tip" tabindex="0" role="button" aria-label="What schedule export does this expect?">?<span class="tip-bub" role="tooltip">A LACCD / PeopleSoft <b>schedule export</b> (.xlsx or .csv) — one row per meeting pattern. The term is auto-normalized (e.g. &ldquo;2024 Spring&rdquo; or 2242), and the export's <b>Cap / Tot / Wait</b> counts (if present) power the fill-rate analysis with no separate upload.</span></span>
-    </div>
-    <div class="row mt liveopts">
-      <button class="ghost" id="importFacBtn" type="button" onclick="pickImportFacility()">Add facility data (optional)</button>
-      <span id="importFacName" class="hint"></span>
-      <span class="tip" tabindex="0" role="button" aria-label="What is the facility data option?">?<span class="tip-bub" role="tooltip">The LACCD <b>LAC_SRC_FACILITY_DATA</b> export (room → seats). Enables room <b>over-capacity</b> + lab-pool analysis, joined on <i>Facil ID</i>. Optional — double-bookings are detected without it.</span></span>
-    </div>
-    <div class="row mt liveopts">
-      <button class="ghost" id="importPlistsBtn" type="button" onclick="pickImportPrograms()">Add program course lists (optional)</button>
-      <span id="importPlistsName" class="hint"></span>
-      <span class="tip" tabindex="0" role="button" aria-label="What is the program course lists option?">?<span class="tip-bub" role="tooltip">The LACCD <b>Program Course Lists</b> export (one row per program × required course). Unlocks the <b>cross-program bottleneck leaderboard</b> — which required courses many programs depend on but few sections / seats / lab rooms serve. Optional.</span></span>
-    </div>
-    <div class="row mt">
-      <button id="importBtn" onclick="runScheduleImport()">Audit schedule export</button>
-      <span id="importStatus" class="hint"></span>
-    </div>
-  </div>
+  <section class="task-layout" aria-label="Schedule planning workspace">
+    <aside class="task-rail panel">
+      <div class="rail-title">Choose the job</div>
+      <button class="task-card active" id="modeBtnImport" type="button" onclick="setWorkflowMode('import')">
+        <span class="task-kicker">Audit</span>
+        <strong>Audit a past schedule</strong>
+        <small>Offline export review with room, capacity, and conflict diagnostics.</small>
+      </button>
+      <button class="task-card" id="modeBtnWorkbook" type="button" onclick="setWorkflowMode('workbook')">
+        <span class="task-kicker">Workbook</span>
+        <strong>Upload planner workbook</strong>
+        <small>Use an existing sections, catalog, and programs workbook.</small>
+      </button>
+      <button class="task-card" id="modeBtnLive" type="button" onclick="setWorkflowMode('live')">
+        <span class="task-kicker">Live data</span>
+        <strong>Build from LACCD</strong>
+        <small>Fetch the published schedule and pathway for one program.</small>
+      </button>
 
-  <div class="orsep"><hr><span>OR</span><hr></div>
+      <div class="rail-status">
+        <div class="rail-title">Run readiness</div>
+        <div class="status-line"><span>Schedule source</span><span id="readySchedule" class="state-chip warn">needed</span></div>
+        <div class="status-line"><span>Program courses</span><span id="readyPrograms" class="state-chip warn">optional</span></div>
+        <div class="status-line"><span>Seats and rooms</span><span id="readyFacility" class="state-chip warn">partial</span></div>
+        <div class="status-line"><span>Report export</span><span id="readyReport" class="state-chip bad">not run</span></div>
+      </div>
+    </aside>
 
-  <div class="optnum">Option 2</div>
-  <div class="opthead">Build from live LACCD data</div>
-  <p class="hint">When to use: you have no file — pull the published schedule and the program's pathway straight from LACCD, by program.</p>
-  <div class="card" id="liveCard">
-    <p class="hint">Pulls the published schedule and the program's default
-      pathway straight from LACCD — no file needed. One program per run.</p>
-    <div class="row mt">
-      <label class="flab"><span>Campus <span class="tip" tabindex="0" role="button" aria-label="What is Campus?">?<span class="tip-bub" role="tooltip">The LACCD college code — e.g. <b>LAMC</b> (Los Angeles Mission College). One campus per run.</span></span></span>
-        <input id="liveCampus" type="text" value="LAMC" spellcheck="false">
-      </label>
-      <label class="flab"><span>Terms <span class="tip" tabindex="0" role="button" aria-label="What are Terms?">?<span class="tip-bub" role="tooltip">LACCD term codes (the same ones on the public class schedule), comma-separated. The app reads the <b>season</b> from each code — ending in <b>8</b> = Fall, otherwise Spring. Example: <b>2264,2266,2268</b>.</span></span></span>
-        <input id="liveTerms" type="text" value="2264,2266,2268" spellcheck="false">
-      </label>
-      <label class="flab" style="flex:1;min-width:220px"><span>Program <span class="tip" tabindex="0" role="button" aria-label="What is Program?">?<span class="tip-bub" role="tooltip">A program name as it appears in LACCD <b>Program Mapper</b> — e.g. <b>Biology</b>. One program per run.</span></span></span>
-        <input id="liveProgram" type="text" value="Biology"
-               placeholder="e.g. Biology" spellcheck="false">
-      </label>
-    </div>
-    <div class="row mt liveopts">
-      <label class="liveopt"><input type="checkbox" id="liveElumen">
-        <span>Include prerequisites from eLumen</span> <span class="xb">experimental</span>
-        <span class="tip" tabindex="0" role="button" aria-label="What is the eLumen prerequisites option?">?<span class="tip-bub" role="tooltip">Fetches prerequisites from the public LACCD <b>eLumen</b> catalog so the solver can order courses (only <i>itemType = Prerequisite</i>; co-reqs/advisories excluded). <b>Experimental</b> — best-effort: the endpoint's ToU / rate-limit / approval review is pending.</span></span>
-      </label>
-      <label class="liveopt"><span>GE goal</span>
-        <select id="liveTransferGoal" onchange="onTransferGoalChange()">
-          <option value="none" selected>None — major only</option>
-          <option value="cal-getc">Cal-GETC (CSU + UC)</option>
-          <option value="igetc">IGETC</option>
-          <option value="csu-ge">CSU GE-Breadth</option>
-          <option value="local">Local AA/AS GE (catalog PDF)</option>
-        </select>
-        <span class="xb">experimental</span>
-        <span class="tip" tabindex="0" role="button" aria-label="What is the GE goal?">?<span class="tip-bub" role="tooltip">Adds lower-division <b>GE</b> to the plan. The three transfer patterns come live from <b>ASSIST</b>; <b>Local AA/AS GE</b> reads your college's catalog PDF on-device (no upload, needs Java 11+). GE adds ~20–30 units, so the full-time plan may not fit four terms; check the part-time plan.</span></span>
-      </label>
-    </div>
-    <div class="row mt liveopts">
-      <button class="ghost" id="liveEnrollBtn" type="button" onclick="pickLiveEnrollment()">Add enrollment export (optional)</button>
-      <span id="liveEnrollName" class="hint"></span>
-      <span class="tip" tabindex="0" role="button" aria-label="What is the enrollment export option?">?<span class="tip-bub" role="tooltip">A real IR / PeopleSoft enrollment export (<b>.csv or .xlsx</b>) with seat <b>Cap / Tot / Wait</b> counts — the term is auto-normalized (e.g. &ldquo;2024 Fall&rdquo; or 2248). Adds capacity / fill-rate analysis on top of the live schedule. <b>Experimental</b> — joined to live sections by <i>term + CRN</i>, so use a <i>current-term</i> export; if none match, counts aren't applied and you'll see the join count.</span></span>
-    </div>
-    <div class="row mt liveopts" id="catalogRow" style="display:none">
-      <button class="ghost" id="catalogBtn" type="button" onclick="pickCatalogPdf()">Choose catalog PDF</button>
-      <span id="catalogName" class="hint"></span>
-      <span class="tip" tabindex="0" role="button" aria-label="What is the catalog PDF option?">?<span class="tip-bub" role="tooltip">Your college <b>catalog PDF</b>. The app reads its Associate-degree <b>General Education</b> section <b>on-device</b> (OpenDataLoader) and schedules those areas. Needs <b>Java 11+</b>. The detected GE is a <b>draft</b> — review it below before building.</span></span>
-    </div>
-    <div id="catalogPreview"></div>
-    <div class="row mt">
-      <button id="liveBtn" onclick="fetchLive()">Build from live LACCD data</button>
-      <span id="liveStatus" class="hint"></span>
-    </div>
-    <p class="hint">Term codes are comma-separated (e.g. <b>2264,2266,2268</b>). The two options above are optional.</p>
-  </div>
+    <section class="workspace-stack">
+      <section class="workspace-hero panel">
+        <div>
+          <div class="screen-label">Intake workspace</div>
+          <h2 id="workspaceHeadline">Audit a past schedule without leaving the app</h2>
+          <p id="workspaceSubhead">Start with the data source you have. The preflight panel below shows what can be measured before you spend time running the solver.</p>
+        </div>
+        <div class="hero-metrics" aria-label="Workflow summary">
+          <div class="metric"><b>3</b><span>entry paths</span></div>
+          <div class="metric"><b>6</b><span>audit views</span></div>
+          <div class="metric"><b>1</b><span>report</span></div>
+        </div>
+      </section>
 
-  <div class="row mt" id="actions" style="display:none">
-    <button id="runBtn" onclick="runAnalysis()" style="display:none">Generate schedules</button>
-    <button class="ghost" id="explainBtn" onclick="doExplain()" style="display:none">
-      Explain for admin
-    </button>
-    <button class="ghost" id="exportBtn" onclick="doExport()" style="display:none">
-      Export HTML report
-    </button>
-    <span id="status" class="hint"></span>
-  </div>
+      <section class="workflow-shell panel">
+        <div class="panel-head">
+          <div>
+            <div class="screen-label">Current setup</div>
+            <h2 id="modeTitle">Audit a past schedule</h2>
+            <p id="modeSummary">Use a schedule export first; add facility or program-list data when you want deeper diagnostics.</p>
+          </div>
+          <span id="modeBadge" class="state-chip warn">waiting</span>
+        </div>
 
-  <div id="out"></div>
-  <div id="live"></div>
-  <div id="explainBox"></div>
+        <div id="modeImport" class="mode-panel">
+          <div class="input-grid">
+            <div class="input-card wide">
+              <h4>Schedule export</h4>
+              <p>Analyze a LACCD or PeopleSoft schedule export for rotation, fill, time conflicts, room double-bookings, and over-capacity.</p>
+              <div class="compact-actions">
+                <button class="ghost" id="importSchedBtn" type="button" onclick="pickScheduleImport()">Choose schedule export</button>
+                <span id="importSchedName" class="hint"></span>
+                <span class="tip" tabindex="0" role="button" aria-label="What schedule export does this expect?">?<span class="tip-bub" role="tooltip">A LACCD / PeopleSoft <b>schedule export</b> (.xlsx or .csv) — one row per meeting pattern. The term is auto-normalized (e.g. &ldquo;2024 Spring&rdquo; or 2242), and the export's <b>Cap / Tot / Wait</b> counts (if present) power the fill-rate analysis with no separate upload.</span></span>
+              </div>
+            </div>
+            <div class="input-card">
+              <h4>Facility data</h4>
+              <p>Room seats unlock over-capacity and lab-pool checks.</p>
+              <div class="compact-actions">
+                <button class="ghost" id="importFacBtn" type="button" onclick="pickImportFacility()">Add facility data</button>
+                <span id="importFacName" class="hint"></span>
+                <span class="tip" tabindex="0" role="button" aria-label="What is the facility data option?">?<span class="tip-bub" role="tooltip">The LACCD <b>LAC_SRC_FACILITY_DATA</b> export (room → seats). Enables room <b>over-capacity</b> + lab-pool analysis, joined on <i>Facil ID</i>. Optional — double-bookings are detected without it.</span></span>
+              </div>
+            </div>
+            <div class="input-card">
+              <h4>Program course lists</h4>
+              <p>Course lists reveal cross-program bottlenecks.</p>
+              <div class="compact-actions">
+                <button class="ghost" id="importPlistsBtn" type="button" onclick="pickImportPrograms()">Add program lists</button>
+                <span id="importPlistsName" class="hint"></span>
+                <span class="tip" tabindex="0" role="button" aria-label="What is the program course lists option?">?<span class="tip-bub" role="tooltip">The LACCD <b>Program Course Lists</b> export (one row per program × required course). Unlocks the <b>cross-program bottleneck leaderboard</b> — which required courses many programs depend on but few sections / seats / lab rooms serve. Optional.</span></span>
+              </div>
+            </div>
+          </div>
+          <div class="row mt">
+            <button id="importBtn" onclick="runScheduleImport()">Audit schedule export</button>
+            <span id="importStatus" class="hint"></span>
+          </div>
+        </div>
 
-  <div class="card" id="chatCard" style="display:none">
-    <h3>Ask about this analysis
-      <span class="tip" tabindex="0" role="button" aria-label="What is the assistant?">?<span class="tip-bub" role="tooltip">A local assistant grounded in the analysis above. It runs on the on-device <b>Gemma</b> model (nothing leaves your machine) and can pull live LACCD data — a course's offering, another program's pathway, prerequisites, or GE areas — when a question needs it.</span></span>
-    </h3>
-    <p class="hint">Grounded in the build above. Runs on the local Gemma model; pulls live LACCD data when a question needs it.</p>
-    <div id="chatLog" class="chatlog" role="log" aria-live="polite" aria-label="Assistant conversation"></div>
-    <form id="chatForm" class="chatform" onsubmit="doChat(event)">
-      <label class="vh" for="chatInput">Your question</label>
-      <input id="chatInput" type="text" autocomplete="off" spellcheck="false"
-             placeholder="e.g. What's in term 2? · Is BIOLOGY 6 offered in 2268? · Draft an email to the dean">
-      <button type="submit" id="chatSend">Send</button>
-    </form>
-  </div>
+        <div id="modeWorkbook" class="mode-panel" hidden>
+          <div class="drop compact" id="drop">
+            <div class="row" style="justify-content:center">
+              <button onclick="pick()">Choose data file</button>
+              <button class="ghost" id="demoBtn" onclick="loadDemo()">Load demo data</button>
+            </div>
+            <p>.xlsx workbook with sheets: sections · catalog · programs
+              <span class="tip" tabindex="0" role="button" aria-label="What workbook does this expect?">?<span class="tip-bub" role="tooltip">An Excel <b>.xlsx</b> with three sheets — <b>sections</b> (offered classes), <b>catalog</b> (courses + prerequisites), and <b>programs</b> (the required courses per program). The demo file has the same shape.</span></span></p>
+            <p class="hint">The workbook path waits for <b>Generate schedules</b>; demo data runs immediately.</p>
+            <p id="picked"></p>
+          </div>
+        </div>
+
+        <div id="modeLive" class="mode-panel" hidden>
+          <div class="live-grid">
+            <label class="flab"><span>Campus <span class="tip" tabindex="0" role="button" aria-label="What is Campus?">?<span class="tip-bub" role="tooltip">The LACCD college code — e.g. <b>LAMC</b> (Los Angeles Mission College). One campus per run.</span></span></span>
+              <input id="liveCampus" type="text" value="LAMC" spellcheck="false">
+            </label>
+            <label class="flab"><span>Terms <span class="tip" tabindex="0" role="button" aria-label="What are Terms?">?<span class="tip-bub" role="tooltip">LACCD term codes (the same ones on the public class schedule), comma-separated. The app reads <b>2264</b> as Spring 2026, <b>2266</b> as Summer 2026, and <b>2268</b> as Fall 2026.</span></span></span>
+              <input id="liveTerms" type="text" value="2264,2266,2268" spellcheck="false">
+            </label>
+            <label class="flab"><span>Program <span class="tip" tabindex="0" role="button" aria-label="What is Program?">?<span class="tip-bub" role="tooltip">A program name as it appears in LACCD <b>Program Mapper</b> — e.g. <b>Biology</b>. One program per run.</span></span></span>
+              <input id="liveProgram" type="text" value="Biology" placeholder="e.g. Biology" spellcheck="false">
+            </label>
+          </div>
+
+          <div class="live-options">
+            <div class="input-card">
+              <h4>Prerequisites</h4>
+              <label class="liveopt"><input type="checkbox" id="liveElumen">
+                <span>Include eLumen prerequisites</span> <span class="xb">experimental</span>
+                <span class="tip" tabindex="0" role="button" aria-label="What is the eLumen prerequisites option?">?<span class="tip-bub" role="tooltip">Fetches prerequisites from the public LACCD <b>eLumen</b> catalog so the solver can order courses (only <i>itemType = Prerequisite</i>; co-reqs/advisories excluded). <b>Experimental</b> — best-effort: the endpoint's ToU / rate-limit / approval review is pending.</span></span>
+              </label>
+            </div>
+            <div class="input-card">
+              <h4>General education</h4>
+              <label class="liveopt"><span>GE goal</span>
+                <select id="liveTransferGoal" onchange="onTransferGoalChange()">
+                  <option value="none" selected>None — major only</option>
+                  <option value="cal-getc">Cal-GETC (CSU + UC)</option>
+                  <option value="igetc">IGETC</option>
+                  <option value="csu-ge">CSU GE-Breadth</option>
+                  <option value="local">Local AA/AS GE (catalog PDF)</option>
+                </select>
+                <span class="xb">experimental</span>
+                <span class="tip" tabindex="0" role="button" aria-label="What is the GE goal?">?<span class="tip-bub" role="tooltip">Adds lower-division <b>GE</b> to the plan. The three transfer patterns come live from <b>ASSIST</b>; <b>Local AA/AS GE</b> reads your college's catalog PDF on-device (no upload, needs Java 11+). GE adds ~20–30 units, so the full-time plan may not fit four terms; check the part-time plan.</span></span>
+              </label>
+            </div>
+            <div class="input-card">
+              <h4>Enrollment counts</h4>
+              <div class="compact-actions">
+                <button class="ghost" id="liveEnrollBtn" type="button" onclick="pickLiveEnrollment()">Add enrollment export</button>
+                <span id="liveEnrollName" class="hint"></span>
+                <span class="tip" tabindex="0" role="button" aria-label="What is the enrollment export option?">?<span class="tip-bub" role="tooltip">A real IR / PeopleSoft enrollment export (<b>.csv or .xlsx</b>) with seat <b>Cap / Tot / Wait</b> counts — the term is auto-normalized (e.g. &ldquo;2024 Fall&rdquo; or 2248). Adds capacity / fill-rate analysis on top of the live schedule. <b>Experimental</b> — joined to live sections by <i>term + CRN</i>, so use a <i>current-term</i> export; if none match, counts aren't applied and you'll see the join count.</span></span>
+              </div>
+            </div>
+            <div class="input-card" id="catalogRow" style="display:none">
+              <h4>Catalog PDF</h4>
+              <div class="compact-actions">
+                <button class="ghost" id="catalogBtn" type="button" onclick="pickCatalogPdf()">Choose catalog PDF</button>
+                <span id="catalogName" class="hint"></span>
+                <span class="tip" tabindex="0" role="button" aria-label="What is the catalog PDF option?">?<span class="tip-bub" role="tooltip">Your college <b>catalog PDF</b>. The app reads its Associate-degree <b>General Education</b> section <b>on-device</b> (OpenDataLoader) and schedules those areas. Needs <b>Java 11+</b>. The detected GE is a <b>draft</b> — review it below before building.</span></span>
+              </div>
+            </div>
+          </div>
+          <div id="catalogPreview"></div>
+          <div class="row mt">
+            <button id="liveBtn" onclick="fetchLive()">Build from live LACCD data</button>
+            <span id="liveStatus" class="hint"></span>
+          </div>
+        </div>
+      </section>
+
+      <section id="preflightCard" class="preflight-card panel">
+        <div class="panel-head">
+          <div>
+            <div class="screen-label">Preflight data validation</div>
+            <h2>Confirm what the app understood</h2>
+            <p>These fields update before a run so missing evidence is visible early.</p>
+          </div>
+          <span id="preflightBadge" class="state-chip warn">review</span>
+        </div>
+        <div class="preflight-grid">
+          <div class="preflight-item"><div class="label">Campus</div><div class="value" id="pfCampus">from file</div><div class="note">Live mode uses this directly.</div></div>
+          <div class="preflight-item"><div class="label">Program</div><div class="value" id="pfProgram">from workbook/export</div><div class="note">One pathway per live build.</div></div>
+          <div class="preflight-item"><div class="label">Terms</div><div class="value" id="pfTerms">from source</div><div class="note">Normalized before solving.</div></div>
+          <div class="preflight-item"><div class="label">GE goal</div><div class="value" id="pfGe">Major only</div><div class="note" id="pfGeNote">No GE evidence requested.</div></div>
+          <div class="preflight-item"><div class="label">Schedule</div><div class="value" id="pfSchedule">Needed</div><div class="note" id="pfScheduleNote">Choose a source to run.</div></div>
+          <div class="preflight-item"><div class="label">Seats</div><div class="value" id="pfCapacity">Partial</div><div class="note">Fill-rate needs enrollment counts.</div></div>
+          <div class="preflight-item"><div class="label">Rooms</div><div class="value" id="pfRooms">Partial</div><div class="note">Room capacity needs facility seats.</div></div>
+          <div class="preflight-item"><div class="label">Diagnostics</div><div class="value" id="pfDiagnostics">Rotation, conflict, waitlist</div><div class="note" id="pfDiagnosticsNote">More evidence unlocks deeper checks.</div></div>
+        </div>
+      </section>
+
+      <div class="row action-bar" id="actions" style="display:none">
+        <button id="runBtn" onclick="runAnalysis()" style="display:none">Generate schedules</button>
+        <button class="ghost" id="explainBtn" onclick="doExplain()" style="display:none">Explain for admin</button>
+        <button class="ghost" id="exportBtn" onclick="doExport()" style="display:none">Export HTML report</button>
+        <span id="status" class="hint"></span>
+      </div>
+    </section>
+
+    <aside class="quick-panel panel">
+      <div class="screen-label">Terminology audit</div>
+      <h3>Before / after terms</h3>
+      <p class="hint">The app now shows the normalized term names before the run, so coded terms do not read like mystery values.</p>
+      <div class="term-chips" id="termAuditChips"></div>
+      <div class="diff-box">
+        <div class="diff-row"><span>Before</span><span id="termAuditBefore">2264, 2266, 2268</span></div>
+        <div class="diff-row"><span>After</span><span id="termAuditAfter">Spring 2026, Summer 2026, Fall 2026</span></div>
+        <div class="diff-row"><span>Diff</span><span id="termAuditDiff">2266 is now called Summer 2026 instead of being grouped into Spring.</span></div>
+      </div>
+      <div class="audit-list" id="quickAuditBody">
+        <div class="audit-row"><span class="state-chip ok">active</span><span>Waitlist, rotation, grid, and conflict checks run from schedule data.</span></div>
+        <div class="audit-row"><span class="state-chip warn">missing</span><span>Capacity and fill-rate need enrollment counts when the schedule source does not include them.</span></div>
+      </div>
+    </aside>
+  </section>
+
+  <section id="resultShell" class="result-shell" aria-live="polite">
+    <div id="out"></div>
+    <div id="live"></div>
+    <section id="exportPreview" class="panel export-preview" hidden>
+      <div class="panel-head">
+        <div>
+          <div class="screen-label">Explain / export preview</div>
+          <h2 id="exportPreviewTitle">Preview the admin-facing report</h2>
+          <p id="exportPreviewMeta">Run an analysis to prepare the report contents.</p>
+        </div>
+        <button class="ghost" type="button" onclick="doExplain()">Ask assistant</button>
+      </div>
+      <div class="export-layout">
+        <div class="briefing-preview" id="exportPreviewBody">The report preview appears here after the solver finishes.</div>
+        <div class="export-checks" id="exportPreviewChecks"></div>
+      </div>
+    </section>
+    <div id="explainBox"></div>
+
+    <div class="card chat-panel" id="chatCard" style="display:none">
+      <h3>Ask about this analysis
+        <span class="tip" tabindex="0" role="button" aria-label="What is the assistant?">?<span class="tip-bub" role="tooltip">A local assistant grounded in the analysis above. It runs on the on-device <b>Gemma</b> model (nothing leaves your machine) and can pull live LACCD data — a course's offering, another program's pathway, prerequisites, or GE areas — when a question needs it.</span></span>
+      </h3>
+      <p class="hint">Grounded in the build above. Runs on the local Gemma model; pulls live LACCD data when a question needs it.</p>
+      <div id="chatLog" class="chatlog" role="log" aria-live="polite" aria-label="Assistant conversation"></div>
+      <form id="chatForm" class="chatform" onsubmit="doChat(event)">
+        <label class="vh" for="chatInput">Your question</label>
+        <input id="chatInput" type="text" autocomplete="off" spellcheck="false"
+               placeholder="e.g. What's in term 2? · Is BIOLOGY 6 offered in 2268? · Draft an email to the dean">
+        <button type="submit" id="chatSend">Send</button>
+      </form>
+    </div>
+  </section>
 </main>
 
 <!-- ===================== How-this-works guide (full in-app view) ===================== -->
@@ -464,6 +732,236 @@ let liveEnrollPath = "";
 // are untrusted; static HTML literals are intentionally left unescaped.
 function escapeHtml(s){ return String(s==null?'':s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
+let workflowMode = 'import';
+const MODE_COPY = {
+  import: {
+    title: 'Audit a past schedule',
+    headline: 'Audit a past schedule without leaving the app',
+    summary: 'Use a schedule export first; add facility or program-list data when you want deeper diagnostics.',
+    badge: 'waiting',
+    badgeClass: 'warn'
+  },
+  workbook: {
+    title: 'Upload planner workbook',
+    headline: 'Run the solver from an existing planner workbook',
+    summary: 'Choose a workbook with sections, catalog, and programs sheets, or load the bundled demo.',
+    badge: 'file path',
+    badgeClass: 'warn'
+  },
+  live: {
+    title: 'Build from published LACCD data',
+    headline: 'Build one program from live LACCD sources',
+    summary: 'Enter campus, terms, and program, then add optional evidence for prerequisites, GE, or enrollment counts.',
+    badge: 'live query',
+    badgeClass: 'ok'
+  }
+};
+
+function byId(id){ return document.getElementById(id); }
+function setText(id, txt){ const n=byId(id); if(n) n.textContent = txt; }
+function filename(path){ return path ? String(path).split(/[\\/]/).pop() : ''; }
+function chip(id, cls, txt){
+  const n=byId(id);
+  if(!n) return;
+  n.className='state-chip '+(cls||'');
+  n.textContent=txt;
+}
+function setStartupCheck(id, state, title, detail){
+  const row=byId(id);
+  if(!row) return;
+  row.className='check-row '+state;
+  const b=row.querySelector('b'), p=row.querySelector('p');
+  if(b) b.textContent=title;
+  if(p) p.textContent=detail;
+}
+function hideStartupPanel(){
+  const panel=byId('startupPanel');
+  if(panel) panel.classList.add('is-hidden');
+}
+
+function liveTermTokens(){
+  const input=byId('liveTerms');
+  return (input ? input.value : '').split(',').map(t=>t.trim()).filter(Boolean);
+}
+function termLabel(code){
+  const raw=String(code||'').trim();
+  const m=raw.match(/^(\d)(\d{2})([2468])$/);
+  if(!m) return raw || 'term';
+  const season={2:'Winter',4:'Spring',6:'Summer',8:'Fall'}[m[3]] || 'Term';
+  return season+' '+String(2000+Number(m[2]));
+}
+function termDiffText(tokens){
+  if(!tokens.length) return 'Add one or more LACCD term codes to see the normalized labels.';
+  const summer=tokens.find(t=>String(t).trim().endsWith('6'));
+  if(summer) return summer+' is now shown as '+termLabel(summer)+' instead of being grouped into Spring.';
+  const unknown=tokens.find(t=>termLabel(t)===t);
+  if(unknown) return unknown+' was not recognized, so the original token is preserved for review.';
+  return 'Each term code now has a plain-language season and year before the solver runs.';
+}
+function geGoalLabel(){
+  const sel=byId('liveTransferGoal');
+  if(!sel) return 'Major only';
+  const txt=sel.options[sel.selectedIndex] ? sel.options[sel.selectedIndex].text : 'Major only';
+  return txt.replace(/\s*\(.*?\)\s*/g,'').replace(/\s*—\s*/g,' - ');
+}
+function renderTermAudit(){
+  const tokens=liveTermTokens();
+  const before=tokens.length ? tokens.join(', ') : 'No term codes entered';
+  const labels=tokens.length ? tokens.map(termLabel) : ['No terms selected'];
+  setText('termAuditBefore', before);
+  setText('termAuditAfter', labels.join(', '));
+  setText('termAuditDiff', termDiffText(tokens));
+  const chips=byId('termAuditChips');
+  if(chips) chips.innerHTML=labels.map(t=>'<span class="term-chip">'+escapeHtml(t)+'</span>').join('');
+}
+function renderQuickAudit(){
+  const body=byId('quickAuditBody');
+  if(!body) return;
+  const rows=[];
+  if(workflowMode==='live'){
+    rows.push(['ok','active','Schedule, waitlist, rotation, and grid checks run from public LACCD data.']);
+    rows.push([liveEnrollPath?'ok':'warn', liveEnrollPath?'active':'missing', liveEnrollPath?'Enrollment counts attached for capacity and fill-rate checks.':'Capacity and fill-rate need an enrollment export.']);
+    rows.push([byId('liveElumen') && byId('liveElumen').checked?'ok':'warn', byId('liveElumen') && byId('liveElumen').checked?'active':'optional', 'Prerequisite ordering is stronger when eLumen is enabled.']);
+  } else if(workflowMode==='import'){
+    rows.push([importSchedPath?'ok':'warn', importSchedPath?'ready':'needed', importSchedPath?'Schedule export attached: '+filename(importSchedPath):'Choose a schedule export to start the offline audit.']);
+    rows.push([importFacPath?'ok':'warn', importFacPath?'active':'optional', importFacPath?'Facility seats attached for room capacity checks.':'Facility seats unlock room over-capacity checks.']);
+    rows.push([importPlistsPath?'ok':'warn', importPlistsPath?'active':'optional', 'Program course lists unlock cross-program bottlenecks.']);
+  } else {
+    rows.push([dataPath?'ok':'warn', dataPath?'ready':'needed', dataPath?'Workbook attached: '+filename(dataPath):'Choose a workbook or load demo data.']);
+    rows.push(['ok','active','Workbook runs the same solver and result review as live data.']);
+  }
+  body.innerHTML=rows.map(r=>'<div class="audit-row"><span class="state-chip '+r[0]+'">'+
+    escapeHtml(r[1])+'</span><span>'+escapeHtml(r[2])+'</span></div>').join('');
+}
+function renderPreflight(){
+  if(workflowMode==='live'){
+    const campus=(byId('liveCampus') && byId('liveCampus').value.trim()) || 'LAMC';
+    const program=(byId('liveProgram') && byId('liveProgram').value.trim()) || 'Program needed';
+    const terms=liveTermTokens().map(termLabel).join(', ') || 'Terms needed';
+    setText('pfCampus', campus);
+    setText('pfProgram', program);
+    setText('pfTerms', terms);
+    setText('pfGe', geGoalLabel());
+    setText('pfGeNote', byId('liveTransferGoal') && byId('liveTransferGoal').value==='local' ? 'Catalog PDF required for local GE.' : 'Transfer GE is optional and draft-reviewed.');
+    setText('pfSchedule', 'Published LACCD schedule');
+    setText('pfScheduleNote', 'Fetched when you run live mode.');
+    setText('pfCapacity', liveEnrollPath ? 'Enrollment export attached' : 'Missing count export');
+    setText('pfRooms', 'Not included in live data');
+    setText('pfDiagnostics', liveEnrollPath ? 'Rotation, conflicts, waitlist, fill-rate' : 'Rotation, conflicts, waitlist');
+    setText('pfDiagnosticsNote', liveEnrollPath ? 'Counts can be joined by term and CRN.' : 'Empty capacity results mean not yet measurable.');
+    chip('preflightBadge', (campus && program && liveTermTokens().length)?'ok':'warn', (campus && program && liveTermTokens().length)?'ready':'review');
+  } else if(workflowMode==='workbook'){
+    const picked=(byId('picked') && byId('picked').textContent.trim()) || '';
+    setText('pfCampus', 'from workbook');
+    setText('pfProgram', 'programs sheet');
+    setText('pfTerms', 'sections sheet');
+    setText('pfGe', 'from workbook rules');
+    setText('pfGeNote', 'GE appears only if the workbook includes it.');
+    setText('pfSchedule', dataPath ? filename(dataPath) : (picked || 'Needed'));
+    setText('pfScheduleNote', dataPath ? 'Ready for Generate schedules.' : 'Load demo data or choose a workbook.');
+    setText('pfCapacity', 'Workbook counts if present');
+    setText('pfRooms', 'Workbook rooms if present');
+    setText('pfDiagnostics', 'Workbook-driven solver');
+    setText('pfDiagnosticsNote', 'Uses the same result review after solving.');
+    chip('preflightBadge', (dataPath || picked)?'ok':'warn', (dataPath || picked)?'ready':'review');
+  } else {
+    setText('pfCampus', 'from export');
+    setText('pfProgram', importPlistsPath ? 'course lists attached' : 'whole schedule audit');
+    setText('pfTerms', 'from export');
+    setText('pfGe', 'not part of schedule audit');
+    setText('pfGeNote', 'Use live mode for GE-inclusive pathway planning.');
+    setText('pfSchedule', importSchedPath ? filename(importSchedPath) : 'Needed');
+    setText('pfScheduleNote', importSchedPath ? 'Ready to audit.' : 'Choose a schedule export to run.');
+    setText('pfCapacity', importFacPath ? 'facility seats attached' : 'schedule counts if present');
+    setText('pfRooms', importFacPath ? 'room capacity enabled' : 'double-bookings only');
+    setText('pfDiagnostics', importPlistsPath ? 'Schedule, rooms, cross-program' : 'Schedule, rooms, conflicts');
+    setText('pfDiagnosticsNote', importPlistsPath ? 'Program demand can be ranked.' : 'Program lists are optional.');
+    chip('preflightBadge', importSchedPath?'ok':'warn', importSchedPath?'ready':'review');
+  }
+}
+function updateReadiness(){
+  if(workflowMode==='live'){
+    const liveReady=!!((byId('liveCampus')&&byId('liveCampus').value.trim()) && liveTermTokens().length && (byId('liveProgram')&&byId('liveProgram').value.trim()));
+    chip('readySchedule', liveReady?'ok':'warn', liveReady?'ready':'needed');
+    chip('readyPrograms', liveReady?'ok':'warn', liveReady?'ready':'needed');
+    chip('readyFacility', liveEnrollPath?'ok':'warn', liveEnrollPath?'counts':'partial');
+  } else if(workflowMode==='workbook'){
+    const picked=!!(dataPath || (byId('picked')&&byId('picked').textContent.trim()));
+    chip('readySchedule', picked?'ok':'warn', picked?'ready':'needed');
+    chip('readyPrograms', picked?'ok':'warn', picked?'included':'needed');
+    chip('readyFacility', picked?'ok':'warn', picked?'if present':'partial');
+  } else {
+    chip('readySchedule', importSchedPath?'ok':'warn', importSchedPath?'ready':'needed');
+    chip('readyPrograms', importPlistsPath?'ok':'warn', importPlistsPath?'attached':'optional');
+    chip('readyFacility', importFacPath?'ok':'warn', importFacPath?'attached':'partial');
+  }
+  const exportVisible=byId('exportBtn') && byId('exportBtn').style.display!=='none';
+  chip('readyReport', exportVisible?'ok':'bad', exportVisible?'ready':'not run');
+}
+function updateRedesignState(){
+  renderTermAudit();
+  renderPreflight();
+  renderQuickAudit();
+  updateReadiness();
+}
+function setWorkflowMode(mode){
+  if(!MODE_COPY[mode]) mode='import';
+  workflowMode=mode;
+  for(const key of Object.keys(MODE_COPY)){
+    const panel=byId('mode'+key.charAt(0).toUpperCase()+key.slice(1));
+    const btn=byId('modeBtn'+key.charAt(0).toUpperCase()+key.slice(1));
+    if(panel) panel.hidden = key!==mode;
+    if(btn) btn.classList.toggle('active', key===mode);
+  }
+  const copy=MODE_COPY[mode];
+  setText('workspaceHeadline', copy.headline);
+  setText('workspaceSubhead', copy.summary);
+  setText('modeTitle', copy.title);
+  setText('modeSummary', copy.summary);
+  chip('modeBadge', copy.badgeClass, copy.badge);
+  updateRedesignState();
+}
+function renderExportPreview(res){
+  const box=byId('exportPreview');
+  if(!box) return;
+  if(!res || res.error){ box.hidden=true; return; }
+  const programs=Object.values(res.programs||{});
+  const p=programs[0] || {};
+  const title=p.title || 'Schedule analysis';
+  const terms=res.live_terms && res.live_terms.length ? res.live_terms.map(termLabel).join(', ') : String(res.terms_in_data||'0')+' terms';
+  const analysis=res.analysis||{};
+  const diagCounts=[
+    ['rotation gaps', analysis.rotation_gaps],
+    ['single-section risks', analysis.single_section],
+    ['capacity / fill-rate flags', analysis.modality_mismatch],
+    ['under-supply flags', analysis.under_supply],
+    ['time conflicts', analysis.time_block_collisions],
+    ['off-grid sections', analysis.off_grid_sections],
+    ['room conflicts', analysis.room_conflicts]
+  ].filter(([_, arr])=>Array.isArray(arr) && arr.length);
+  const ft=p.cohorts && p.cohorts.full_time;
+  const pt=p.cohorts && p.cohorts.part_time;
+  const status=(!ft && !pt) ? 'no feasible plan was found' :
+    (ft && ft.needs_fix ? 'the full-time path needs a schedule change' : 'the primary path is schedulable');
+  setText('exportPreviewTitle', 'Preview: '+title);
+  setText('exportPreviewMeta', terms+' · '+programs.length+' program'+(programs.length===1?'':'s')+' analyzed');
+  setText('exportPreviewBody',
+    title+' is ready for an admin-facing report. In this run, '+status+
+    '. The exported report will include the cohort plans, supply diagnostics, live-data coverage notes, and caveats for any detector that needs more evidence.');
+  const checks=[
+    ['ok','Cohort plans', (ft?'full-time ':'')+(pt?'part-time':'')],
+    [diagCounts.length?'ok':'warn','Diagnostics', diagCounts.length?diagCounts.map(d=>d[0]).join(', '):'no blocking signals found'],
+    [res.reconciliation?'ok':'warn','Live/source coverage', res.reconciliation?'matched '+res.reconciliation.matched_count+' offered course(s)':'file or demo source'],
+    [res.ge_coverage && res.ge_coverage.requested?'warn':'ok','GE evidence', res.ge_coverage && res.ge_coverage.requested?'draft review included':'major-only run'],
+    ['ok','Export contents','HTML report, briefing, evidence notes']
+  ];
+  const checksBox=byId('exportPreviewChecks');
+  if(checksBox) checksBox.innerHTML=checks.map(c=>
+    '<div class="export-check"><span class="state-chip '+c[0]+'">'+escapeHtml(c[1])+
+    '</span><br>'+escapeHtml(c[2])+'</div>').join('');
+  box.hidden=false;
+}
+
 async function refreshAI(){
   const pill = document.getElementById('aiPill');
   const txt = document.getElementById('aiText');
@@ -472,13 +970,22 @@ async function refreshAI(){
   // always reaches a terminal state instead of sticking on "checking AI…".
   let s;
   try { s = await window.pywebview.api.ai_status(); }
-  catch(e){ pill.className='pill off'; txt.textContent='Offline mode (no Gemma 4)'; return; }
+  catch(e){
+    pill.className='pill off'; txt.textContent='Offline mode (no Gemma 4)';
+    setStartupCheck('bridgeCheck','bad','Python bridge unavailable','The desktop API did not respond yet.');
+    setStartupCheck('gemmaCheck','warn','Gemma status unknown','The solver can still run without Gemma.');
+    return;
+  }
+  setStartupCheck('bridgeCheck','ok','Python bridge ready','Desktop API calls are available.');
   if(s.running && s.model){
     pill.className='pill on'; txt.textContent='Gemma 4 ready ('+s.model_name+')';
+    setStartupCheck('gemmaCheck','ok','Gemma ready','Admin explanations can use the local model.');
   } else if(s.installed && !s.model){
     pill.className='pill'; txt.innerHTML='Gemma 4 not downloaded — <a href="#" onclick="setupAI(event)" style="color:var(--amber)">get it</a>';
+    setStartupCheck('gemmaCheck','warn','Gemma not downloaded','Explanations fall back to the templated summary.');
   } else {
     pill.className='pill off'; txt.textContent='Offline mode (no Gemma 4)';
+    setStartupCheck('gemmaCheck','warn','Gemma offline','The deterministic solver is still available.');
   }
 }
 
@@ -510,6 +1017,8 @@ async function pick(){
   // (Load demo / Build from live auto-run instead and keep it hidden.)
   document.getElementById('runBtn').style.display='inline-block';
   document.getElementById('actions').style.display='flex';
+  setWorkflowMode('workbook');
+  updateRedesignState();
 }
 
 async function runAnalysis(){
@@ -541,6 +1050,8 @@ async function loadDemo(){
   document.getElementById('runBtn').style.display='none';
   document.getElementById('actions').style.display='flex';
   document.getElementById('picked').textContent='bundled demo data';
+  setWorkflowMode('workbook');
+  updateRedesignState();
   document.getElementById('status').innerHTML='<span class="spinner"></span> running solver on demo data';
   let res;
   try{ res = await window.pywebview.api.load_demo(); }
@@ -570,11 +1081,13 @@ async function pickLiveEnrollment(){
     const name = r.path.split(/[\\/]/).pop();
     document.getElementById('liveEnrollName').innerHTML =
       escapeHtml(name)+' <a href="#" onclick="clearLiveEnrollment();return false;">✕ remove</a>';
+    updateRedesignState();
   }
 }
 function clearLiveEnrollment(){
   liveEnrollPath = '';
   document.getElementById('liveEnrollName').textContent = '';
+  updateRedesignState();
 }
 
 // ---- Offline historical schedule import (Option 1) -------------------------
@@ -591,11 +1104,14 @@ async function pickScheduleImport(){
     const name = r.path.split(/[\\/]/).pop();
     document.getElementById('importSchedName').innerHTML =
       escapeHtml(name)+' <a href="#" onclick="clearScheduleImport();return false;">✕ remove</a>';
+    setWorkflowMode('import');
+    updateRedesignState();
   }
 }
 function clearScheduleImport(){
   importSchedPath='';
   document.getElementById('importSchedName').textContent='';
+  updateRedesignState();
 }
 async function pickImportFacility(){
   let r;
@@ -606,11 +1122,14 @@ async function pickImportFacility(){
     const name = r.path.split(/[\\/]/).pop();
     document.getElementById('importFacName').innerHTML =
       escapeHtml(name)+' <a href="#" onclick="clearImportFacility();return false;">✕ remove</a>';
+    setWorkflowMode('import');
+    updateRedesignState();
   }
 }
 function clearImportFacility(){
   importFacPath='';
   document.getElementById('importFacName').textContent='';
+  updateRedesignState();
 }
 async function pickImportPrograms(){
   let r;
@@ -621,11 +1140,14 @@ async function pickImportPrograms(){
     const name = r.path.split(/[\\/]/).pop();
     document.getElementById('importPlistsName').innerHTML =
       escapeHtml(name)+' <a href="#" onclick="clearImportPrograms();return false;">✕ remove</a>';
+    setWorkflowMode('import');
+    updateRedesignState();
   }
 }
 function clearImportPrograms(){
   importPlistsPath='';
   document.getElementById('importPlistsName').textContent='';
+  updateRedesignState();
 }
 async function runScheduleImport(){
   if(!importSchedPath){
@@ -643,6 +1165,8 @@ async function runScheduleImport(){
   document.getElementById('actions').style.display='flex';
   document.getElementById('picked').textContent='historical schedule export · '+importSchedPath.split(/[\\/]/).pop();
   document.getElementById('status').innerHTML='<span class="spinner"></span> converting + solving';
+  setWorkflowMode('import');
+  updateRedesignState();
   let res;
   try{
     res = await window.pywebview.api.analyze_schedule_import(
@@ -662,14 +1186,17 @@ async function runScheduleImport(){
 let catalogPdfPath = "";
 function onTransferGoalChange(){
   const local = document.getElementById('liveTransferGoal').value === 'local';
-  document.getElementById('catalogRow').style.display = local ? 'flex' : 'none';
+  document.getElementById('catalogRow').style.display = local ? 'block' : 'none';
   if(!local) clearCatalogPdf();
+  setWorkflowMode('live');
+  updateRedesignState();
 }
 function clearCatalogPreview(){ document.getElementById('catalogPreview').innerHTML=''; }
 function clearCatalogPdf(){
   catalogPdfPath='';
   document.getElementById('catalogName').textContent='';
   clearCatalogPreview();
+  updateRedesignState();
 }
 async function pickCatalogPdf(){
   let r;
@@ -680,6 +1207,7 @@ async function pickCatalogPdf(){
     const name = r.path.split(/[\\/]/).pop();
     document.getElementById('catalogName').innerHTML =
       escapeHtml(name)+' <a href="#" onclick="clearCatalogPdf();return false;">✕ remove</a>';
+    updateRedesignState();
     previewCatalogGe();
   }
 }
@@ -721,6 +1249,8 @@ async function fetchLive(){
   const program=document.getElementById('liveProgram').value.trim();
   const elumenLive=document.getElementById('liveElumen').checked;
   const transferGoal=document.getElementById('liveTransferGoal').value;
+  setWorkflowMode('live');
+  updateRedesignState();
   if(transferGoal==='local' && !catalogPdfPath){
     document.getElementById('liveStatus').textContent='Choose a catalog PDF for the Local AA/AS GE option.';
     return;
@@ -734,6 +1264,7 @@ async function fetchLive(){
   document.getElementById('actions').style.display='flex';
   document.getElementById('picked').textContent='live LACCD data · '+campus+' · '+program;
   document.getElementById('status').innerHTML='<span class="spinner"></span> fetching + solving';
+  updateRedesignState();
   let res;
   try{
     // Pass the three optional (experimental) enrichments: an enrollment export
@@ -763,6 +1294,8 @@ function showResult(res){
     document.getElementById('exportBtn').style.display='none';
     document.getElementById('chatCard').style.display='none';
     document.getElementById('explainBox').innerHTML='';
+    renderExportPreview(res);
+    updateRedesignState();
     return;
   }
   // ai_used = a Gemma 4 parser was AVAILABLE this run (used for messy prereq
@@ -770,6 +1303,7 @@ function showResult(res){
   // signals the AI layer is ON — not that every prerequisite was LLM-parsed.
   document.getElementById('status').textContent = res.ai_used ? 'Gemma 4 enabled' : 'regex parse (offline)';
   render(res);
+  renderExportPreview(res);
   // A fresh analysis invalidates any previous run's briefing — clear it so a
   // stale briefing can't sit under the new results.
   document.getElementById('explainBox').innerHTML='';
@@ -778,6 +1312,7 @@ function showResult(res){
   if(res.reconciliation || res.inert_detectors) renderLivePanel(res);
   document.getElementById('explainBtn').style.display='inline-block';
   document.getElementById('exportBtn').style.display='inline-block';
+  updateRedesignState();
   // A fresh analysis is a new context — reset the assistant and reveal its panel.
   resetChat();
   document.getElementById('chatCard').style.display='block';
@@ -1360,12 +1895,15 @@ function badge(p){
     '<b>no plan</b> = the scheduler could not produce any plan for this program.</span></span></span>';
 }
 
-function cohortCard(label, c){
+function cohortCard(label, c, termLabels){
   if(!c) return '<div class="cohort"><div class="lab">'+label+'</div><div class="big">—</div></div>';
   const tpy=c.terms_per_year||2;   // cadence length (2 Fall/Spring, 3 w/ Summer); engine.run supplies it
   const yrs=Math.ceil(c.terms_used/tpy);
-  const terms=Object.entries(c.plan).map(([t,cs])=>
-    '<div class="term"><b>T'+t+'</b> '+cs.map(escapeHtml).join(', ')+'</div>').join('');
+  const terms=Object.entries(c.plan).map(([t,cs])=>{
+    const idx=Number(t)-1;
+    const label=(termLabels && termLabels[idx]) ? termLabels[idx] : 'Term '+t;
+    return '<div class="term"><b>'+escapeHtml(label)+'</b> '+cs.map(escapeHtml).join(', ')+'</div>';
+  }).join('');
   const fix=(c.fixes&&c.fixes.length)?
     '<div class="fix">fix: '+c.fixes.map(f=>'+ '+escapeHtml(f.course)+' in '+escapeHtml(f.season)).join(', ')+'</div>':'';
   let tag=c.needs_fix?' <span style="color:var(--red)">(with fix)</span>':'';
@@ -1377,13 +1915,37 @@ function cohortCard(label, c){
          '<div class="hint">~'+yrs+' year'+(yrs>1?'s':'')+'</div>'+terms+fix+'</div>';
 }
 
+const DIAG_GUIDES = {
+  rotation_gaps: 'Required courses offered in too few of the terms you checked. A chair can read this as "students may have to wait for the next rotation."',
+  single_section: 'Only one section is available in the analyzed window. One cancellation, room problem, or time conflict can block the path.',
+  modality_mismatch: 'Capacity / fill-rate needs real Cap/Tot enrollment counts. On live-only builds, an empty result usually means "not yet measurable," not "all clear."',
+  under_supply: 'Shows waitlist pressure. With live data it counts waitlisted sections; with an enrollment export it can show exact waitlist headcount. Treat it as a planning signal, not proof of completion impact.',
+  time_block_collisions: 'Required courses meet at overlapping times, so a student cannot take the planned combination without delaying something.',
+  off_grid_sections: 'Sections starting outside the standard time-block grid. Off-grid starts can create avoidable conflicts; the broad campus grid-pressure view stays in the Grid conformance panel.',
+};
+
+function offGridGuide(meta){
+  let txt=DIAG_GUIDES.off_grid_sections;
+  if(meta && meta.scope==='program'){
+    txt+=' This Supply list is scoped to the selected program: '+
+      escapeHtml(String(meta.shown_count||0))+'/'+
+      escapeHtml(String(meta.total_program_count||0))+
+      ' program off-grid pattern(s) shown';
+    if(meta.truncated) txt+=' (truncated)';
+    txt+=', from '+escapeHtml(String(meta.total_campus_count||0))+
+      ' campus-wide off-grid pattern(s) found.';
+  }
+  return txt;
+}
+
 function render(res){
   let html='';
+  const termLabels=(Array.isArray(res.live_terms) && res.live_terms.length) ? res.live_terms.map(termLabel) : null;
   for(const [code,p] of Object.entries(res.programs)){
     const issues=p.official_map_issues.map(i=>'<div class="issue">! '+escapeHtml(i)+'</div>').join('');
     html+='<div class="card"><h3>'+escapeHtml(p.title)+' '+badge(p)+'</h3>'+issues+
-      '<div class="cohorts">'+cohortCard('Full-time',p.cohorts.full_time)+
-      cohortCard('Part-time',p.cohorts.part_time)+'</div></div>';
+      '<div class="cohorts">'+cohortCard('Full-time',p.cohorts.full_time,termLabels)+
+      cohortCard('Part-time',p.cohorts.part_time,termLabels)+'</div></div>';
   }
   if(Object.keys(res.programs).length===0){
     // A schema-valid programs sheet with zero data rows yields {} — don't
@@ -1394,23 +1956,29 @@ function render(res){
   }
   // analysis block
   const a=res.analysis;
-  const mk=(t,arr,fn)=>'<div class="a"><h4>'+t+'</h4><ul>'+
-    (arr.length?arr.map(fn).join(''):'<li>none</li>')+'</ul></div>';
+  const mk=(t,arr,fn,guide,limit=8)=>{
+    const rows=Array.isArray(arr)?arr:[];
+    const shown=rows.slice(0,limit);
+    const more=rows.length>limit?'<li>+'+escapeHtml(String(rows.length-limit))+' more in the exported report</li>':'';
+    return '<div class="a"><h4>'+t+'</h4>'+
+      (guide?'<p class="hint diag-guide">'+guide+'</p>':'')+
+      '<ul>'+(shown.length?shown.map(fn).join('')+more:'<li>none</li>')+'</ul></div>';
+  };
   // Render an OPTIONAL detector section only when the analysis actually carries the
   // key. An absent key means the detector did not run (e.g. room checks with no
   // room/facility data) — omit it rather than showing "none", which would conflate
   // "not assessed" with "none found".
-  const mkOpt=(t,arr,fn)=>Array.isArray(arr)?mk(t,arr,fn):'';
+  const mkOpt=(t,arr,fn,guide,limit=8)=>Array.isArray(arr)?mk(t,arr,fn,guide,limit):'';
   html+='<div class="card"><h3>Supply diagnostics ('+res.terms_in_data+' terms)</h3>'+
     '<div class="analysis mt">'+
-    mk('Rotation gaps',a.rotation_gaps,x=>'<li>'+escapeHtml(x.course)+' — '+x.offered+'/'+x.of+'</li>')+
-    mk('Single-section risk',a.single_section,x=>'<li>'+escapeHtml(x.course)+'</li>')+
-    mk('Modality mismatch',a.modality_mismatch,x=>'<li>'+escapeHtml(x.course)+' — '+x.fill_pct+'% fill</li>')+
-    mk('Under-supply',a.under_supply,x=>'<li>'+escapeHtml(x.course)+' — '+(x.waitlisted>0?x.waitlisted+' waitlisted':(x.sections_waitlisted!=null?x.sections_waitlisted+'/'+x.sections_total+' sections waitlisted':'waitlisted'))+'</li>')+
-    mk('Time conflicts',a.time_block_collisions||[],x=>'<li>'+escapeHtml(x.summary)+'</li>')+
-    mk('Off-grid sections',a.off_grid_sections||[],x=>'<li>'+escapeHtml(x.summary)+'</li>')+
-    mkOpt('Room double-bookings',a.room_conflicts,x=>'<li>'+escapeHtml(x.summary)+'</li>')+
-    mkOpt('Room over capacity',a.room_capacity,x=>'<li>'+escapeHtml(x.summary)+'</li>')+
+    mk('Rotation gaps',a.rotation_gaps,x=>'<li>'+escapeHtml(x.course)+' — '+escapeHtml(String(x.offered))+'/'+escapeHtml(String(x.of))+'</li>', DIAG_GUIDES.rotation_gaps,6)+
+    mk('Single-section risk',a.single_section,x=>'<li>'+escapeHtml(x.course)+'</li>', DIAG_GUIDES.single_section,8)+
+    mk('Capacity / fill-rate',a.modality_mismatch,x=>'<li>'+escapeHtml(x.course)+' — '+escapeHtml(String(x.fill_pct))+'% fill</li>', DIAG_GUIDES.modality_mismatch,6)+
+    mk('Under-supply',a.under_supply,x=>'<li>'+escapeHtml(x.course)+' — '+escapeHtml(x.waitlisted>0?String(x.waitlisted)+' waitlisted':(x.sections_waitlisted!=null?String(x.sections_waitlisted)+'/'+String(x.sections_total)+' sections waitlisted':'waitlisted'))+'</li>', DIAG_GUIDES.under_supply,6)+
+    mk('Time conflicts',a.time_block_collisions||[],x=>'<li>'+escapeHtml(x.summary)+'</li>', DIAG_GUIDES.time_block_collisions,6)+
+    mk('Off-grid sections',a.off_grid_sections||[],x=>'<li>'+escapeHtml(x.summary)+'</li>', offGridGuide(a.off_grid_sections_meta),6)+
+    mkOpt('Room double-bookings',a.room_conflicts,x=>'<li>'+escapeHtml(x.summary)+'</li>', '',6)+
+    mkOpt('Room over capacity',a.room_capacity,x=>'<li>'+escapeHtml(x.summary)+'</li>', '',6)+
     '</div></div>';
   document.getElementById('out').innerHTML=html;
 }
@@ -1543,6 +2111,21 @@ document.addEventListener('keydown', function(e){
     e.preventDefault(); el.classList.toggle('open');
   }
 });
+
+function initRedesign(){
+  ['liveCampus','liveTerms','liveProgram'].forEach(id=>{
+    const n=byId(id);
+    if(n) n.addEventListener('input', updateRedesignState);
+  });
+  ['liveElumen','liveTransferGoal'].forEach(id=>{
+    const n=byId(id);
+    if(n) n.addEventListener('change', updateRedesignState);
+  });
+  setWorkflowMode(workflowMode);
+  updateRedesignState();
+  window.addEventListener('load', function(){ setTimeout(hideStartupPanel, 1400); });
+}
+initRedesign();
 
 window.addEventListener('pywebviewready', refreshAI);
 // pywebviewready is a one-shot event with no ordering guarantee vs this inline
