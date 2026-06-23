@@ -218,7 +218,10 @@ def day_cols(days):
     m = {"M":"M","T":"T","W":"W","R":"R","F":"F","S":"S"}
     out = {c:"" for c in DAY_FLAGS}
     if days == "TBA":
-        out["TBA"]="Y"; out["N"]="Y"
+        # TBA/async only: set the TBA flag. Do NOT also set N (Sunday) — an
+        # async row has no scheduled day, and a stray N made downstream readers
+        # treat it as a Sunday meeting.
+        out["TBA"]="Y"
         return out
     for ch in days:
         if ch in m: out[m[ch]]="Y"
@@ -278,6 +281,19 @@ def _build_demo_sections(rng):
                 cancelled = (rng.random() < 0.03 and enr < cap*0.3)
                 pacoima = "Y" if rng.random() < 0.08 else ""
                 dc = day_cols(days)
+                # ONE physical room footprint per section, reused across the
+                # BUILDING / Room Descr / ROOM aliases so a section is not assigned
+                # three different rooms. Online/async sections have no room.
+                if start:
+                    bldg = rng.choice(BUILDINGS)
+                    room_label = f"{bldg}-{rng.randint(100, 399)}"
+                    facil_id = f"F{rng.randint(1000, 9999)}"
+                else:
+                    bldg = room_label = "ONLINE"
+                    facil_id = ""
+                # Meetings = (distinct meeting days) x 16 weeks, so MW=32 / MWF=48 /
+                # TR=32 rather than a flat 16 for every pattern.
+                n_mtg_days = sum(1 for ch in days if ch in "MTWRFS")
                 rows.append({
                     "Term": term, "Descr": descr, "Campus": "LAMC",
                     "Class Nbr": crn, "Subject": subj, "Catalog": cat,
@@ -288,9 +304,9 @@ def _build_demo_sections(rng):
                     "Cancel Dt": sdate if cancelled else "",
                     "Mode": mode, "IN_PERSON": "Y" if inperson else "",
                     "Location": "Pacoima" if pacoima else "Main",
-                    "BUILDING": rng.choice(BUILDINGS) if start else "ONLINE",
-                    "Room Descr": f"{rng.choice(BUILDINGS)}-{rng.randint(100,399)}" if start else "ONLINE",
-                    "Facil ID": f"F{rng.randint(1000,9999)}" if start else "",
+                    "BUILDING": bldg,
+                    "Room Descr": room_label,
+                    "Facil ID": facil_id,
                     "Pacoima": pacoima,
                     "Mtg Start": start or "", "Mtg End": end or "",
                     "Meetings": days, **dc, "TBA Hours": "" if start else units*16,
@@ -298,7 +314,7 @@ def _build_demo_sections(rng):
                     "HOURS": f"{start}-{end}" if start else "TBA",
                     "STARTEND": f"{sdate}-{edate}",
                     "Class Start Date": sdate, "Class End Date": edate,
-                    "Nbr Mtgs": 16 if start else 0,
+                    "Nbr Mtgs": n_mtg_days * 16 if start else 0,
                     "LATE-START": "",
                     "Cap Enrl": cap, "Tot Enrl": 0 if cancelled else enr,
                     "Wait Cap": 10, "Wait Tot": 0 if cancelled else wait,
@@ -312,7 +328,7 @@ def _build_demo_sections(rng):
                     "Class Workload Hrs": units,
                     "LEVEL": "UG",
                     "CLASS": cid, "SEC": f"M{i+1:02d}",
-                    "DAYS": days, "ROOM": "ONLINE" if not start else f"{rng.choice(BUILDINGS)}-{rng.randint(100,399)}",
+                    "DAYS": days, "ROOM": room_label,
                 })
     return rows
 
@@ -449,11 +465,17 @@ def _build_programs_df():
     prog_rows = []
     for pcode, p in PROGRAMS.items():
         seq_lookup = {c: t for t, cs in p["sequence"].items() for c in cs}
-        for c in p["required"]:
+        required = set(p["required"])
+        # Emit every course in the program: the required list FIRST (order
+        # preserved), then any course that appears only in the recommended
+        # sequence (e.g. PSYC 1 / HIST 11 / COMM 101). The latter used to be
+        # silently dropped, losing recommended-sequence courses from the program.
+        seq_only = [c for c in seq_lookup if c not in required]
+        for c in list(p["required"]) + seq_only:
             prog_rows.append({
                 "Program Code": pcode, "Program Title": p["title"],
                 "GE Pattern": p["ge_pattern"], "Course ID": c,
-                "Requirement Type": "Required",
+                "Requirement Type": "Required" if c in required else "Recommended",
                 "Recommended Semester": seq_lookup.get(c, ""),
             })
     return pd.DataFrame(prog_rows)

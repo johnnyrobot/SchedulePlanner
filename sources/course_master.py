@@ -15,7 +15,7 @@ from __future__ import annotations
 
 from .enrollment_ir import _empty, _read_frame
 from .http import SourceDataError
-from .mapping import _norm, _to_units
+from .textnorm import _norm, _to_units
 
 SOURCE = "course master"
 
