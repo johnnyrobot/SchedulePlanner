@@ -38,5 +38,8 @@ graphify-out/
 /PRD.md
 /TECH_SPEC.md
 /LAMC_scheduling_data_spec.md
+# Ephemeral review / strategy / audit docs (kept locally, never committed)
+/SCHEDULEPLANNER_*.md
+/MIROFISH_*.md
 /docs/*
 !/docs/e2e_live_computer_use.md
