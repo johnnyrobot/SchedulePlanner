@@ -200,11 +200,16 @@ class Api:
         {'error': <clear message>} so the UI shows a readable card instead of
         freezing or silently failing.
         """
-        # Term codes are always positive integers; .isdigit() rejects empty,
-        # signed ("-2268") and non-numeric tokens, so a negative/zero term is
-        # treated as invalid rather than slipping through.
-        parsed_terms = [int(t) for t in str(terms).split(",")
-                        if t.strip().isdigit() and int(t.strip()) > 0]
+        # Term codes are always positive integers. Reject any non-empty token that
+        # is not one (signed "-2268", "abc", "0") rather than silently dropping it,
+        # so a typo like "2264,abc,2268" is surfaced, not quietly processed as
+        # "2264,2268". Empty tokens (a trailing comma) are tolerated.
+        raw_tokens = [t.strip() for t in str(terms).split(",")]
+        bad_tokens = [t for t in raw_tokens if t and not (t.isdigit() and int(t) > 0)]
+        if bad_tokens:
+            return {"error": (f"Invalid term code(s) {bad_tokens}. Enter one or more "
+                              "positive numeric term codes, e.g. 2264,2266,2268.")}
+        parsed_terms = [int(t) for t in raw_tokens if t]
         if not parsed_terms:
             return {"error": (f"No valid term codes in {terms!r}. Enter one or "
                               "more positive numeric term codes, e.g. "

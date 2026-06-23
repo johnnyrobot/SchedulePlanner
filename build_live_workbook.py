@@ -592,8 +592,10 @@ def _time_block_detector_entry(sections, collisions):
     Active whenever any fetched section carries a parseable meeting time (the live schedule
     does); inert only if no meeting data is present (e.g. an all-async/TBA fetch).
     """
-    has_meeting = any(timeblocks.parse_meeting(r.get("days", ""), r.get("times", ""))
-                      for r in sections)
+    # section_meeting unions EVERY block (M1): a section timed only on a secondary
+    # block (its flat Days/Times being block[0]/async) still counts as having a
+    # meeting, so the detector is not falsely marked inert.
+    has_meeting = any(timeblocks.section_meeting(r) for r in sections)
     if not has_meeting:
         return {
             "detector": "time_block_conflict", "status": "inert",
@@ -613,20 +615,23 @@ def _off_grid_sections(sections):
     without a known grid are skipped (timeblocks.on_grid fails open)."""
     findings, seen = [], set()
     for r in sections:
-        meeting = timeblocks.parse_meeting(r.get("days", ""), r.get("times", ""))
-        if not meeting or timeblocks.on_grid(r.get("term"), meeting):
-            continue
         cid = mapping._norm(r.get("course", ""))
-        key = (cid, r.get("days", ""), r.get("times", ""), r.get("term"))
-        if key in seen:
-            continue
-        seen.add(key)
-        findings.append({
-            "course": cid, "term": r.get("term"),
-            "days": r.get("days", ""), "times": r.get("times", ""),
-            "summary": (f"{cid} ({r.get('days', '')} {r.get('times', '')}) starts off the "
-                        "standard time-block grid"),
-        })
+        # Evaluate EVERY meeting block (M1): a secondary block can start off-grid
+        # while block[0] is on-grid, so per-block iteration catches it.
+        for blk, meeting in timeblocks.iter_section_blocks(r):
+            if not meeting or timeblocks.on_grid(r.get("term"), meeting):
+                continue
+            days, times = blk.get("days", ""), blk.get("times", "")
+            key = (cid, days, times, r.get("term"))
+            if key in seen:
+                continue
+            seen.add(key)
+            findings.append({
+                "course": cid, "term": r.get("term"),
+                "days": days, "times": times,
+                "summary": (f"{cid} ({days} {times}) starts off the "
+                            "standard time-block grid"),
+            })
     return findings
 
 
@@ -710,30 +715,34 @@ def _room_capacity_findings(sections, facility):
         return []
     findings, seen = [], set()
     for r in sections:
-        meta = facility.get(facilities.norm_facil(r.get("facil_id", "")))
-        if not meta or not meta.get("capacity"):
-            continue  # capacity None / 0 = unset seat count, not a real over-enroll
-        cap = meta["capacity"]
         try:
             tot = int(r.get("Tot Enrl"))
         except (TypeError, ValueError):
             continue
-        if tot <= cap:
-            continue
         course = mapping._norm(r.get("course", ""))
         cls = str(r.get("class_nbr", "") or "")
-        facil = facilities.norm_facil(r.get("facil_id", ""))
-        key = (str(r.get("term")), facil, cls)
-        if key in seen:
-            continue
-        seen.add(key)
-        findings.append({
-            "kind": "over_capacity", "course": course, "class_nbr": cls,
-            "term": int(r["term"]) if r.get("term") not in (None, "") else None,
-            "room": facil, "capacity": cap, "enrolled": tot,
-            "summary": (f"{course} (class {cls}) has {tot} enrolled in room {facil} "
-                        f"(seats {cap}) — over capacity by {tot - cap}"),
-        })
+        # Check the room of EVERY meeting block (M1): a section can sit in a
+        # different room per block, so an over-capacity placement can live on a
+        # secondary block the flat block[0] Facil ID never exposed.
+        for blk, _meeting in timeblocks.iter_section_blocks(r):
+            facil = facilities.norm_facil(blk.get("facil_id", ""))
+            meta = facility.get(facil)
+            if not meta or not meta.get("capacity"):
+                continue  # capacity None / 0 = unset seat count, not a real over-enroll
+            cap = meta["capacity"]
+            if tot <= cap:
+                continue
+            key = (str(r.get("term")), facil, cls)
+            if key in seen:
+                continue
+            seen.add(key)
+            findings.append({
+                "kind": "over_capacity", "course": course, "class_nbr": cls,
+                "term": int(r["term"]) if r.get("term") not in (None, "") else None,
+                "room": facil, "capacity": cap, "enrolled": tot,
+                "summary": (f"{course} (class {cls}) has {tot} enrolled in room {facil} "
+                            f"(seats {cap}) — over capacity by {tot - cap}"),
+            })
     findings.sort(key=lambda f: (str(f["term"]), f["room"], f["course"], f["class_nbr"]))
     return findings
 
@@ -747,8 +756,14 @@ def _lab_pool_stats(sections, facility):
     total_labs = sum(1 for m in facility.values() if facilities.is_lab(m))
     if not total_labs:
         return None
-    in_use = {facilities.norm_facil(r.get("facil_id", "")) for r in sections
-              if facilities.is_lab(facility.get(facilities.norm_facil(r.get("facil_id", ""))))}
+    # Count labs occupied across EVERY meeting block (M1): a section's lab room can
+    # live on a secondary block, not just the flat block[0] Facil ID.
+    in_use = set()
+    for r in sections:
+        for blk, _meeting in timeblocks.iter_section_blocks(r):
+            facil = facilities.norm_facil(blk.get("facil_id", ""))
+            if facilities.is_lab(facility.get(facil)):
+                in_use.add(facil)
     return {"total_labs": total_labs, "labs_in_use": len(in_use)}
 
 
@@ -762,16 +777,21 @@ def _room_detector_entry(sections, collisions, *, facility_used, capacity=None,
     online/roomless/async. The capacity sub-analysis reports active only when a
     facility table was supplied.
     """
+    # Mirror _room_collisions (M1): inspect each meeting block's own room, since a
+    # physical room can sit on a secondary block while block[0] is online/async.
     has_room = False
     for r in sections:
-        if not timeblocks.parse_meeting(r.get("days", ""), r.get("times", "")):
-            continue
-        if facilities.is_physical_room(r.get("facil_id", "")):
-            has_room = True
-            break
-        label = mapping._norm(str(r.get("room", "") or ""))
-        if label and "ONLINE" not in label and label != "TBA":
-            has_room = True
+        for blk, meeting in timeblocks.iter_section_blocks(r):
+            if not meeting:
+                continue
+            if facilities.is_physical_room(blk.get("facil_id", "")):
+                has_room = True
+                break
+            label = mapping._norm(str(blk.get("room", "") or ""))
+            if label and "ONLINE" not in label and label != "TBA":
+                has_room = True
+                break
+        if has_room:
             break
     if not has_room:
         return {
@@ -1388,12 +1408,15 @@ def analyze_live(campus, terms, program_query, out_path, *, client=None,
         # subject ONCE instead of re-crawling per goal — a deliberate kindness to
         # the rate-limit-pending endpoint.
         elumen_cache = elumen_cache if elumen_cache is not None else {}
+        # Keep this DISTINCT from the schedule-fetch ``fetch_status`` (set above and
+        # read for the skipped-terms warnings below): overwriting it here erased the
+        # schedule's partial-coverage info.
         if client is not None:
-            records, _fetched, fetch_status = elumen_client.fetch_prereq_records(
+            records, _fetched, elumen_fetch_status = elumen_client.fetch_prereq_records(
                 campus, subjects, client=client, cache=elumen_cache)
         else:
             with httpx.Client(timeout=30.0) as owned:
-                records, _fetched, fetch_status = elumen_client.fetch_prereq_records(
+                records, _fetched, elumen_fetch_status = elumen_client.fetch_prereq_records(
                     campus, subjects, client=owned, cache=elumen_cache)
 
         kwargs = {}
@@ -1406,8 +1429,8 @@ def analyze_live(campus, terms, program_query, out_path, *, client=None,
             records, known_course_ids, requested_course_ids=requested_course_ids)
         # Surface an aggregate wall-clock-cap truncation honestly: prerequisite
         # coverage may be partial (some subjects skipped). Never silent.
-        if fetch_status.get("exceeded"):
-            elumen_coverage["fetch_truncated"] = fetch_status
+        if elumen_fetch_status.get("exceeded"):
+            elumen_coverage["fetch_truncated"] = elumen_fetch_status
         report["elumen_coverage"] = elumen_coverage
         elumen_source = f"eLumen live: {elumen_client.tenant_for(campus)}"
         elumen_live_active = True
@@ -1732,7 +1755,8 @@ def _by_design_from_workbook(path):
 def analyze_import(schedule_path, out_path, *, program=None, program_path=None,
                    facility_path=None, course_master_path=None,
                    program_lists_path=None, sheet=None, transfer_goal="none",
-                   enrollment_path=None, enrollment_map=None):
+                   enrollment_path=None, enrollment_map=None,
+                   assist_areas=None, assist_year_id=None):
     """Offline historical audit: convert a real LACCD schedule export into engine
     records and run the SAME pipeline ``analyze_live`` runs — with NO network.
 
@@ -1756,6 +1780,18 @@ def analyze_import(schedule_path, out_path, *, program=None, program_path=None,
     ``analyze_live``'s ``enrollment_path`` (real IR adapter) /
     ``enrollment_map`` (hand-keyed offline) seam; both stay OUTSIDE engine.run.
     """
+    # Enforce the NO-network contract this function advertises: a transfer GE goal
+    # (anything but "none"/"local") makes analyze_live fetch the ASSIST area map over
+    # the network. On this offline path that is only allowed when the caller injects
+    # a pre-fetched ``assist_areas`` map — otherwise reject rather than silently
+    # reaching out. ("local" sources GE from the catalog PDF, no network.)
+    goal_l = str(transfer_goal).lower() if transfer_goal else "none"
+    if goal_l not in ("none", "local") and not assist_areas:
+        raise ValueError(
+            f"analyze_import is offline (no network) but transfer_goal={transfer_goal!r} "
+            "needs the ASSIST area map. Pass a pre-fetched assist_areas (with "
+            "assist_year_id), or use transfer_goal='local' (catalog GE) or 'none'.")
+
     records, summary = schedule_import.load_schedule_export(schedule_path, sheet=sheet)
     if not records:
         return {"campus": "LAMC", "terms": [], "section_count": 0, "program": None,
@@ -1802,7 +1838,8 @@ def analyze_import(schedule_path, out_path, *, program=None, program_path=None,
         # sections keep the schedule export's own native counts — F5
         # demand_supply then reads IR-on-matched + native-on-unmatched.
         enrollment_path=enrollment_path, enrollment_map=enrollment_map,
-        elumen_live=False, transfer_goal=transfer_goal)
+        elumen_live=False, transfer_goal=transfer_goal,
+        assist_areas=assist_areas, assist_year_id=assist_year_id)
     report["import_summary"] = summary
     return report
 

@@ -169,6 +169,26 @@ def pairwise_hard_conflict(sections_a, sections_b):
     return all(sections_conflict(x, y) for x in sections_a for y in sections_b)
 
 
+def pairwise_hard_conflict_termed(sections_a, sections_b):
+    """Term-aware ``pairwise_hard_conflict``: each section is a ``(term, meeting)``
+    pair, and a student can take both courses in DIFFERENT terms.
+
+    Returns True iff a student literally cannot take both as offered — which, since
+    two sections in different terms never clash, requires that EVERY cross pair is
+    both same-term AND time-overlapping (any cross-term pairing, any conflict-free
+    same-term pairing, or any async/no-meeting section lets the student escape).
+
+    Reduces to :func:`pairwise_hard_conflict` when every section shares one term, so
+    a single-term cohort is byte-identical to the term-blind check.
+    """
+    if not sections_a or not sections_b:
+        return False
+    if any(len(m) == 0 for _t, m in sections_a) or any(len(m) == 0 for _t, m in sections_b):
+        return False
+    return all(ta == tb and sections_conflict(ma, mb)
+               for ta, ma in sections_a for tb, mb in sections_b)
+
+
 def feasible_selection(course_to_sections):
     """Can we pick exactly one section per course with no pairwise time overlap?
 

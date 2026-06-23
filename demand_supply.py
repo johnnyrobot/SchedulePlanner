@@ -30,6 +30,7 @@ from __future__ import annotations
 
 from buildability import _is_closed, offered_by_course
 from sources import facility as facility_mod
+from sources.mapping import canonical_subject
 
 # Honesty caveat that travels with every report (see module docstring).
 DEMAND_SUPPLY_LABEL = (
@@ -133,6 +134,14 @@ def demand_supply_report(sections, *, program_demand=None, facility=None,
     offered = offered_by_course(sections)
     required = getattr(program_demand, "required", None) or {}
     program_weighted = bool(required)
+    # Match offered courses to the cross-program demand map in CANONICAL-subject
+    # space, so an aliased spelling (e.g. offered ENGLISH vs required ENGL) is
+    # weighted and counted, not silently treated as not_assessed. The fold collapses
+    # only data-verified subject pairs (never the ambiguous ENG), so single-spelling
+    # data stays byte-identical.
+    required_canon = {}
+    for _k, _v in required.items():
+        required_canon.setdefault(canonical_subject(_k), _v)
 
     add_rows, slack_rows = [], []
     sections_with_counts = 0
@@ -142,8 +151,9 @@ def demand_supply_report(sections, *, program_demand=None, facility=None,
         m = _metrics(secs, facility)
         if m["cap_total"] <= 0:
             continue
-        assessed.add(course)
-        n_programs = len(required.get(course, ())) if program_weighted else 0
+        assessed.add(canonical_subject(course))
+        programs = required_canon.get(canonical_subject(course), ()) if program_weighted else ()
+        n_programs = len(programs)
         if _qualifies_add(m):
             impact_mult = 1.0 + IMPACT_PER_PROGRAM * n_programs
             add_rows.append({
@@ -155,7 +165,7 @@ def demand_supply_report(sections, *, program_demand=None, facility=None,
                 "n_sections": m["n_sections"],
                 "min_sections_per_term": m["min_sections_per_term"],
                 "is_lab": m["is_lab"], "n_programs": n_programs,
-                "required": bool(program_weighted and course in required),
+                "required": bool(program_weighted and programs),
                 "action_score": round(m["demand_ratio"] * impact_mult, 2),
                 "reasons": _add_reasons(m, n_programs),
             })
@@ -178,7 +188,7 @@ def demand_supply_report(sections, *, program_demand=None, facility=None,
                                  -r["n_programs"], r["course"]))
     slack_rows.sort(key=lambda r: (r["fill"], -r["n_sections"], r["course"]))
 
-    not_assessed = (sum(1 for c in required if c not in assessed)
+    not_assessed = (sum(1 for c in required if canonical_subject(c) not in assessed)
                     if program_weighted else 0)
 
     return {
