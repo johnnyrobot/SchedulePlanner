@@ -182,7 +182,9 @@ def fetch_sections(campus, terms=None, *, client=None, status=None,
             skipped.append(entry)
             if status is not None:
                 status["skipped"].append(entry)
-    if skipped and len(skipped) == len(terms):
+    if skipped and len(skipped) == len(terms) and last_error is not None:
         # Every term failed -> a total failure must stay loud, never a silent [].
+        # (``last_error`` is always set when ``skipped`` is non-empty; the explicit
+        # guard keeps ``raise None`` impossible even if that invariant ever drifts.)
         raise last_error
     return records

@@ -73,9 +73,12 @@ def _timed(sections):
 
 
 def _by_course(timed):
+    # Carry each section's term alongside its meeting so the mutual-exclusion check
+    # can stay term-aware: two morning-locked courses offered in DIFFERENT terms are
+    # not mutually exclusive (a student takes them in separate terms).
     by = {}
     for s in timed:
-        by.setdefault(s["course"], []).append(s["meeting"])
+        by.setdefault(s["course"], []).append((s["term"], s["meeting"]))
     return by
 
 
@@ -163,7 +166,7 @@ def mutual_exclusions(sections, locked, *, relevant=None, top=20):
     for i in range(len(candidates)):
         for j in range(i + 1, len(candidates)):
             a, b = candidates[i], candidates[j]
-            if timeblocks.pairwise_hard_conflict(by.get(a, []), by.get(b, [])):
+            if timeblocks.pairwise_hard_conflict_termed(by.get(a, []), by.get(b, [])):
                 pairs.append({"courses": [a, b],
                               "reason": ("both meet only in the 9 AM-1 PM window; "
                                          "every section pair overlaps")})

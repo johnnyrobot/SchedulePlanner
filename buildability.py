@@ -105,22 +105,33 @@ def offered_by_course(sections):
         cls = str(r.get("class_nbr", "") or "").strip()
         term = r.get("term")
         key = (term, cls) if cls else (term, r.get("days", ""), r.get("times", ""))
-        s = seen.setdefault(cid, set())
-        if key in s:
-            continue
-        s.add(key)
-        out.setdefault(cid, []).append({
-            "term": term,
-            "class_nbr": cls,
-            # Full block union (M1): a required-course time conflict on a section's
-            # secondary meeting block is now seen, not just the first pattern.
-            "meeting": timeblocks.section_meeting(r),
-            "status": str(r.get("status", "") or r.get("Avail Status", "") or "").strip(),
-            "cap": _int(r.get("Cap Enrl")),
-            "tot": _int(r.get("Tot Enrl")),
-            "wait": _int(r.get("Wait Tot")),
-            "facil_id": str(r.get("facil_id", "") or "").strip(),
-        })
+        bucket = seen.setdefault(cid, {})
+        # Full block union (M1): a single physical section can be split across
+        # several rows (e.g. a separate lecture + lab meeting-pattern row sharing a
+        # class number, on import paths that don't carry a per-row ``meetings``
+        # list). Union EVERY row of the same (term, class) into one section's
+        # meeting footprint so a conflict on a secondary/lab block is seen, not
+        # dropped with the duplicate row. ``section_meeting`` already unions the
+        # blocks WITHIN a row, so single-row sections stay byte-identical.
+        blocks = timeblocks.section_meeting(r)
+        rec = bucket.get(key)
+        if rec is None:
+            rec = {
+                "term": term,
+                "class_nbr": cls,
+                "meeting": list(blocks),
+                "status": str(r.get("status", "") or r.get("Avail Status", "") or "").strip(),
+                "cap": _int(r.get("Cap Enrl")),
+                "tot": _int(r.get("Tot Enrl")),
+                "wait": _int(r.get("Wait Tot")),
+                "facil_id": str(r.get("facil_id", "") or "").strip(),
+            }
+            bucket[key] = rec
+            out.setdefault(cid, []).append(rec)
+        else:
+            for b in blocks:
+                if b not in rec["meeting"]:
+                    rec["meeting"].append(b)
     return out
 
 
@@ -163,16 +174,24 @@ def time_conflict(program, required, offered, horizon_terms=None):
     ``feasible`` is True iff neither fires."""
     horizon = set(horizon_terms) if horizon_terms else None
     meetings = {}
+    # Parallel term-tagged view used ONLY for the plan-independent hard-pair check:
+    # two courses offered in DIFFERENT terms are not a hard conflict (the student
+    # takes them in separate terms), so a weekly-pattern overlap across offering
+    # terms must not be flagged. The same-semester ``feasible_selection`` below
+    # keeps the original term-blind meeting lists, so its behavior is unchanged.
+    meetings_termed = {}
     for cid in required:
         secs = _in_horizon(offered.get(cid, []), horizon)
         if secs:
             meetings[cid] = [s["meeting"] for s in secs]
+            meetings_termed[cid] = [(s["term"], s["meeting"]) for s in secs]
 
     hard = []
     cids = sorted(meetings)
     for i in range(len(cids)):
         for j in range(i + 1, len(cids)):
-            if timeblocks.pairwise_hard_conflict(meetings[cids[i]], meetings[cids[j]]):
+            if timeblocks.pairwise_hard_conflict_termed(
+                    meetings_termed[cids[i]], meetings_termed[cids[j]]):
                 hard.append([cids[i], cids[j]])
 
     by_sem = {}
