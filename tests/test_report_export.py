@@ -161,6 +161,39 @@ def test_report_renders_time_conflicts_block():
     assert "CHEM 101 &amp; MATH 245" in doc   # & is HTML-escaped
 
 
+def test_report_renders_supply_diagnostic_guides():
+    """Exported reports carry chair/dean-facing definitions beside terse findings."""
+    results = {
+        "terms_in_data": 3,
+        "analysis": {
+            "rotation_gaps": [{"course": "BIOLOGY 3", "offered": 1, "of": 3}],
+            "single_section": [{"course": "CHEM 101"}],
+            "modality_mismatch": [],
+            "under_supply": [{"course": "MATH 227", "waitlisted": 0,
+                              "sections_waitlisted": 1, "sections_total": 2}],
+            "time_block_collisions": [],
+            "off_grid_sections": [{"course": "MATH 245",
+                                   "summary": "MATH 245 starts off-grid"}],
+            "off_grid_sections_meta": {
+                "scope": "program",
+                "shown_count": 1,
+                "total_program_count": 1,
+                "total_campus_count": 9,
+                "truncated": False,
+            },
+        },
+        "programs": {},
+    }
+    doc = report_export.render_report(results)
+    assert "Capacity / fill-rate" in doc
+    assert "not yet measurable, not all clear" in doc
+    assert "planning signal, not proof of completion impact" in doc
+    assert "This Supply list is scoped to the selected program" in doc
+    assert "1/1 program off-grid pattern(s) shown" in doc
+    assert "9 campus-wide off-grid pattern(s) found" in doc
+    assert "Modality mismatch" not in doc
+
+
 def test_report_renders_room_conflicts_block():
     """Room double-bookings + over-capacity in analysis render in the Supply-diagnostics
     card. Previously these were injected by analyze_live and shown ONLY in the live UI —
@@ -403,7 +436,7 @@ def test_report_omits_grid_pressure_when_absent():
                "analysis": {"rotation_gaps": [], "single_section": [],
                             "modality_mismatch": [], "under_supply": []},
                "programs": {}}
-    assert "Grid conformance" not in report_export.render_report(results)
+    assert 'aria-labelledby="grid"' not in report_export.render_report(results)
 
 
 def test_demand_supply_section_renders_and_escapes():

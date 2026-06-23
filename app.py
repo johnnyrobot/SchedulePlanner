@@ -251,6 +251,7 @@ class Api:
         out["campus"] = report.get("campus")
         out["live_terms"] = report.get("terms")
         out["program_info"] = report.get("program")
+        out["section_count"] = report.get("section_count")
         out["ge_coverage"] = report.get("ge_coverage")
         # Live data has no prerequisite/LLM parse step; mark accordingly so the
         # status line does not falsely claim a Gemma 4 parse.

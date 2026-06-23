@@ -95,6 +95,11 @@ KNOWN_LIVE_NODES = {
     "tests/test_pdf_loader.py::test_extract_real_pdf_roundtrip",
     # E6: schedule wire-contract canary (hits the real LACCD schedule endpoint).
     "tests/test_source_contracts.py::test_schedule_live_wire_still_matches_the_contract",
+    # Live matrix for the desktop Build-from-live bridge; non-gating by design.
+    "tests/test_live_laccd_matrix.py::test_live_laccd_matrix[lamc-biology-igetc]",
+    "tests/test_live_laccd_matrix.py::test_live_laccd_matrix[lacc-psychology-cal-getc]",
+    "tests/test_live_laccd_matrix.py::test_live_laccd_matrix[elac-business-admin-csu-ge]",
+    "tests/test_live_laccd_matrix.py::test_live_laccd_matrix[lattc-admin-justice-igetc]",
 }
 
 
