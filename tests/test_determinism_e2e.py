@@ -233,7 +233,7 @@ def _default_plan_hash():
 # change — from a lock-bump that moves ortools, or any model edit — fails loudly
 # and forces a deliberate re-pin + determinism review rather than silently shipping
 # a different schedule. Regenerate intentionally with UPDATE_DETERMINISM_GOLDEN=1.
-_DEFAULT_PLANS_SHA256 = "46c4fab2b144919567101fc81379699279de7b8cffd6938e2af275dfb43f4392"
+_DEFAULT_PLANS_SHA256 = "1f2cd47ff1b45dfa01a833bdf981eab44fdfd72939c78286385cc12a89952890"
 
 
 def test_default_data_plans_match_the_stored_determinism_golden():

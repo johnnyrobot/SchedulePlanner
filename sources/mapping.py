@@ -27,12 +27,15 @@ and stay valid):
 from __future__ import annotations
 
 import json
-import math
-import re
 
 import pandas as pd
 
 from .http import SourceDataError
+# _norm / _to_units now live in the shared low-level module so offline readers
+# (e.g. course_master) can use them without importing this workbook-assembly
+# layer. Re-exported here so every existing ``mapping._norm`` / ``mapping._to_units``
+# call site stays byte-identical.
+from .textnorm import _norm, _to_units
 
 # Human label so a malformed-record guard names where the bad data came from
 # (the live source -> mapping step), mirroring sources/http.py's style.
@@ -47,8 +50,6 @@ GE_REQUIREMENT_COLUMNS = ["Program Code", "Pattern", "Area", "Area Title",
                           "Recommended Course", "Units"]
 
 
-def _norm(code):
-    return re.sub(r"\s+", " ", str(code).strip().upper())
 
 
 # --- FF1: subject-alias crosswalk (F2 unmatched reducer) ---------------------
@@ -126,13 +127,6 @@ def canonical_subject(code):
     return f"{canon} {rest}" if canon else norm
 
 
-def _to_units(value, default=3.0):
-    """Coerce '3.00', '3-4', 5.0, '' -> float (solver does int(units))."""
-    try:
-        result = float(str(value).split("-")[0])
-    except (ValueError, TypeError):
-        return default
-    return default if math.isnan(result) else result
 
 
 def _encode_meetings(record):
