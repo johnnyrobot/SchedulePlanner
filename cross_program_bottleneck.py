@@ -84,21 +84,36 @@ def _offered_match(course, offered, alias_idx):
     falling back to the FF1 canonical-subject crosswalk (``alias_idx``) on a miss.
 
     Returns ``(course, None)`` when neither hits. The direct-first order keeps every
-    already-matching course's label and sections untouched (no regression); the
-    fallback rescues only genuinely-aliased source-side spellings, reporting the
-    matched offering under its canonical id."""
-    secs = offered.get(course)
-    if secs:
-        return course, secs
+    already-matching course's label untouched (no regression); the fallback rescues
+    genuinely-aliased source-side spellings. When a course is offered under BOTH its
+    own spelling AND a canonical alias (a mixed-source workbook), the section lists
+    are MERGED — deduped by object identity, since ``alias_idx`` re-references the
+    same section dicts — so neither spelling's sections are undercounted. The label
+    is whichever the direct-first order would have chosen, so single-spelling rows
+    stay byte-identical."""
+    seen_ids, merged = set(), []
+
+    def _add(secs):
+        for s in secs or ():
+            if id(s) not in seen_ids:
+                seen_ids.add(id(s))
+                merged.append(s)
+
+    direct = offered.get(course)
     canon = canonical_subject(course)
+    _add(direct)
     if canon != course:
-        secs = offered.get(canon) or alias_idx.get(canon)
-        if secs:
-            return canon, secs
-    secs = alias_idx.get(course)
-    if secs:
-        return course, secs
-    return course, None
+        _add(offered.get(canon))
+        _add(alias_idx.get(canon))
+    _add(alias_idx.get(course))
+
+    if not merged:
+        return course, None
+    # Preserve the direct-first label: only when the direct spelling missed but a
+    # canonical-side lookup hit do we report under the canonical id (as before).
+    if not direct and canon != course and (offered.get(canon) or alias_idx.get(canon)):
+        return canon, merged
+    return course, merged
 
 
 def _is_closed(status):
