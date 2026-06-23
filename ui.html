@@ -1032,8 +1032,12 @@ async function runAnalysis(){
   const btn=document.getElementById('runBtn');
   btn.disabled=true; btn.textContent='Solving…';
   document.getElementById('status').innerHTML='<span class="spinner"></span> running solver';
-  const res = await window.pywebview.api.analyze(dataPath);
-  btn.disabled=false; btn.textContent='Generate schedules';
+  let res;
+  // Always restore the button, even if the JS<->Python bridge rejects, so a failed
+  // call never leaves the UI stuck on the spinner.
+  try{ res = await window.pywebview.api.analyze(dataPath); }
+  catch(e){ res = {error:'Unexpected error talking to the app: '+String(e)}; }
+  finally{ btn.disabled=false; btn.textContent='Generate schedules'; }
   showResult(res);
 }
 
@@ -1049,8 +1053,10 @@ async function loadDemo(){
   setWorkflowMode('workbook');
   updateRedesignState();
   document.getElementById('status').innerHTML='<span class="spinner"></span> running solver on demo data';
-  const res = await window.pywebview.api.load_demo();
-  btn.disabled=false; btn.textContent='Load demo data';
+  let res;
+  try{ res = await window.pywebview.api.load_demo(); }
+  catch(e){ res = {error:'Unexpected error talking to the app: '+String(e)}; }
+  finally{ btn.disabled=false; btn.textContent='Load demo data'; }
   showResult(res);
 }
 
@@ -1958,6 +1964,11 @@ function render(res){
       (guide?'<p class="hint diag-guide">'+guide+'</p>':'')+
       '<ul>'+(shown.length?shown.map(fn).join('')+more:'<li>none</li>')+'</ul></div>';
   };
+  // Render an OPTIONAL detector section only when the analysis actually carries the
+  // key. An absent key means the detector did not run (e.g. room checks with no
+  // room/facility data) — omit it rather than showing "none", which would conflate
+  // "not assessed" with "none found".
+  const mkOpt=(t,arr,fn,guide,limit=8)=>Array.isArray(arr)?mk(t,arr,fn,guide,limit):'';
   html+='<div class="card"><h3>Supply diagnostics ('+res.terms_in_data+' terms)</h3>'+
     '<div class="analysis mt">'+
     mk('Rotation gaps',a.rotation_gaps,x=>'<li>'+escapeHtml(x.course)+' — '+escapeHtml(String(x.offered))+'/'+escapeHtml(String(x.of))+'</li>', DIAG_GUIDES.rotation_gaps,6)+
@@ -1966,8 +1977,8 @@ function render(res){
     mk('Under-supply',a.under_supply,x=>'<li>'+escapeHtml(x.course)+' — '+escapeHtml(x.waitlisted>0?String(x.waitlisted)+' waitlisted':(x.sections_waitlisted!=null?String(x.sections_waitlisted)+'/'+String(x.sections_total)+' sections waitlisted':'waitlisted'))+'</li>', DIAG_GUIDES.under_supply,6)+
     mk('Time conflicts',a.time_block_collisions||[],x=>'<li>'+escapeHtml(x.summary)+'</li>', DIAG_GUIDES.time_block_collisions,6)+
     mk('Off-grid sections',a.off_grid_sections||[],x=>'<li>'+escapeHtml(x.summary)+'</li>', offGridGuide(a.off_grid_sections_meta),6)+
-    mk('Room double-bookings',a.room_conflicts||[],x=>'<li>'+escapeHtml(x.summary)+'</li>', '',6)+
-    mk('Room over capacity',a.room_capacity||[],x=>'<li>'+escapeHtml(x.summary)+'</li>', '',6)+
+    mkOpt('Room double-bookings',a.room_conflicts,x=>'<li>'+escapeHtml(x.summary)+'</li>', '',6)+
+    mkOpt('Room over capacity',a.room_capacity,x=>'<li>'+escapeHtml(x.summary)+'</li>', '',6)+
     '</div></div>';
   document.getElementById('out').innerHTML=html;
 }
@@ -1978,8 +1989,14 @@ async function doExplain(){
   // The briefing renders below the results (below the fold), so scroll to it —
   // otherwise clicking "Explain for admin" looks like it does nothing.
   box.scrollIntoView({behavior:'smooth', block:'start'});
-  const r=await window.pywebview.api.explain();
-  box.innerHTML='<div class="card"><h3>Briefing</h3><div class="explain mt">'+escapeHtml(r.text)+'</div></div>';
+  let r;
+  try{ r=await window.pywebview.api.explain(); }
+  catch(e){ r={error:String(e)}; }
+  if(r.error){
+    box.innerHTML='<div class="card">Briefing failed: '+escapeHtml(r.error)+'</div>';
+  }else{
+    box.innerHTML='<div class="card"><h3>Briefing</h3><div class="explain mt">'+escapeHtml(r.text||'')+'</div></div>';
+  }
 }
 
 // Export the current analysis as a self-contained, accessible HTML file. The

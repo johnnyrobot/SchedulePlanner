@@ -39,19 +39,21 @@ def _bundled_java():
     (``…/Contents/Resources/jre`` derived from ``sys.executable``), and a dev
     ``build/jre`` in the repo.
     """
+    # The launcher binary is ``java`` on POSIX but ``java.exe`` on Windows.
+    java_bin = "java.exe" if os.name == "nt" else "java"
     candidates = []
     env = os.environ.get("SCHEDULEPLANNER_JRE")
     if env:
-        candidates.append(os.path.join(env, "bin", "java"))
+        candidates.append(os.path.join(env, "bin", java_bin))
     meipass = getattr(sys, "_MEIPASS", None)
     if meipass:
-        candidates.append(os.path.join(meipass, "jre", "bin", "java"))
+        candidates.append(os.path.join(meipass, "jre", "bin", java_bin))
     exe = getattr(sys, "executable", "") or ""
     if exe:
         # macOS .app: …/Contents/MacOS/<exe> -> …/Contents/Resources/jre/bin/java
         contents = os.path.dirname(os.path.dirname(os.path.abspath(exe)))
-        candidates.append(os.path.join(contents, "Resources", "jre", "bin", "java"))
-    candidates.append(os.path.join(_REPO_ROOT, "build", "jre", "bin", "java"))
+        candidates.append(os.path.join(contents, "Resources", "jre", "bin", java_bin))
+    candidates.append(os.path.join(_REPO_ROOT, "build", "jre", "bin", java_bin))
     for c in candidates:
         if c and os.path.isfile(c):
             return c
