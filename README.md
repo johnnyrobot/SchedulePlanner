@@ -20,7 +20,8 @@ pip install -r requirements.txt
 ### Run the headless analysis
 
 ```bash
-# Uses the bundled demo workbook (files/lamc_data.xlsx):
+# Uses the bundled SYNTHETIC demo workbook (files/lamc_data.xlsx — fabricated
+# sample data, no real student records or PII; see files/README.md):
 python3 engine.py
 
 # Or point at your own workbook or a folder of three CSVs:
