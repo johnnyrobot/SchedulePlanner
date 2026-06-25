@@ -364,3 +364,8 @@ The bundled demo (`files/lamc_data.xlsx`) has deliberately planted problems:
 - `legacy/` contains early prototype scripts (`analyze_bottlenecks.py`,
   `solve_schedule.py`, `load_neo4j.py`) retained for reference; they are not
   part of the product.
+
+## License
+
+Licensed under the [Apache License, Version 2.0](LICENSE). Copyright 2026
+Johnny Robot. See the [LICENSE](LICENSE) and [NOTICE](NOTICE) files for details.
