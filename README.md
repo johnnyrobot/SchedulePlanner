@@ -1,5 +1,7 @@
 # SchedulePlanner
 
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
+
 A deterministic scheduling engine that finds why community-college cohorts
 can't finish 2-year programs on time and recommends the minimum schedule
 changes to fix it. Ships as a desktop app (pywebview) backed by an OR-Tools
@@ -10,6 +12,8 @@ CP-SAT solver. Works on real LACCD data or a bundled synthetic demo.
 ### Install
 
 ```bash
+git clone https://github.com/johnnyrobot/SchedulePlanner.git
+cd SchedulePlanner
 pip install -r requirements.txt
 ```
 
